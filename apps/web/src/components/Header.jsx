@@ -80,22 +80,22 @@ const Header = () => {
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex h-16 items-center justify-between">
-          <div className="flex items-center gap-8">
-            <Link to="/" className="flex items-center gap-2">
+        <div className="flex h-16 items-center justify-between gap-2">
+          <div className="flex items-center gap-8 min-w-0 flex-1">
+            <Link to="/" className="flex items-center gap-2 min-w-0">
               {displayLogo && !logoBroken ? (
                 <img
                   src={displayLogo}
                   alt={displayAppName}
-                  className="h-10 object-contain"
+                  className="h-10 max-w-[120px] object-contain flex-shrink-0"
                   onError={() => setLogoBroken(true)}
                 />
               ) : (
-                <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+                <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center flex-shrink-0">
                   <CheckSquare className="w-5 h-5 text-primary-foreground" />
                 </div>
               )}
-              <span className="font-bold text-xl text-primary tracking-tight">{displayAppName}</span>
+              <span className="font-bold text-lg sm:text-xl text-primary tracking-tight truncate">{displayAppName}</span>
             </Link>
             
             <nav className="hidden md:flex items-center gap-6">
@@ -103,7 +103,7 @@ const Header = () => {
             </nav>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 flex-shrink-0">
             {isAuthenticated ? (
               <>
                 <Button variant="ghost" size="icon" asChild className="relative hidden md:flex">
@@ -184,7 +184,7 @@ const Header = () => {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="md:hidden"
+                  className="relative md:hidden"
                   aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
                   aria-expanded={mobileOpen}
                   aria-controls="mobile-nav-sheet"
