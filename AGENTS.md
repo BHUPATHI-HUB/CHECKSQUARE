@@ -16,6 +16,7 @@
   4. [CONSTRUCTIONS.md](CONSTRUCTIONS.md)
   5. [DEPLOY-FREE.md](DEPLOY-FREE.md) — only if the user asks to deploy / publish / host
   6. [DEPLOY.md](DEPLOY.md) — only if the user has a credit card and wants Fly.io
+  7. [BACKUP.md](BACKUP.md) — only if the user asks about moving data to another laptop / restoring / backups
 - **Operating system assumed:** Windows 10/11 with PowerShell. If the host
   is macOS or Linux, adapt the binary download URL (see §3.2) and use `sh`
   equivalents; do **not** ask the user which OS — detect from `$IsWindows` /
@@ -314,8 +315,34 @@ Existing config files (already in repo, agent must NOT recreate):
 - Don't create a credit card or sign up for the user.
 - Don't paste secrets (SMTP keys, passwords) into commits or markdown.
 - Don't push `pb_data/` to GitHub — `.gitignore` already excludes it; verify before `git add .`.
+- Don't push `backups/` or `pb_backup_*.zip` — they contain hashed passwords and uploaded files; `.gitignore` excludes them too.
 - Don't change `VITE_PB_URL` in source code. It belongs in Cloudflare Pages env vars only.
 - Don't recommend Render/Vercel/Koyeb for the backend — they will silently wipe the DB.
+
+---
+
+## 9.5 Moving DB + users + photos to another laptop (BACKUP.md)
+
+If the user asks "how do I keep the same database/users/data on another laptop" or "how do I move my data" or anything backup-related:
+
+1. Read [BACKUP.md](BACKUP.md) for the full reference.
+2. On the **source** laptop, run:
+   ```powershell
+   .\backup-pb.ps1                 # stops PB, zips pb_data → backups\pb_backup_<timestamp>.zip
+   .\backup-pb.ps1 -KeepRunning    # if backend is part of a live tunnel and must stay up
+   ```
+3. Tell the user to transfer the zip via OneDrive / USB / email / WhatsApp-to-self.
+4. On the **new** laptop, after `git clone` + `setup.ps1`:
+   ```powershell
+   .\restore-pb.ps1 -Source <path-to-zip>     # refuses to run if PB is up; renames old pb_data as safety net
+   ```
+5. Confirm restore by counting users via REST API.
+
+Agent rules:
+- ❌ NEVER commit a backup zip to git.
+- ❌ NEVER suggest committing `pb_data/`.
+- ❌ NEVER run two PocketBase instances against the same DB folder (corrupts SQLite).
+- ✅ Recommend setting up `PocketBase admin → Settings → Backups → Auto backup` (cron `0 3 * * *`, keep 7) for recurring safety.
 
 ---
 

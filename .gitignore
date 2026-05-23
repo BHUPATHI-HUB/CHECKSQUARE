@@ -23,6 +23,12 @@ apps/pocketbase/pocketbase
 apps/pocketbase/pocketbase.exe
 apps/pocketbase/pb_snapshots/
 
+# ─── Local backup zips (created by backup-pb.ps1) ────────────────────────────
+# These contain hashed passwords + all uploaded files. NEVER commit them.
+backups/
+*.bak.zip
+pb_backup_*.zip
+
 # ─── Environment / secrets ───────────────────────────────────────────────────
 .env
 .env.*
