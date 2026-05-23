@@ -53,7 +53,60 @@ Then open <http://localhost:3000>. First-admin setup → [DATABASE.md §3](DATAB
 
 ---
 
-## 🗂 Project layout
+## � Move your database (users + photos + settings) to another laptop
+
+`pb_data/` is **gitignored** on purpose (it has hashed passwords + uploaded
+photos). So `git clone` on a new laptop gives you an empty app. To carry
+your real data over, use the two helper scripts:
+
+### On the OLD laptop — make a backup
+```powershell
+.\backup-pb.ps1
+# Creates: backups\pb_backup_<timestamp>.zip   (DB + every uploaded photo)
+```
+Transfer that zip to the new laptop via **OneDrive / USB / email / WhatsApp-to-self**.
+
+### On the NEW laptop — restore it
+```powershell
+# 1. Get the code + base install
+git clone https://github.com/BHUPATHI-HUB/CHECKSQUARE.git
+cd CHECKSQUARE
+powershell -ExecutionPolicy Bypass -File .\setup.ps1
+
+# 2. Restore the backup (PocketBase must NOT be running)
+.\restore-pb.ps1 -Source C:\path\to\pb_backup_<timestamp>.zip
+
+# 3. Start the backend
+cd apps\pocketbase ; .\pocketbase.exe serve --http=127.0.0.1:8090
+
+# 4. Start the frontend (new terminal)
+cd apps\web ; npm run dev
+```
+
+Log in at <http://localhost:3000> with your **original** admin email +
+password — every user, inspection, photo, and setting carries over.
+
+### Safety net
+`restore-pb.ps1` does **not** delete the existing `pb_data/`. It renames it
+to `pb_data.replaced_<timestamp>/` first, so if anything goes wrong you can
+roll back by renaming it back.
+
+### If you're keeping the live `*.pages.dev` site working from the new laptop
+After step 4 above:
+```powershell
+.\start-tunnel.ps1
+# Copy the new https://*.trycloudflare.com URL it prints
+```
+Then: Cloudflare Pages dashboard → **Settings → Environment variables** →
+update `VITE_PB_URL` → **Save and redeploy**. Also add the same Pages URL
+under PocketBase admin → **Settings → Application → Application URLs** (CORS).
+
+Full reference + alternative methods (admin UI backup, scheduled backup,
+multi-laptop shared backend): [BACKUP.md](BACKUP.md).
+
+---
+
+## �🗂 Project layout
 
 ```
 apps/
