@@ -40,6 +40,94 @@ big your photos are.
 
 ---
 
+## Full new-laptop flow — from zero to identical state
+
+This is the end-to-end walkthrough for setting up the project on a **brand new** laptop with all your existing users, passwords, inspections, and photos.
+
+### Step 1 — Transfer your backup zip
+Copy `pb_backup_<timestamp>.zip` (e.g. 17 MB) to the new laptop via:
+- OneDrive (sync folder), or
+- USB drive, or
+- email it to yourself, or
+- WhatsApp / Telegram to yourself
+
+### Step 2 — Install prerequisites on the new laptop
+- Node.js 20 LTS — <https://nodejs.org>
+- Git — <https://git-scm.com/download/win>
+
+### Step 3 — Clone + base install
+```powershell
+cd $HOME
+git clone https://github.com/BHUPATHI-HUB/CHECKSQUARE.git
+cd CHECKSQUARE
+powershell -ExecutionPolicy Bypass -File .\setup.ps1
+```
+This downloads the PocketBase binary + runs `npm install`. Takes ~2 minutes.
+
+### Step 4 — Restore your backup (replaces the empty `pb_data`)
+```powershell
+# IMPORTANT: PocketBase must NOT be running. The script will refuse otherwise.
+.\restore-pb.ps1 -Source C:\Users\<you>\Downloads\pb_backup_<timestamp>.zip
+```
+You'll see:
+```
+Renaming existing pb_data → pb_data.replaced_<timestamp> (kept as safety net)
+Restoring from: ...\pb_backup_<timestamp>.zip
+✅ Restore complete. data.db = 0.4 MB
+```
+
+### Step 5 — Start the backend
+```powershell
+cd apps\pocketbase
+.\pocketbase.exe serve --http=127.0.0.1:8090
+```
+
+### Step 6 — Verify (in a new terminal)
+```powershell
+# Should show same user count as your source laptop
+Invoke-RestMethod "http://127.0.0.1:8090/api/collections/users/records?perPage=1" | Select-Object -ExpandProperty totalItems
+```
+Open <http://127.0.0.1:8090/_/> and log in with your **original superuser email + password**. All users, inspections, photos, settings are present.
+
+### Step 7 — Start frontend (for local dev)
+```powershell
+# In a new terminal
+cd apps\web
+npm run dev
+```
+Open <http://localhost:3000> → log in with your same admin account.
+
+### Step 8 — (Optional) Resume the public tunnel on the new laptop
+Only if you want the new laptop to also host the live `*.pages.dev` site:
+```powershell
+winget install --id Cloudflare.cloudflared -e
+# close + reopen PowerShell so cloudflared is on PATH
+.\start-tunnel.ps1
+# Copy the new *.trycloudflare.com URL it prints
+# Cloudflare Pages → Settings → Environment Variables → update VITE_PB_URL → Save & Redeploy
+# Then in PB admin → Settings → Application URL → keep https://checksquare.pages.dev
+```
+
+### Summary card (keep handy)
+
+| Task | Command |
+|---|---|
+| Make backup | `.\backup-pb.ps1` |
+| Move zip | OneDrive / USB / email |
+| Clone + install | `git clone ...` → `setup.ps1` |
+| Restore | `.\restore-pb.ps1 -Source <zip>` |
+| Start backend | `cd apps\pocketbase ; .\pocketbase.exe serve --http=127.0.0.1:8090` |
+| Verify | Log in with original email/password |
+| Resume public tunnel | `.\start-tunnel.ps1` → update Pages env → redeploy |
+
+### Common gotchas
+- ❌ **Don't start PocketBase before running `restore-pb.ps1`** — the script refuses to overwrite a live DB.
+- ❌ **Don't run two laptops against the same DB folder** (e.g. via OneDrive symlink) — SQLite will corrupt. Pick one "primary" laptop at a time.
+- ✅ **Original `pb_data` is renamed, not deleted** — if restore goes wrong, `pb_data.replaced_<timestamp>` is your undo.
+- ✅ **Same superuser credentials work** — passwords are stored hashed inside `data.db`, which is in the zip.
+
+---
+
 ## Method 1 — Helper scripts (recommended)
 
 ### On the source laptop
