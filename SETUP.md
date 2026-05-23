@@ -31,6 +31,7 @@ copy the project folder and that `pb_data/` folder.
 | [DATABASE.md](DATABASE.md) | Create the first admin user, seed test data, inspect schema |
 | [CONSTRUCTIONS.md](CONSTRUCTIONS.md) | Architecture overview + per-role walkthrough |
 | [BACKUP.md](BACKUP.md) | Move DB + users + photos to another laptop (helper scripts included) |
+| [HOSTINGER.md](HOSTINGER.md) | Publish on Hostinger Horizons (your project's original platform) |
 | [DEPLOY-FREE.md](DEPLOY-FREE.md) | Publish for free via Cloudflare Tunnel + Pages (no credit card) |
 | [DEPLOY.md](DEPLOY.md) | Publish 24/7 via Fly.io (free tier, credit card required) |
 | [AGENTS.md](AGENTS.md) | Instructions for AI coding agents (Copilot, Claude, etc.) |

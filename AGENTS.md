@@ -17,6 +17,7 @@
   5. [DEPLOY-FREE.md](DEPLOY-FREE.md) — only if the user asks to deploy / publish / host
   6. [DEPLOY.md](DEPLOY.md) — only if the user has a credit card and wants Fly.io
   7. [BACKUP.md](BACKUP.md) — only if the user asks about moving data to another laptop / restoring / backups
+  8. [HOSTINGER.md](HOSTINGER.md) — only if the user asks to deploy on Hostinger Horizons (the project's original platform)
 - **Operating system assumed:** Windows 10/11 with PowerShell. If the host
   is macOS or Linux, adapt the binary download URL (see §3.2) and use `sh`
   equivalents; do **not** ask the user which OS — detect from `$IsWindows` /
