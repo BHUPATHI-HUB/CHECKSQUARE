@@ -138,6 +138,13 @@ You should see:
 
 Open <http://localhost:3000> in your browser. You're live.
 
+> **Why no env vars needed?** The Vite dev server auto-proxies
+> `/hcgi/platform/*` → `http://127.0.0.1:8090` (see
+> [apps/web/vite.config.js](apps/web/vite.config.js)), so the frontend
+> finds PocketBase out of the box. If your backend runs on a different
+> port, copy [apps/web/.env.example](apps/web/.env.example) to
+> `apps/web/.env.local` and set `VITE_PB_URL`.
+
 ---
 
 ## Step 7 — First-run admin setup (only if `pb_data/` is empty)
@@ -164,24 +171,23 @@ create the first admin:
 
 ## Daily use — what to run every time you reopen the laptop
 
-Just the two `serve` / `dev` commands. **Never** run `npm install` again
-unless you delete `node_modules` or someone adds a package.
+Two terminals, two commands. **Never** run `npm install` again unless you
+delete `node_modules` or someone adds a package.
 
 ```powershell
-# Terminal 1
+# Terminal 1 — backend
 cd apps\pocketbase
 .\pocketbase.exe serve --http=127.0.0.1:8090
 
-# Terminal 2
+# Terminal 2 — frontend
 cd apps\web
 npm run dev
 ```
 
-Or, from the project root, the convenience script runs both at once:
-
-```powershell
-npm run dev
-```
+> **Don't use `npm run dev` from the project root on Windows** — its
+> PocketBase half calls bare `pocketbase` (no `.\` and no `.exe`), which
+> only works on Linux/macOS where the binary is on `PATH`. Use the two
+> terminals above.
 
 ---
 
@@ -189,11 +195,16 @@ npm run dev
 
 ```powershell
 npm run build       # outputs static site to dist/apps/web
-npm run start       # serves built site + PocketBase together
 ```
 
-For Hostinger / VPS deploy notes, see your existing
-`/memories/repo/inspectpro-hostinger-deploy.md` file.
+Upload `dist/apps/web/` to any static host (Cloudflare Pages, Netlify,
+Hostinger). For full hosting walk-throughs see
+[DEPLOY-FREE.md](DEPLOY-FREE.md) (Cloudflare, no credit card) or
+[DEPLOY.md](DEPLOY.md) (Fly.io, credit card required).
+
+> `npm run start` at the repo root is for the Fly.io container only — it
+> uses paths like `--dir=/data` that don't exist on Windows. On a laptop,
+> just run the two `dev` / `serve` commands above.
 
 ---
 
