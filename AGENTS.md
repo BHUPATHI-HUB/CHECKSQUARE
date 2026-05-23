@@ -260,27 +260,38 @@ Hosts that **don't** work for this app:
 ### 9.2 No-CC path — Cloudflare Tunnel + Pages
 Full walkthrough lives in [DEPLOY-FREE.md](DEPLOY-FREE.md). Agent summary:
 
-1. Verify `cloudflared` is installed:
+1. Verify `cloudflared` is installed; if not, install + remind user to restart PowerShell:
    ```powershell
    if (-not (Get-Command cloudflared -ErrorAction SilentlyContinue)) {
-     winget install --id Cloudflare.cloudflared -e
+     winget install --id Cloudflare.cloudflared -e --accept-source-agreements --accept-package-agreements
+     # PATH not refreshed in current session — agent must use full path until next shell:
+     $cf = "C:\Program Files (x86)\cloudflared\cloudflared.exe"
    }
    ```
-2. Run `.\start-tunnel.ps1` (already in repo). It starts PocketBase + a Quick Tunnel and prints a `https://*.trycloudflare.com` URL. **Capture that URL — call it `$PB_URL`.**
+2. Run `.\start-tunnel.ps1` (already in repo). It starts PocketBase + a Quick Tunnel and prints a `https://*.trycloudflare.com` URL. **Capture that URL — call it `$PB_URL`.** Verify it returns HTTP 200 at `$PB_URL/api/health` before continuing.
 3. Push latest code: `git add . ; git commit -m "deploy" ; git push`.
-4. **User action required** (browser, can't automate): create a Cloudflare Pages project from `BHUPATHI-HUB/CHECKSQUARE` with:
-   | Field | Value |
+4. **User action required** (browser, can't automate): create a Cloudflare Pages project from `BHUPATHI-HUB/CHECKSQUARE` (or fork). **⚠️ User must click the "Pages" tab at the top, NOT "Workers"** — Workers UI shows "Deploy command" / "Build token" fields and will fail. The Pages form has these EXACT values:
+   | Field | Exact value |
    |---|---|
+   | Framework preset | None |
    | Build command | `npm install && npm run build --workspace apps/web` |
-   | Output directory | `dist/apps/web` |
-   | Env var `VITE_PB_URL` | `$PB_URL` |
+   | **Build output directory** | **`dist/apps/web`** ← not `web`, not `apps/web`, not `/dist/apps/web` |
+   | Root directory | *(blank)* |
+   | Env var `VITE_PB_URL` | `$PB_URL` (no trailing slash) |
    | Env var `NODE_VERSION` | `20` |
-5. **User action required:** in PocketBase admin (`http://127.0.0.1:8090/_/`) → Settings → Application URL → paste the `*.pages.dev` URL.
-6. Smoke test: `Invoke-WebRequest "$PB_URL/api/health"` must return HTTP 200.
+5. **User action required:** in PocketBase admin (`http://127.0.0.1:8090/_/`) → Settings → Application → Application URL → paste the `*.pages.dev` URL (CORS fix; without this login fails silently).
+6. Agent smoke test:
+   ```powershell
+   (Invoke-WebRequest "$PB_URL/api/health" -UseBasicParsing).StatusCode    # expect 200
+   $html = (Invoke-WebRequest "https://<project>.pages.dev/" -UseBasicParsing).Content
+   if ($html -match '/src/main\.jsx') { Write-Host "❌ Output dir wrong — fix in Pages settings to dist/apps/web" }
+   elseif ($html -match '/assets/index-[A-Za-z0-9]+\.js') { Write-Host "✅ Deployed correctly" }
+   ```
 
 Caveats the agent must surface to the user:
-- Quick Tunnel URL **changes on every restart** unless they own a domain (then use Named Tunnel — see DEPLOY-FREE.md §5).
+- Quick Tunnel URL **changes on every restart** unless they own a domain (then use Named Tunnel — see DEPLOY-FREE.md §8). Each rotation requires updating `VITE_PB_URL` in Pages + redeploy.
 - Backend goes down when laptop sleeps. Tell the user to set Power → Sleep → Never while plugged in.
+- If user accidentally creates a superuser with literal placeholder text (e.g. `your-email@example.com`), guide them to re-run `pocketbase.exe superuser upsert <real_email> "<real_password>"` (`upsert` adds-or-updates, keep password in quotes).
 
 ### 9.3 Paid path — Fly.io + Cloudflare Pages
 See [DEPLOY.md](DEPLOY.md). Agent summary:
