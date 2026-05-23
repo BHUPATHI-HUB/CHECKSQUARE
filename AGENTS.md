@@ -14,6 +14,8 @@
   2. [SETUP.md](SETUP.md)
   3. [DATABASE.md](DATABASE.md)
   4. [CONSTRUCTIONS.md](CONSTRUCTIONS.md)
+  5. [DEPLOY-FREE.md](DEPLOY-FREE.md) — only if the user asks to deploy / publish / host
+  6. [DEPLOY.md](DEPLOY.md) — only if the user has a credit card and wants Fly.io
 - **Operating system assumed:** Windows 10/11 with PowerShell. If the host
   is macOS or Linux, adapt the binary download URL (see §3.2) and use `sh`
   equivalents; do **not** ask the user which OS — detect from `$IsWindows` /
@@ -240,7 +242,74 @@ To restart later  : open two terminals and run
 
 ---
 
-## 9. What you (the agent) should NOT do unless asked
+## 9. Deployment (only when the user asks to deploy / publish / host)
+
+There are two supported paths. **Pick based on whether the user has a credit card.**
+
+### 9.1 Decision tree
+```
+Does the user have a credit/debit card (incl. virtual prepaid)?
+  ├── NO  → §9.2  Cloudflare Tunnel + Cloudflare Pages   (₹0, laptop must stay on)
+  └── YES → §9.3  Fly.io + Cloudflare Pages              (₹0 within free tier, 24/7)
+```
+
+Hosts that **don't** work for this app:
+- **Render / Vercel / Koyeb free tier** — no persistent disk; PocketBase DB wipes on redeploy.
+- **PocketHost.io** — free tier no longer runs instances (as of 2026); requires paid plan.
+
+### 9.2 No-CC path — Cloudflare Tunnel + Pages
+Full walkthrough lives in [DEPLOY-FREE.md](DEPLOY-FREE.md). Agent summary:
+
+1. Verify `cloudflared` is installed:
+   ```powershell
+   if (-not (Get-Command cloudflared -ErrorAction SilentlyContinue)) {
+     winget install --id Cloudflare.cloudflared -e
+   }
+   ```
+2. Run `.\start-tunnel.ps1` (already in repo). It starts PocketBase + a Quick Tunnel and prints a `https://*.trycloudflare.com` URL. **Capture that URL — call it `$PB_URL`.**
+3. Push latest code: `git add . ; git commit -m "deploy" ; git push`.
+4. **User action required** (browser, can't automate): create a Cloudflare Pages project from `BHUPATHI-HUB/CHECKSQUARE` with:
+   | Field | Value |
+   |---|---|
+   | Build command | `npm install && npm run build --workspace apps/web` |
+   | Output directory | `dist/apps/web` |
+   | Env var `VITE_PB_URL` | `$PB_URL` |
+   | Env var `NODE_VERSION` | `20` |
+5. **User action required:** in PocketBase admin (`http://127.0.0.1:8090/_/`) → Settings → Application URL → paste the `*.pages.dev` URL.
+6. Smoke test: `Invoke-WebRequest "$PB_URL/api/health"` must return HTTP 200.
+
+Caveats the agent must surface to the user:
+- Quick Tunnel URL **changes on every restart** unless they own a domain (then use Named Tunnel — see DEPLOY-FREE.md §5).
+- Backend goes down when laptop sleeps. Tell the user to set Power → Sleep → Never while plugged in.
+
+### 9.3 Paid path — Fly.io + Cloudflare Pages
+See [DEPLOY.md](DEPLOY.md). Agent summary:
+
+1. `iwr https://fly.io/install.ps1 -useb | iex` then `fly auth login` (user does browser auth).
+2. `cd apps\pocketbase ; fly launch --no-deploy --copy-config --name checksquare-pb --region bom`
+3. `fly volumes create pb_data --region bom --size 1`
+4. `fly secrets set PB_SUPERUSER_EMAIL=... PB_SUPERUSER_PASSWORD=...`
+5. `fly deploy`
+6. Cloudflare Pages setup identical to §9.2 step 4, but `VITE_PB_URL=https://checksquare-pb.fly.dev`.
+
+Existing config files (already in repo, agent must NOT recreate):
+- [apps/pocketbase/Dockerfile](apps/pocketbase/Dockerfile)
+- [apps/pocketbase/fly.toml](apps/pocketbase/fly.toml)
+- [apps/pocketbase/.dockerignore](apps/pocketbase/.dockerignore)
+- [apps/web/.env.example](apps/web/.env.example)
+- [apps/web/src/lib/pocketbaseClient.js](apps/web/src/lib/pocketbaseClient.js) — already env-aware (reads `VITE_PB_URL`)
+
+### 9.4 What the agent must NEVER do during deploy
+- Don't create a credit card or sign up for the user.
+- Don't paste secrets (SMTP keys, passwords) into commits or markdown.
+- Don't push `pb_data/` to GitHub — `.gitignore` already excludes it; verify before `git add .`.
+- Don't change `VITE_PB_URL` in source code. It belongs in Cloudflare Pages env vars only.
+- Don't recommend Render/Vercel/Koyeb for the backend — they will silently wipe the DB.
+
+---
+
+## 10. What you (the agent) should NOT do unless asked
+
 
 - Don't reformat existing source files.
 - Don't add dependencies. The `package.json` is authoritative.
@@ -263,6 +332,21 @@ To restart later  : open two terminals and run
 
 ---
 
+## 11. When the user asks to deploy, follow this loop
+
+1. Ask **one** question only: *"Do you have a credit/debit card (any virtual prepaid card works too)?"*
+2. If **no** → follow §9.2 (Cloudflare Tunnel + Pages). Run `.\start-tunnel.ps1`.
+3. If **yes** → follow §9.3 (Fly.io). Run the 5 commands in order.
+4. For **both paths**, the Cloudflare Pages part is identical — the user must do steps 4–5 in a browser; do not pretend you can automate them.
+5. After deploy, smoke-test:
+   ```powershell
+   Invoke-WebRequest "$BACKEND_URL/api/health"   # expect 200
+   Invoke-WebRequest "$FRONTEND_URL"             # expect 200
+   ```
+6. Report the two URLs + remind the user to set Application URL in PB admin for CORS.
+
+---
+
 End of agent instructions. For human-readable docs, point the user at
-[SETUP.md](SETUP.md), [CONSTRUCTIONS.md](CONSTRUCTIONS.md), and
-[DATABASE.md](DATABASE.md).
+[SETUP.md](SETUP.md), [CONSTRUCTIONS.md](CONSTRUCTIONS.md),
+[DATABASE.md](DATABASE.md), and [DEPLOY-FREE.md](DEPLOY-FREE.md).
