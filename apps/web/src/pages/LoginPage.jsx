@@ -114,12 +114,12 @@ const LoginPage = () => {
               <div>
                 <Label htmlFor="email" className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Email address</Label>
                 <div className="relative mt-2">
-                  <Mail className="absolute left-0 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
+                  <Mail className="absolute left-0 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60 pointer-events-none" />
                   <Input
                     id="email" type="email" placeholder="you@domain.com"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="h-12 pl-7 border-0 border-b rounded-none px-0 focus-visible:ring-0 text-base bg-transparent"
+                    className="h-12 pl-8 pr-0 border-0 border-b rounded-none focus-visible:ring-0 text-base bg-transparent"
                   />
                 </div>
                 {errors.email && <p className="text-xs text-destructive mt-2 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors.email}</p>}
@@ -131,12 +131,12 @@ const LoginPage = () => {
                   <button onClick={handleForgotPassword} className="text-xs text-muted-foreground hover:text-foreground link-underline">Forgot?</button>
                 </div>
                 <div className="relative mt-2">
-                  <Lock className="absolute left-0 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
+                  <Lock className="absolute left-0 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60 pointer-events-none" />
                   <Input
                     id="password" type="password" placeholder="••••••••"
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    className="h-12 pl-7 border-0 border-b rounded-none px-0 focus-visible:ring-0 text-base bg-transparent"
+                    className="h-12 pl-8 pr-0 border-0 border-b rounded-none focus-visible:ring-0 text-base bg-transparent"
                   />
                 </div>
                 {errors.password && <p className="text-xs text-destructive mt-2 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors.password}</p>}

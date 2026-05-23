@@ -82,21 +82,21 @@ const SignupPage = () => {
 
             <form onSubmit={handleSubmit} className="mt-10 space-y-6">
               <Field id="name" label="Full name" icon={User} error={errors.name}>
-                <Input id="name" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder="Maya Chen" className="h-12 pl-7 border-0 border-b rounded-none px-0 focus-visible:ring-0 text-base bg-transparent" />
+                <Input id="name" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder="Maya Chen" className="h-12 pl-8 pr-0 border-0 border-b rounded-none focus-visible:ring-0 text-base bg-transparent" />
               </Field>
               <Field id="phone" label="Phone" icon={Phone} error={errors.phone}>
-                <Input id="phone" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} placeholder="+1 555 0100" className="h-12 pl-7 border-0 border-b rounded-none px-0 focus-visible:ring-0 text-base bg-transparent" />
+                <Input id="phone" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} placeholder="+1 555 0100" className="h-12 pl-8 pr-0 border-0 border-b rounded-none focus-visible:ring-0 text-base bg-transparent" />
               </Field>
               <Field id="email" label="Email" icon={Mail} error={errors.email}>
-                <Input id="email" type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} placeholder="you@studio.com" className="h-12 pl-7 border-0 border-b rounded-none px-0 focus-visible:ring-0 text-base bg-transparent" />
+                <Input id="email" type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} placeholder="you@studio.com" className="h-12 pl-8 pr-0 border-0 border-b rounded-none focus-visible:ring-0 text-base bg-transparent" />
               </Field>
 
               <div className="grid grid-cols-2 gap-6">
                 <Field id="password" label="Password" icon={Lock} error={errors.password}>
-                  <Input id="password" type="password" value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} className="h-12 pl-7 border-0 border-b rounded-none px-0 focus-visible:ring-0 text-base bg-transparent" />
+                  <Input id="password" type="password" value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} className="h-12 pl-8 pr-0 border-0 border-b rounded-none focus-visible:ring-0 text-base bg-transparent" />
                 </Field>
                 <Field id="confirmPassword" label="Confirm" icon={Lock} error={errors.confirmPassword}>
-                  <Input id="confirmPassword" type="password" value={formData.confirmPassword} onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })} className="h-12 pl-7 border-0 border-b rounded-none px-0 focus-visible:ring-0 text-base bg-transparent" />
+                  <Input id="confirmPassword" type="password" value={formData.confirmPassword} onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })} className="h-12 pl-8 pr-0 border-0 border-b rounded-none focus-visible:ring-0 text-base bg-transparent" />
                 </Field>
               </div>
 
