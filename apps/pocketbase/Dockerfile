@@ -32,7 +32,10 @@ COPY pb_migrations /pb/pb_migrations
 COPY pb_hooks       /pb/pb_hooks
 
 # pb_data is a mounted volume; do NOT bake it into the image.
-VOLUME ["/pb_data"]
+# Note: VOLUME directive removed for Railway compatibility (Railway uses managed
+# volumes attached via UI). Fly.io infers the volume from fly.toml, so it works
+# there without this line too.
+# VOLUME ["/pb_data"]
 
 EXPOSE 8080
 
