@@ -23,6 +23,20 @@ copy the project folder and that `pb_data/` folder.
 
 ---
 
+## Related guides
+
+| Guide | When to read it |
+|---|---|
+| [SETUP.md](SETUP.md) | First-time install on a new laptop (you are here) |
+| [DATABASE.md](DATABASE.md) | Create the first admin user, seed test data, inspect schema |
+| [CONSTRUCTIONS.md](CONSTRUCTIONS.md) | Architecture overview + per-role walkthrough |
+| [BACKUP.md](BACKUP.md) | Move DB + users + photos to another laptop (helper scripts included) |
+| [DEPLOY-FREE.md](DEPLOY-FREE.md) | Publish for free via Cloudflare Tunnel + Pages (no credit card) |
+| [DEPLOY.md](DEPLOY.md) | Publish 24/7 via Fly.io (free tier, credit card required) |
+| [AGENTS.md](AGENTS.md) | Instructions for AI coding agents (Copilot, Claude, etc.) |
+
+---
+
 ## Step 1 — Install the prerequisites (one time only)
 
 Install these three things on the new laptop. Click through the default
