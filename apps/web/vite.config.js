@@ -1,6 +1,7 @@
 import path from 'node:path';
 import react from '@vitejs/plugin-react';
 import { createLogger, defineConfig } from 'vite';
+import { VitePWA } from 'vite-plugin-pwa';
 import inlineEditPlugin from './plugins/visual-editor/vite-plugin-react-inline-editor.js';
 import editModeDevPlugin from './plugins/visual-editor/vite-plugin-edit-mode.js';
 import selectionModePlugin from './plugins/selection-mode/vite-plugin-selection-mode.js';
@@ -292,7 +293,36 @@ export default defineConfig({
 	plugins: [
 		...(isDev ? [inlineEditPlugin(), editModeDevPlugin(), selectionModePlugin(), iframeRouteRestorationPlugin(), pocketbaseAuthPlugin()] : []),
 		react(),
-		addTransformIndexHtml
+		addTransformIndexHtml,
+		VitePWA({
+			registerType: 'autoUpdate',
+			injectRegister: 'auto',
+			devOptions: { enabled: false },
+			includeAssets: ['logo.svg', 'property-hero.jpg', 'report-cover.jpg'],
+			workbox: {
+				globPatterns: ['**/*.{js,css,html,svg,png,jpg,jpeg,ico,woff2}'],
+				maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+				navigateFallback: '/index.html',
+				navigateFallbackDenylist: [/^\/api\//, /^\/_\//],
+				cleanupOutdatedCaches: true,
+				clientsClaim: true,
+				skipWaiting: true,
+			},
+			manifest: {
+				name: 'CheckSquare',
+				short_name: 'CheckSquare',
+				description: 'Property inspection management',
+				theme_color: '#0f172a',
+				background_color: '#ffffff',
+				display: 'standalone',
+				orientation: 'any',
+				scope: '/',
+				start_url: '/',
+				icons: [
+					{ src: '/logo.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' },
+				],
+			},
+		}),
 	],
 	server: {
 		port: 3000,
