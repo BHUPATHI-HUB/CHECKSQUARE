@@ -101,29 +101,67 @@ Without step B, login on the live site fails silently with a CORS error.
 
 ## 4. First-time Cloudflare Pages setup (one-time only)
 
-Only needed once per Cloudflare account. Skip if already set up.
+Full browser-based walkthrough, ~10 minutes. Skip if already set up.
 
-1. Push latest code: `git add . ; git commit -m "deploy" ; git push`
-2. https://dash.cloudflare.com → **Workers & Pages** → **Create application** → **Pages** tab (NOT Workers)
-3. **Connect to Git** → authorize GitHub → pick repo → branch `main`
-4. Fill in **exactly**:
+### Prerequisites
+- `cloudflared` installed and tunnel running (see §2) — copy the tunnel URL, e.g. `https://brass-either-electoral-halifax.trycloudflare.com`
+- Latest code pushed to GitHub: `git add . ; git commit -m "deploy" ; git push`
 
-   | Field | Value |
-   |---|---|
-   | Framework preset | **None** |
-   | Build command | `npm install && npm run build --workspace apps/web` |
-   | **Build output directory** | **`dist/apps/web`** |
-   | Root directory | *(blank)* |
+### Step 1 — Create Cloudflare account (skip if you have one)
+1. Go to https://dash.cloudflare.com/sign-up
+2. Sign up with email + password (no credit card needed)
+3. Verify your email
 
-5. **Environment variables** → add:
+### Step 2 — Create the Pages project
+1. Log in → https://dash.cloudflare.com
+2. Left sidebar → **Workers & Pages**
+3. Click **Create application**
+4. **⚠️ At the top, click the "Pages" tab** (NOT "Workers" — the Workers tab shows "Deploy command" / "Build token" fields, which is wrong)
+5. Click **Connect to Git**
+6. **Connect GitHub** → authorize Cloudflare → pick `BHUPATHI-HUB/CHECKSQUARE`
+7. Click **Begin setup**
 
-   | Name | Value |
-   |---|---|
-   | `VITE_PB_URL` | your tunnel URL (no trailing slash) |
-   | `NODE_VERSION` | `20` |
+### Step 3 — Build configuration (most important — exact values)
 
-6. **Save and Deploy** → wait ~2 min → copy `https://<project>.pages.dev`
-7. Do step **3.B** above to fix CORS.
+| Field | Exact value |
+|---|---|
+| Project name | `checksquare` (or whatever — becomes `<name>.pages.dev`) |
+| Production branch | `main` |
+| Framework preset | **None** |
+| Build command | `npm install && npm run build --workspace apps/web` |
+| **Build output directory** | **`dist/apps/web`** |
+| Root directory (advanced) | *(leave blank)* |
+
+⚠️ **`dist/apps/web` must be exact.** `web`, `apps/web`, `/dist/apps/web` all fail.
+
+### Step 4 — Environment variables
+Scroll down → expand **Environment variables (advanced)** → click **+ Add variable** twice:
+
+| Variable | Value |
+|---|---|
+| `VITE_PB_URL` | your tunnel URL (no trailing `/`), e.g. `https://brass-either-electoral-halifax.trycloudflare.com` |
+| `NODE_VERSION` | `20` |
+
+### Step 5 — Deploy
+1. Click **Save and Deploy**
+2. Wait ~2 minutes — watch the build log
+3. You get a URL like `https://checksquare.pages.dev` → **copy it**
+
+### Step 6 — Fix CORS (critical, easy to miss)
+Without this, the live site loads but **login silently fails**.
+
+1. Open http://127.0.0.1:8090/_/ → log in as superuser
+2. Left sidebar → **Settings** (gear icon)
+3. Click **Application**
+4. **Application URL** field → paste your Pages URL: `https://checksquare.pages.dev`
+5. Click **Save**
+
+### Step 7 — Smoke test
+```powershell
+(Invoke-WebRequest "https://<your-tunnel>.trycloudflare.com/api/health" -UseBasicParsing).StatusCode  # 200
+(Invoke-WebRequest "https://<your-project>.pages.dev/" -UseBasicParsing).StatusCode                   # 200
+```
+Open `https://<your-project>.pages.dev` in a fresh browser tab → log in → confirm dashboard loads.
 
 ---
 
