@@ -40,16 +40,20 @@ const DownloadsPage = () => {
 		setLoading(true);
 		try {
 			const records = await pb.collection('report_downloads').getFullList({
-				filter: `user="${user.id}"`,
+				// Parameterized filter — guards against any quote/escape edge cases
+				// in user.id (e.g. a future custom-id scheme). PB SDK ≥0.21.
+				filter: pb.filter('user = {:uid}', { uid: user.id }),
 				sort: '-created',
 				expand: 'inspection',
 				$autoCancel: false,
 			});
 			setItems(records);
 		} catch (err) {
-			console.warn('Could not load downloads:', err?.message || err);
-			toast.error('Could not load your downloads.');
-			setItems([]);
+			if (!String(err?.message || '').includes('autocancel')) {
+				console.warn('Could not load downloads:', err?.message || err);
+				toast.error('Could not load your downloads.');
+				setItems([]);
+			}
 		} finally {
 			setLoading(false);
 		}

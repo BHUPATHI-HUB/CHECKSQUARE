@@ -76,15 +76,10 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     if (!user) return;
 
-    const bump = () => {
-      lastActivityRef.current = Date.now();
-      // If the warning was up because the user was idle, dismiss it the
-      // moment they come back (before logout deadline).
-      if (warnedRef.current && Date.now() - lastActivityRef.current < IDLE_WARN_MS) {
-        // user is active again -- handled by the tick below
-      }
-    };
-
+    // Single tick. Reads activity via ref + reads warning state via a flag ref
+    // so that toggling the modal does NOT re-mount listeners or restart the
+    // interval (previous behaviour re-added 5 listeners every modal toggle).
+    const bump = () => { lastActivityRef.current = Date.now(); };
     const events = ['mousemove', 'keydown', 'touchstart', 'scroll', 'click'];
     events.forEach((ev) => window.addEventListener(ev, bump, { passive: true }));
 
@@ -96,7 +91,7 @@ export const AuthProvider = ({ children }) => {
       } else if (idle >= IDLE_WARN_MS && !warnedRef.current) {
         warnedRef.current = true;
         setSessionWarning(true);
-      } else if (idle < IDLE_WARN_MS && warnedRef.current && sessionWarning) {
+      } else if (idle < IDLE_WARN_MS && warnedRef.current) {
         // Activity resumed before logout -> auto-dismiss the modal.
         warnedRef.current = false;
         setSessionWarning(false);
@@ -107,7 +102,7 @@ export const AuthProvider = ({ children }) => {
       events.forEach((ev) => window.removeEventListener(ev, bump));
       clearInterval(tick);
     };
-  }, [user, logout, sessionWarning]);
+  }, [user, logout]);
 
   // Session expiry warning. PocketBase tokens are JWTs; decode the `exp` claim.
   useEffect(() => {
@@ -115,7 +110,11 @@ export const AuthProvider = ({ children }) => {
 
     const decodeExp = (token) => {
       try {
-        const payload = JSON.parse(atob(token.split('.')[1]));
+        // JWTs use base64url (URL-safe alphabet) which atob() can't parse
+        // directly — translate `-_` → `+/` and right-pad to a multiple of 4.
+        let b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+        b64 += '='.repeat((4 - (b64.length % 4)) % 4);
+        const payload = JSON.parse(atob(b64));
         return payload.exp ? payload.exp * 1000 : null;
       } catch {
         return null;

@@ -87,10 +87,13 @@ export async function saveFile(blob, filename, opts = {}) {
 	}
 
 	// 2. Sync to PocketBase (best-effort — silent on failure).
-	if (sync && pb?.authStore?.isValid && pb.authStore.model?.id) {
+	// `authStore.record` is the canonical accessor in PB JS SDK ≥0.21;
+	// `authStore.model` is deprecated and undefined on newer builds.
+	const authUser = pb?.authStore?.record || pb?.authStore?.model;
+	if (sync && pb?.authStore?.isValid && authUser?.id) {
 		try {
 			const fd = new FormData();
-			fd.append('user', pb.authStore.model.id);
+			fd.append('user', authUser.id);
 			if (inspectionId) fd.append('inspection', inspectionId);
 			fd.append('filename', filename);
 			fd.append('format', extToFormat(filename));

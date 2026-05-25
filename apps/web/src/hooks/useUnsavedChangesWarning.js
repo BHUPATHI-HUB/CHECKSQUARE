@@ -46,10 +46,12 @@ export default function useUnsavedChangesWarning(
 				const { Capacitor } = await import('@capacitor/core');
 				if (!Capacitor?.isNativePlatform?.()) return;
 				const { App } = await import('@capacitor/app');
-				const sub = await App.addListener('backButton', () => {
+				const sub = await App.addListener('backButton', ({ canGoBack } = {}) => {
 					if (!when) {
-						// Default behaviour: let the system go back.
-						App.exitApp?.();
+						// No unsaved work — preserve normal Android back semantics:
+						// navigate back if possible, otherwise exit the app.
+						if (canGoBack || window.history.length > 1) window.history.back();
+						else App.exitApp?.();
 						return;
 					}
 					if (window.confirm(message)) {
