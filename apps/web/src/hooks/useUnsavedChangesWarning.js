@@ -1,13 +1,16 @@
 import { useEffect, useRef } from 'react';
-import { useBlocker } from 'react-router-dom';
 
 /**
  * Warns / confirms before the user leaves a page with unsaved work.
  *
  * Guards against:
  *   1. Browser tab close / refresh / OS back gesture          → beforeunload
- *   2. In-app navigation via react-router (clicking a Link)   → useBlocker
- *   3. Android hardware Back button inside the Capacitor APK  → App.backButton
+ *   2. Android hardware Back button inside the Capacitor APK  → App.backButton
+ *
+ * Note: in-app react-router <Link> clicks are NOT intercepted here because
+ * the app uses the legacy <BrowserRouter> component router, and `useBlocker`
+ * only works inside `createBrowserRouter` (data router). Wiring it in would
+ * crash every consumer with "useBlocker must be used within a data router."
  *
  * @param {boolean} when    True while there is unsaved work.
  * @param {string}  message Confirmation prompt shown to the user.
@@ -16,15 +19,6 @@ export default function useUnsavedChangesWarning(
 	when,
 	message = 'You have an inspection in progress. Are you sure you want to leave? Unsaved changes will be lost.'
 ) {
-	// Router blocker — pauses in-app navigation and shows native confirm().
-	const blocker = useBlocker(when);
-	useEffect(() => {
-		if (blocker.state === 'blocked') {
-			if (window.confirm(message)) blocker.proceed();
-			else blocker.reset();
-		}
-	}, [blocker, message]);
-
 	// Browser tab close / refresh / web back-button.
 	useEffect(() => {
 		if (!when) return;
