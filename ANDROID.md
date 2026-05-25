@@ -130,29 +130,44 @@ After this `apps\web\android\` exists and is ready to build.
 
 ## 5. Build the APK
 
-Every time the web app changes:
+Every time the web app changes. Run from the **project root** in PowerShell:
 
 ```powershell
-cd apps\web
-
-# 5.1 — Rebuild web bundle
-npm run build
+# 5.1 — Rebuild web bundle (VITE_PB_URL only matters for bundled-offline builds;
+#       harmless to set since capacitor.config.json server.url overrides it at runtime)
+$env:VITE_PB_URL = "https://checksquare.pages.dev"
+npm run build --workspace apps/web
 
 # 5.2 — Copy fresh web assets + plugins into android/
+cd apps\web
 npx cap sync android
 
-# 5.3 — Compile APK with Gradle
-cd android
-$env:JAVA_HOME = "C:\Program Files\Microsoft\jdk-21.0.11.10-hotspot"
+# 5.3 — Compile APK with Gradle (JDK 21 required by Capacitor 8)
+$env:JAVA_HOME  = "C:\Program Files\Microsoft\jdk-21.0.11.10-hotspot"
 $env:ANDROID_HOME = "$env:LOCALAPPDATA\Android\Sdk"
 $env:Path = "$env:JAVA_HOME\bin;" + $env:Path
-.\gradlew.bat assembleDebug
+cd android
+.\gradlew.bat assembleDebug '-Porg.gradle.java.installations.paths=C:\Program Files\Microsoft\jdk-21.0.11.10-hotspot'
+
+# 5.4 — Copy APK to Downloads with timestamp
+$ts = Get-Date -Format "yyyyMMdd-HHmm"
+Copy-Item app\build\outputs\apk\debug\app-debug.apk "$env:USERPROFILE\Downloads\CheckSquare-debug-$ts.apk"
 ```
+
+> **Why the `-P` flag?** Gradle's Java auto-detection sometimes misses the JDK
+> install. Passing `-Porg.gradle.java.installations.paths=...` explicitly points
+> the toolchain at JDK 21. The single-quotes around the value are required
+> because the path contains a space (`Program Files`).
 
 First build downloads Gradle 8.14 + dependencies (~5 min). Subsequent builds
 take ~10 s thanks to the Gradle daemon.
 
-**Output:** `apps\web\android\app\build\outputs\apk\debug\app-debug.apk`
+**Output:** `apps\web\android\app\build\outputs\apk\debug\app-debug.apk` (~9 MB)
+
+> 💡 **Frontend-only changes don't need a new APK.** Because `capacitor.config.json`
+> has `server.url: "https://checksquare.pages.dev"`, the installed APK fetches
+> the latest UI from Cloudflare Pages on every launch. Just `git push` and let
+> Pages auto-deploy — users reopen the app and see the change.
 
 ---
 
