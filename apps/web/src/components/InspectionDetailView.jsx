@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext.jsx';
 import { useSettings } from '@/contexts/SettingsContext.jsx';
+import { useInspectionStatus } from '@/hooks/useInspectionStatus.js';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -15,11 +16,13 @@ import { Edit, Download, CheckCircle, XCircle, AlertCircle, FileText, Image as I
 const InspectionDetailView = ({ inspection, onUpdate }) => {
   const { user, role } = useAuth();
   const { settings } = useSettings();
+  const { updateInspectionStatus, softDeleteInspection, saveInspection } = useInspectionStatus();
   const navigate = useNavigate();
   const [localInspection, setLocalInspection] = useState(inspection);
   const [selectedRoom, setSelectedRoom] = useState(null);
   const [managerOpen, setManagerOpen] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   const isAdmin = role === 'admin';
@@ -29,15 +32,23 @@ const InspectionDetailView = ({ inspection, onUpdate }) => {
   const handleApprove = () => updateStatus('approved');
   const handleReject = () => updateStatus('rejected');
 
-  const updateStatus = (status) => {
-    const inspections = JSON.parse(localStorage.getItem('inspections') || '[]');
-    const updated = inspections.map(i =>
-      i.id === inspection.id ? { ...i, status, [status === 'approved' ? 'approvedBy' : 'rejectedBy']: user.name, [status === 'approved' ? 'approvedAt' : 'rejectedAt']: new Date().toISOString() } : i
-    );
-    localStorage.setItem('inspections', JSON.stringify(updated));
-    setLocalInspection({ ...localInspection, status });
-    toast.success(`Inspection ${status}`);
-    if (onUpdate) onUpdate();
+  // Persist status via PocketBase (previously wrote to a non-existent
+  // `inspections` localStorage key, so approvals silently disappeared on
+  // reload). The hook handles audit fields (approvedBy/approvedAt etc.)
+  // and customer notifications server-side.
+  const updateStatus = async (status) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const ok = await updateInspectionStatus(inspection.id, status, user);
+      if (ok) {
+        setLocalInspection((prev) => ({ ...prev, status }));
+        toast.success(`Inspection ${status}`);
+        if (onUpdate) onUpdate();
+      }
+    } finally {
+      setBusy(false);
+    }
   };
 
   const handleEditRoom = (room) => {
@@ -45,30 +56,40 @@ const InspectionDetailView = ({ inspection, onUpdate }) => {
     setManagerOpen(true);
   };
 
-  const handleSaveRoom = (updatedRoom) => {
-    const updatedInspections = JSON.parse(localStorage.getItem('inspections') || '[]');
-    const newRoomInspections = localInspection.roomInspections.map(r => r.id === updatedRoom.id ? updatedRoom : r);
-    const mapped = updatedInspections.map(i => i.id === localInspection.id ? { ...i, roomInspections: newRoomInspections } : i);
-    localStorage.setItem('inspections', JSON.stringify(mapped));
-    setLocalInspection(prev => ({ ...prev, roomInspections: newRoomInspections }));
+  // Persist room photo edits to PB via saveInspection (same path the wizard
+  // uses). Previously written only to localStorage which the dashboards
+  // never read from.
+  const handleSaveRoom = async (updatedRoom) => {
+    const newRoomInspections = (localInspection.roomInspections || []).map((r) =>
+      r.id === updatedRoom.id ? updatedRoom : r,
+    );
+    const next = { ...localInspection, roomInspections: newRoomInspections };
+    setLocalInspection(next);
+    try {
+      const saved = await saveInspection(next, localInspection.id);
+      if (saved) {
+        setLocalInspection(saved);
+        if (onUpdate) onUpdate();
+      }
+    } catch (err) {
+      console.error('Save room failed', err);
+      toast.error('Failed to save room changes');
+    }
   };
 
-  const handleDeleteReport = () => {
-    const inspections = JSON.parse(localStorage.getItem('inspections') || '[]');
-    const deletedArchives = JSON.parse(localStorage.getItem('deleted-inspections') || '[]');
-    
-    const reportToDelete = {
-      ...localInspection,
-      deletedAt: new Date().toISOString(),
-      deletedBy: user.id,
-      deletionReason: 'Manual Admin Deletion'
-    };
-    
-    localStorage.setItem('inspections', JSON.stringify(inspections.filter(i => i.id !== localInspection.id)));
-    localStorage.setItem('deleted-inspections', JSON.stringify([...deletedArchives, reportToDelete]));
-    
-    toast.success('Report moved to deleted archive');
-    navigate('/admin/dashboard');
+  const handleDeleteReport = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const ok = await softDeleteInspection(inspection.id, user, 'Manual Admin Deletion');
+      if (ok) {
+        toast.success('Report moved to deleted archive');
+        navigate('/admin/dashboard');
+      }
+    } finally {
+      setBusy(false);
+      setDeleteConfirmOpen(false);
+    }
   };
 
   const handleDownload = async (format) => {
