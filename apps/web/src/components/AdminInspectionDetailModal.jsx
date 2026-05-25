@@ -10,7 +10,7 @@ import { toast } from 'sonner';
 import AdminApprovalActions from '@/components/AdminApprovalActions.jsx';
 import AdminDownloadReport from '@/components/AdminDownloadReport.jsx';
 import ReportPreviewModal from '@/components/ReportPreviewModal.jsx';
-import { MapPin, Calendar, User, Edit2, Save, X, Eye } from 'lucide-react';
+import { MapPin, Calendar, User, Edit2, Save, X, Eye, Loader2 } from 'lucide-react';
 import pb from '@/lib/pocketbaseClient.js';
 
 const AdminInspectionDetailModal = ({ inspection, open, onOpenChange, onInspectionUpdated }) => {
@@ -19,6 +19,10 @@ const AdminInspectionDetailModal = ({ inspection, open, onOpenChange, onInspecti
   const [editForm, setEditForm] = useState({});
   const [saving, setSaving] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  // Dashboards now pass a LEAN inspection (no roomInspections / areaCalculations
+  // / waterQuality JSON) for speed. We hydrate the full record on open so the
+  // Rooms / Areas tabs and the report preview have everything they need.
+  const [hydrating, setHydrating] = useState(false);
 
   useEffect(() => {
     if (inspection) {
@@ -37,6 +41,33 @@ const AdminInspectionDetailModal = ({ inspection, open, onOpenChange, onInspecti
       });
     }
   }, [inspection]);
+
+  // Hydrate the heavy JSON fields the moment the modal opens, but only if
+  // the prop is the lean list-row shape (no roomInspections array yet).
+  useEffect(() => {
+    if (!open || !inspection?.id) return;
+    if (Array.isArray(inspection.roomInspections)) return; // already full
+    let cancelled = false;
+    setHydrating(true);
+    (async () => {
+      try {
+        const full = await pb.collection('inspections').getOne(inspection.id, { $autoCancel: false });
+        if (cancelled) return;
+        let safeMeta = full.metadata;
+        if (typeof safeMeta === 'string') {
+          try { safeMeta = JSON.parse(safeMeta); } catch (_) { safeMeta = {}; }
+        }
+        if (!safeMeta || typeof safeMeta !== 'object') safeMeta = {};
+        setLocalData({ ...full, metadata: safeMeta });
+      } catch (err) {
+        console.error('Failed to hydrate inspection detail', err);
+        if (!cancelled) toast.error('Could not load full inspection');
+      } finally {
+        if (!cancelled) setHydrating(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [open, inspection]);
 
   if (!localData) return null;
 
@@ -83,6 +114,7 @@ const AdminInspectionDetailModal = ({ inspection, open, onOpenChange, onInspecti
             <DialogTitle className="text-2xl font-bold flex items-center gap-3">
               Inspection Details
               {getStatusBadge(localData.status)}
+              {hydrating && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
             </DialogTitle>
             <DialogDescription className="mt-1">
               ID: {localData.id} • Submitted by {localData.inspectorName}

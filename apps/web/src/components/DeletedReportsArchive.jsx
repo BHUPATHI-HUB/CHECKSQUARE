@@ -5,10 +5,11 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Search, RotateCcw, Trash2, Archive, Download } from 'lucide-react';
+import { Search, RotateCcw, Trash2, Archive, Download, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useInspectionStatus } from '@/hooks/useInspectionStatus.js';
 import { useFeedback } from '@/contexts/FeedbackContext.jsx';
+import pb from '@/lib/pocketbaseClient.js';
 
 const DeletedReportsArchive = () => {
   const { getDeletedInspections, restoreInspection, permanentlyDeleteInspection } = useInspectionStatus();
@@ -16,6 +17,7 @@ const DeletedReportsArchive = () => {
   const [deletedReports, setDeletedReports] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [reportToPermanentlyDelete, setReportToPermanentlyDelete] = useState(null);
+  const [exporting, setExporting] = useState(false);
 
   const loadData = async () => {
     const data = await getDeletedInspections();
@@ -47,14 +49,31 @@ const DeletedReportsArchive = () => {
     }
   };
 
-  const exportArchive = () => {
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(deletedReports, null, 2));
-    const downloadAnchorNode = document.createElement('a');
-    downloadAnchorNode.setAttribute("href", dataStr);
-    downloadAnchorNode.setAttribute("download", `deleted_reports_archive_${new Date().toISOString().split('T')[0]}.json`);
-    document.body.appendChild(downloadAnchorNode);
-    downloadAnchorNode.click();
-    downloadAnchorNode.remove();
+  const exportArchive = async () => {
+    if (deletedReports.length === 0) return;
+    setExporting(true);
+    try {
+      // The list view stores the LEAN row shape (no roomInspections, areaCalculations,
+      // waterQuality, scoreOverrides). For an audit/restore export we re-fetch the
+      // full record per row so the JSON dump is complete.
+      const full = await Promise.all(
+        deletedReports.map((r) =>
+          pb.collection('inspections').getOne(r.id, { $autoCancel: false }).catch(() => r),
+        ),
+      );
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(full, null, 2));
+      const downloadAnchorNode = document.createElement('a');
+      downloadAnchorNode.setAttribute("href", dataStr);
+      downloadAnchorNode.setAttribute("download", `deleted_reports_archive_${new Date().toISOString().split('T')[0]}.json`);
+      document.body.appendChild(downloadAnchorNode);
+      downloadAnchorNode.click();
+      downloadAnchorNode.remove();
+    } catch (err) {
+      console.error('Failed to export archive', err);
+      toast.error('Failed to export archive');
+    } finally {
+      setExporting(false);
+    }
   };
 
   const filtered = deletedReports.filter(r => 
@@ -72,8 +91,9 @@ const DeletedReportsArchive = () => {
           </CardTitle>
           <CardDescription>View, restore, or permanently remove deleted inspections.</CardDescription>
         </div>
-        <Button variant="outline" size="sm" onClick={exportArchive} disabled={deletedReports.length === 0}>
-          <Download className="w-4 h-4 mr-2" /> Export Log
+        <Button variant="outline" size="sm" onClick={exportArchive} disabled={deletedReports.length === 0 || exporting}>
+          {exporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
+          {exporting ? 'Bundling…' : 'Export Log'}
         </Button>
       </CardHeader>
       <CardContent>

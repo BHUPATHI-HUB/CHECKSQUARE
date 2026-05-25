@@ -2,6 +2,25 @@ import { useCallback } from 'react';
 import { toast } from 'sonner';
 import pb from '@/lib/pocketbaseClient.js';
 
+// Fields needed to render the dashboard list rows + drive sort/search/filter
+// + power inline actions (approve/reject/chat/delete). Crucially we DO NOT
+// fetch the four large JSON fields (`roomInspections`, `areaCalculations`,
+// `waterQuality`, `scoreOverrides`) — those can balloon to megabytes per row
+// because they hold every uploaded photo URL, room note, and area calc, and
+// transferring them for 50+ records over Cloudflare Tunnel is what was making
+// the admin/inspector dashboards take many seconds to load. The full record
+// is fetched on-demand by AdminDownloadReport and AdminInspectionDetailModal
+// when the operator actually opens a row.
+const LIST_FIELDS = [
+  'id', 'collectionId', 'collectionName',
+  'status', 'inspector', 'inspectorName', 'customer',
+  'created', 'updated',
+  'metadata', // small (~few KB) — needed for address/date/preparedFor in rows
+  'propertyType', 'includeScore',
+  'deletedAt', 'deletedBy', 'deletionReason',
+  'approvedBy', 'approvedAt', 'rejectedBy', 'rejectedAt',
+].join(',');
+
 // All inspection CRUD now goes through PocketBase. We keep the same hook surface
 // so existing callers (AdminDashboard, InspectorDashboard, InspectionForm, etc.)
 // just need to await the returned promises.
@@ -14,6 +33,7 @@ export const useInspectionStatus = () => {
       const records = await pb.collection('inspections').getFullList({
         filter: 'deletedAt = null',
         sort: '-created',
+        fields: LIST_FIELDS,
         $autoCancel: false,
         ...options,
       });
@@ -31,6 +51,7 @@ export const useInspectionStatus = () => {
       return await pb.collection('inspections').getFullList({
         filter: `inspector = "${inspectorId}" && deletedAt = null`,
         sort: '-created',
+        fields: LIST_FIELDS,
         $autoCancel: false,
       });
     } catch (error) {
@@ -45,6 +66,7 @@ export const useInspectionStatus = () => {
       return await pb.collection('inspections').getFullList({
         filter: 'deletedAt != null',
         sort: '-deletedAt',
+        fields: LIST_FIELDS,
         $autoCancel: false,
       });
     } catch (error) {

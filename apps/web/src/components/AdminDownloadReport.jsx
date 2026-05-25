@@ -9,6 +9,7 @@ import {
   buildReportHTML, buildDOCXBlob, generatePDF, generateDOCX,
 } from '@/utils/ReportGenerator.jsx';
 import { useSettings } from '@/contexts/SettingsContext.jsx';
+import pb from '@/lib/pocketbaseClient.js';
 
 /**
  * Admin "download report" dialog.
@@ -29,6 +30,12 @@ const AdminDownloadReport = ({ inspection, variant = 'icon' }) => {
   const [docxRendering, setDocxRendering] = useState(false);
   const [docxError, setDocxError] = useState(null);
   const docxContainerRef = useRef(null);
+  // The list query intentionally strips the heavy JSON fields
+  // (`roomInspections`, `areaCalculations`, `waterQuality`, `scoreOverrides`)
+  // to keep the dashboards fast. The report renderer NEEDS them, so we fetch
+  // the full record on open and use that local copy from here on.
+  const [fullInspection, setFullInspection] = useState(inspection);
+  const [hydrating, setHydrating] = useState(false);
 
   // Reset preview mode every time the dialog opens so reviewers always
   // start on the PDF view (the "customer-facing" canonical render).
@@ -39,18 +46,43 @@ const AdminDownloadReport = ({ inspection, variant = 'icon' }) => {
     }
   }, [open]);
 
+  // When the dialog opens, hydrate to a full record if the prop only has
+  // the lean list-row fields (no `roomInspections` array yet).
+  useEffect(() => {
+    if (!open || !inspection?.id) return;
+    const needsHydration = !Array.isArray(inspection.roomInspections);
+    if (!needsHydration) {
+      setFullInspection(inspection);
+      return;
+    }
+    let cancelled = false;
+    setHydrating(true);
+    (async () => {
+      try {
+        const full = await pb.collection('inspections').getOne(inspection.id, { $autoCancel: false });
+        if (!cancelled) setFullInspection(full);
+      } catch (err) {
+        console.error('Failed to hydrate inspection for report', err);
+        if (!cancelled) toast.error('Could not load the full inspection. Please retry.');
+      } finally {
+        if (!cancelled) setHydrating(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [open, inspection]);
+
   // Build the PDF-facing HTML once per (inspection, settings) pair so
   // the iframe doesn't reflow on unrelated re-renders.
   const html = useMemo(
-    () => (inspection ? buildReportHTML(inspection, settings) : ''),
-    [inspection, settings],
+    () => (fullInspection && !hydrating ? buildReportHTML(fullInspection, settings) : ''),
+    [fullInspection, hydrating, settings],
   );
 
   // Render the DOCX into the right-hand pane when (and only when) the
   // operator switches to the DOCX tab.  We build a fresh blob each
   // switch so the preview always reflects the live inspection data.
   useEffect(() => {
-    if (!open || previewMode !== 'docx' || !inspection) return;
+    if (!open || previewMode !== 'docx' || !fullInspection || hydrating) return;
     let cancelled = false;
     const container = docxContainerRef.current;
     if (!container) return;
@@ -60,7 +92,7 @@ const AdminDownloadReport = ({ inspection, variant = 'icon' }) => {
     (async () => {
       try {
         const [{ blob }, { renderAsync }] = await Promise.all([
-          buildDOCXBlob(inspection, settings),
+          buildDOCXBlob(fullInspection, settings),
           import('docx-preview'),
         ]);
         if (cancelled || !docxContainerRef.current) return;
@@ -86,15 +118,28 @@ const AdminDownloadReport = ({ inspection, variant = 'icon' }) => {
       }
     })();
     return () => { cancelled = true; };
-  }, [open, previewMode, inspection, settings]);
+  }, [open, previewMode, fullInspection, hydrating, settings]);
 
   const handleDownload = async (format) => {
-    if (!inspection) return;
+    if (!fullInspection) return;
+    // If the user clicks Download before hydration finished, fetch on demand
+    // so we never generate a report from the lean list-row data.
+    let data = fullInspection;
+    if (!Array.isArray(data.roomInspections) && inspection?.id) {
+      try {
+        data = await pb.collection('inspections').getOne(inspection.id, { $autoCancel: false });
+        setFullInspection(data);
+      } catch (err) {
+        console.error('Failed to fetch inspection for download', err);
+        toast.error('Could not load the full inspection. Please retry.');
+        return;
+      }
+    }
     setGenerating(format);
     toast.info(`Composing ${format.toUpperCase()}…`);
     try {
-      if (format === 'pdf') await generatePDF(inspection, settings);
-      else await generateDOCX(inspection, settings);
+      if (format === 'pdf') await generatePDF(data, settings);
+      else await generateDOCX(data, settings);
       toast.success('Report downloaded.');
       setOpen(false);
     } catch (err) {
@@ -155,7 +200,7 @@ const AdminDownloadReport = ({ inspection, variant = 'icon' }) => {
                 variant="outline"
                 size="sm"
                 onClick={() => handleDownload('pdf')}
-                disabled={generating !== null}
+                disabled={generating !== null || hydrating}
                 className="rounded-full"
               >
                 {generating === 'pdf'
@@ -166,7 +211,7 @@ const AdminDownloadReport = ({ inspection, variant = 'icon' }) => {
               <Button
                 size="sm"
                 onClick={() => handleDownload('docx')}
-                disabled={generating !== null}
+                disabled={generating !== null || hydrating}
                 className="rounded-full"
               >
                 {generating === 'docx'
@@ -178,7 +223,15 @@ const AdminDownloadReport = ({ inspection, variant = 'icon' }) => {
           </div>
 
           {/* Preview surface */}
-          <div className="flex-1 min-h-0 overflow-hidden">
+          <div className="flex-1 min-h-0 overflow-hidden relative">
+            {hydrating && (
+              <div className="absolute inset-0 flex items-center justify-center bg-white/80 backdrop-blur-sm z-20">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Loading inspection details…
+                </div>
+              </div>
+            )}
             {previewMode === 'pdf' ? (
               <iframe
                 title="Report preview"
