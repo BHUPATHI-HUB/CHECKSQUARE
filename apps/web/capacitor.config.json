@@ -1,0 +1,15 @@
+{
+  "appId": "com.bhupathi.checksquare",
+  "appName": "CheckSquare",
+  "webDir": "../../dist/apps/web",
+  "server": {
+    "url": "https://checksquare.pages.dev",
+    "cleartext": false,
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": true
+  }
+}

@@ -6,7 +6,7 @@ the app step by step**. Treat it as a TPO / product walkthrough.
 
 ---
 
-## 1. What is InspectPro?
+## 1. What is CHECKSQUARE?
 
 A property-inspection SaaS. Customers book an inspection appointment;
 inspectors visit the property, fill in a 5-phase digital report (with photos),
