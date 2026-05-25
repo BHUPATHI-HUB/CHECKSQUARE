@@ -17,6 +17,10 @@ const LIST_FIELDS = [
   'created', 'updated',
   'metadata', // small (~few KB) — needed for address/date/preparedFor in rows
   'propertyType', 'includeScore',
+  // propertyMetrics is a tiny JSON array (door height / ceiling height
+  // etc.) — small enough to safely ship with list rows and needed by the
+  // report renderer downstream.
+  'propertyMetrics',
   'deletedAt', 'deletedBy', 'deletionReason',
   'approvedBy', 'approvedAt', 'rejectedBy', 'rejectedAt',
 ].join(',');
@@ -152,6 +156,11 @@ export const useInspectionStatus = () => {
       const payload = {
         metadata: inspectionData.metadata || {},
         areaCalculations: inspectionData.areaCalculations || [],
+        // Phase 2 free-form metrics (door height, ceiling height, wall height, …).
+        // Schema column added in migration 1779800002; before that, PB silently
+        // dropped this field on every save and the metrics never made it into
+        // the generated PDF/DOCX.
+        propertyMetrics: inspectionData.propertyMetrics || [],
         waterQuality: inspectionData.waterQuality || {},
         roomInspections: inspectionData.roomInspections || [],
         propertyType: inspectionData.propertyType || 'Residential',

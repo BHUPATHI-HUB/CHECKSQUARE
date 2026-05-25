@@ -308,7 +308,13 @@ const InspectionForm = ({ existingInspection = null, isEditing = false }) => {
   }, [existingInspection]);
 
   useEffect(() => {
-    if (!existingInspection) {
+    if (existingInspection) return;
+    // Debounce the draft write — formData can balloon into multi-MB once
+    // photos are attached (they're base64 data URLs), and JSON.stringify on
+    // every keystroke was the main reason the form felt slow on phones.
+    // 600ms is short enough that the draft is never more than ~half a
+    // sentence behind, long enough to coalesce typing bursts.
+    const handle = setTimeout(() => {
       try {
         localStorage.setItem('inspection-draft', JSON.stringify(formData));
       } catch (e) {
@@ -316,7 +322,8 @@ const InspectionForm = ({ existingInspection = null, isEditing = false }) => {
         // — fail silently. Server-side auto-draft is the authoritative store.
         console.warn('Could not persist draft to localStorage:', e?.message || e);
       }
-    }
+    }, 600);
+    return () => clearTimeout(handle);
   }, [formData, existingInspection]);
 
   // ---- Silent auto-save as draft (server-side) -----------------------------
