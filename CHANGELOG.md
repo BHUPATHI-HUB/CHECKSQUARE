@@ -15,6 +15,48 @@ Date format: YYYY-MM-DD. Hosting target: Hostinger Horizons (PocketBase served a
 
 ---
 
+## 2026-05-25 — Mobile-first hardening: PWA, downloads sync, perf, back-button guard 🟢 KEEP
+
+### New PocketBase collection
+| File | Purpose |
+|---|---|
+| `apps/pocketbase/pb_migrations/1779800001_create_report_downloads.js` | New `report_downloads` collection — per-user history of generated PDF/DOCX reports. Stores the actual file (max 50 MB, protected) + `inspection` relation + `format` + `fileSize`. Owner can list/view/delete; admins can do all. **Auto-applies on next PB restart.** |
+
+### New frontend dependencies
+- `@capacitor/filesystem ^8.1.2` — write to Android `Documents/` so APK downloads actually land somewhere visible.
+- `@capacitor/share ^8.0.1` — opens share sheet so the user can pick "Open with" / "Save to Drive" etc.
+- `@capacitor/app ^8.1.0` — listen to Android hardware Back button for the unsaved-changes guard.
+
+### New / changed frontend files
+| File | Change |
+|---|---|
+| `apps/web/src/utils/saveFile.js` (new) | Single cross-platform save helper. Web → `file-saver`; native → Capacitor filesystem + share sheet. Always syncs the blob to PB `report_downloads` (best-effort, silent on failure). |
+| `apps/web/src/pages/DownloadsPage.jsx` (new) | "My Downloads" page at `/downloads`. Lists synced reports, re-download (auth token), permanent delete with confirm dialog. Works on web + APK. |
+| `apps/web/src/hooks/useUnsavedChangesWarning.js` (new) | Guards inspection form against accidental navigation. Hooks `beforeunload` + react-router `useBlocker` + Capacitor Android `App.backButton`. |
+| `apps/web/src/hooks/useOnlineStatus.js` (new) | Tracks `navigator.onLine`. |
+| `apps/web/src/components/OfflineBanner.jsx` (new) | Amber banner mounted globally in App.jsx; appears when device goes offline. |
+| `apps/web/src/components/InspectionForm.jsx` | Wires `useUnsavedChangesWarning(isDirty)`. `isDirty` = past phase 1 OR address/preparedFor filled OR rooms added. |
+| `apps/web/src/components/Header.jsx` | Adds "My Downloads" nav link (desktop + mobile + user dropdown). |
+| `apps/web/src/utils/ReportGenerator.jsx` | Switched `saveAs()` → `saveFile()` for both PDF (`html2pdf().outputPdf('blob')` then saveFile) and DOCX. Fixes silent download failure inside Android WebView. |
+| `apps/web/src/App.jsx` | All non-public routes lazy-loaded with `React.lazy` + `<Suspense>`. Added `/downloads` route. Mounted `<OfflineBanner />`. |
+| `apps/web/vite.config.js` | VitePWA `runtimeCaching`: `/api/collections/*/records` → NetworkFirst (7d), `/api/files/*` → CacheFirst (30d). Added `manualChunks` to split `vendor-react`, `vendor-radix`, `vendor-motion`, `vendor-docx`, `vendor-pdf`. |
+
+### Performance
+Initial JS payload went from **2.37 MB → 212 KB** (gzip **683 KB → 63 KB**). Heavy `vendor-pdf` (~975 KB) + `vendor-docx` (~536 KB) chunks now load only when the user actually generates a report.
+
+### Mobile (APK) impact
+After pulling this change on another laptop, agents/users must re-sync Capacitor:
+
+```powershell
+cd apps\web
+npm install
+npm run build
+npx cap sync android
+# then rebuild APK — see ANDROID.md
+```
+
+---
+
 ## 2026-05-22 — End-to-end refactor (mocks → PocketBase)
 
 ### Backend — new PocketBase migrations 🟢 KEEP

@@ -141,6 +141,11 @@ try { (Invoke-WebRequest http://localhost:3000/        -UseBasicParsing).StatusC
 | Inspection 5-phase wizard | [apps/web/src/components/InspectionForm.jsx](apps/web/src/components/InspectionForm.jsx) |
 | PDF + DOCX export | [apps/web/src/utils/ReportGenerator.jsx](apps/web/src/utils/ReportGenerator.jsx) |
 | User management page | [apps/web/src/pages/AdminUserManagementPage.jsx](apps/web/src/pages/AdminUserManagementPage.jsx) |
+| **Synced Downloads page** | [apps/web/src/pages/DownloadsPage.jsx](apps/web/src/pages/DownloadsPage.jsx) — lists user's `report_downloads`, re-download, permanent delete |
+| **Cross-platform file save** | [apps/web/src/utils/saveFile.js](apps/web/src/utils/saveFile.js) — web uses `file-saver`; native uses `@capacitor/filesystem` + `@capacitor/share`; always syncs blob to PB `report_downloads` |
+| **Unsaved-changes guard** | [apps/web/src/hooks/useUnsavedChangesWarning.js](apps/web/src/hooks/useUnsavedChangesWarning.js) — `beforeunload` + react-router `useBlocker` + Capacitor Android back button |
+| **Online/offline status** | [apps/web/src/hooks/useOnlineStatus.js](apps/web/src/hooks/useOnlineStatus.js) + [apps/web/src/components/OfflineBanner.jsx](apps/web/src/components/OfflineBanner.jsx) (mounted globally in App.jsx) |
+| **PWA / service worker** | [apps/web/vite.config.js](apps/web/vite.config.js) `VitePWA` block — `runtimeCaching` for `/api/collections/*/records` (NetworkFirst) + `/api/files/*` (CacheFirst) |
 | Collection migrations | [apps/pocketbase/pb_migrations/](apps/pocketbase/pb_migrations/) |
 | Server-side hooks | [apps/pocketbase/pb_hooks/](apps/pocketbase/pb_hooks/) |
 | DB + uploaded files | `apps/pocketbase/pb_data/` (do **NOT** delete) |
@@ -186,7 +191,7 @@ each line:
 |---|---|---|
 | Backend reachable | `Invoke-WebRequest http://127.0.0.1:8090/api/health` | HTTP 200 |
 | Frontend reachable | `Invoke-WebRequest http://localhost:3000/` | HTTP 200 + body contains `<div id="root"` |
-| Migrations applied | `Invoke-RestMethod http://127.0.0.1:8090/api/collections` (auth as superuser) | Contains `users`, `inspections`, `appointments`, `chats`, `messages`, `notifications`, `app_settings` |
+| Migrations applied | `Invoke-RestMethod http://127.0.0.1:8090/api/collections` (auth as superuser) | Contains `users`, `inspections`, `appointments`, `chats`, `messages`, `notifications`, `app_settings`, `report_downloads` |
 | Avatar field present | `(Invoke-RestMethod .../collections/users).fields.name` | Includes `avatar` |
 | Admin update rule | same query | `updateRule` contains `@request.auth.role = 'admin'` |
 
@@ -215,6 +220,14 @@ Port 3000 already in use
 
 Avatar uploads return 400 "invalid field 'avatar'"
    → migration 1779700002_users_avatar_field didn't apply; restart PB
+
+Downloads page is empty / 404 "report_downloads not found"
+   → migration 1779800001_create_report_downloads didn't apply; restart PB
+
+PDF/DOCX "downloaded successfully" toast on Android but file missing
+   → @capacitor/filesystem not synced into native project. From apps/web run:
+       npx cap sync android
+     Then rebuild the APK (see ANDROID.md).
 ```
 
 If a problem is **not** on this list: stop, summarize what failed (include

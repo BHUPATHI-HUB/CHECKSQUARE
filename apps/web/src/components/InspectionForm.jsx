@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext.jsx';
 import { useSettings } from '@/contexts/SettingsContext.jsx';
 import { useFeedback } from '@/contexts/FeedbackContext.jsx';
 import { useInspectionStatus } from '@/hooks/useInspectionStatus.js';
+import useUnsavedChangesWarning from '@/hooks/useUnsavedChangesWarning.js';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -270,6 +271,18 @@ const InspectionForm = ({ existingInspection = null, isEditing = false }) => {
   // draft is discoverable from the dashboard's drafts list and editable later.
   const [draftId, setDraftId] = useState(existingInspection?.id || null);
   const autoSavingRef = useRef(false);
+
+  // Warn the user before they accidentally lose work via browser back, tab
+  // close, in-app navigation, or the Android hardware Back button. "Dirty"
+  // means they've advanced past phase 1 OR typed an address / prepared-for.
+  const isDirty =
+    !submitting && (
+      currentPhase > 1 ||
+      !!(formData?.metadata?.propertyAddress || '').trim() ||
+      !!(formData?.metadata?.preparedFor || '').trim() ||
+      (formData?.roomInspections?.length || 0) > 0
+    );
+  useUnsavedChangesWarning(isDirty);
 
   useEffect(() => {
     if (!existingInspection) {

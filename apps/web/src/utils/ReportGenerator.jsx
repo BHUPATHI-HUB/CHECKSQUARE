@@ -4,7 +4,7 @@ import {
   Table, TableRow, TableCell, WidthType, BorderStyle, PageBreak, ShadingType,
   ImageRun,
 } from 'docx';
-import { saveAs } from 'file-saver';
+import { saveFile } from './saveFile';
 import { computeInspectionScore, DEFAULT_SCORE_EXPLANATION_HTML, explainScore } from './scoring';
 
 // ─── Inline editorial SVG art (no network deps; render-safe in html2pdf) ──
@@ -1810,14 +1810,18 @@ export const generatePDF = async (inspection, settings) => {
 
   const filename = `Inspection_${(inspection.metadata?.propertyAddress || 'Report').replace(/[^a-z0-9]/gi, '_')}_${refId}.pdf`;
 
-  await html2pdf().set({
+  // Render to a Blob first (works on Android WebView where the default
+  // anchor-based download fails silently), then hand to the cross-platform
+  // saveFile() helper which uses Capacitor Filesystem on native.
+  const pdfBlob = await html2pdf().set({
     margin: 0,
     filename,
     image: { type: 'jpeg', quality: 0.98 },
     html2canvas: { scale: 2, useCORS: true, letterRendering: true, backgroundColor: '#ffffff' },
     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
     pagebreak: { mode: ['css', 'legacy'] },
-  }).from(element).save();
+  }).from(element).outputPdf('blob');
+  await saveFile(pdfBlob, filename, { inspectionId: inspection?.id });
 };
 
 /* ============================================================
@@ -4292,7 +4296,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
   const blob = await Packer.toBlob(doc);
   const filename = `Inspection_${(inspection.metadata?.propertyAddress || 'Report').replace(/[^a-z0-9]/gi, '_')}_${refId}.docx`;
   if (opts && opts.preview) return { blob, filename };
-  saveAs(blob, filename);
+  await saveFile(blob, filename, { inspectionId: inspection?.id });
   return { blob, filename };
 };
 

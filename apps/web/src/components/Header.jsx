@@ -7,7 +7,7 @@ import { useChatContext } from '@/contexts/ChatContext.jsx';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Menu, Home, LogOut, User, Shield, Settings, MessageCircle, CheckSquare, Users as UsersIcon } from 'lucide-react';
+import { Menu, Home, LogOut, User, Shield, Settings, MessageCircle, CheckSquare, Users as UsersIcon, Download } from 'lucide-react';
 
 const Header = () => {
   const { user, logout, isAuthenticated, role } = useAuth();
@@ -44,6 +44,17 @@ const Header = () => {
           onClick={() => mobile && setMobileOpen(false)}
         >
           Dashboard
+        </Link>
+      )}
+      {isAuthenticated && (
+        <Link
+          to="/downloads"
+          className={`${
+            isActive('/downloads') ? 'text-primary font-medium' : 'text-foreground hover:text-primary'
+          } transition-colors duration-200 ${mobile ? 'block py-2' : ''}`}
+          onClick={() => mobile && setMobileOpen(false)}
+        >
+          Downloads
         </Link>
       )}
       {isAuthenticated && role === 'admin' && (
@@ -145,6 +156,12 @@ const Header = () => {
                       </div>
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild className="cursor-pointer">
+                      <Link to="/downloads">
+                        <Download className="w-4 h-4 mr-2" />
+                        Downloads
+                      </Link>
+                    </DropdownMenuItem>
                     {role === 'admin' && (
                       <>
                         <DropdownMenuItem asChild className="cursor-pointer">

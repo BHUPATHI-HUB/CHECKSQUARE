@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { Route, Routes, BrowserRouter as Router, Navigate } from 'react-router-dom';
 import { AuthProvider } from '@/contexts/AuthContext.jsx';
 import { SettingsProvider } from '@/contexts/SettingsContext.jsx';
@@ -7,32 +7,36 @@ import { ChatProvider } from '@/contexts/ChatContext.jsx';
 import { FeedbackProvider } from '@/contexts/FeedbackContext.jsx';
 import ScrollToTop from '@/components/ScrollToTop.jsx';
 import ProtectedRoute from '@/components/ProtectedRoute.jsx';
+import OfflineBanner from '@/components/OfflineBanner.jsx';
 import { Toaster } from 'sonner';
 
-// Public Pages
+// Public pages stay eager-loaded — they're tiny and needed on first paint.
 import HomePage from '@/pages/HomePage.jsx';
 import LoginPage from '@/pages/LoginPage.jsx';
-import CustomerSignupPage from '@/pages/CustomerSignupPage.jsx';
 import NotFoundPage from '@/pages/NotFoundPage.jsx';
-import ThankYouPage from '@/pages/ThankYouPage.jsx';
-import InfoPage from '@/pages/InfoPage.jsx';
 
-// Protected Feature Pages
-import ChatPage from '@/pages/ChatPage.jsx';
+// Everything else loads on demand to shrink the initial JS bundle.
+// Each lazy() creates its own chunk that's only downloaded when the route
+// is visited — dramatically improves first-load time on mobile.
+const CustomerSignupPage      = lazy(() => import('@/pages/CustomerSignupPage.jsx'));
+const ThankYouPage            = lazy(() => import('@/pages/ThankYouPage.jsx'));
+const InfoPage                = lazy(() => import('@/pages/InfoPage.jsx'));
+const ChatPage                = lazy(() => import('@/pages/ChatPage.jsx'));
+const AdminDashboard          = lazy(() => import('@/pages/AdminDashboard.jsx'));
+const AdminSettingsPage       = lazy(() => import('@/pages/AdminSettingsPage.jsx'));
+const AdminUserManagementPage = lazy(() => import('@/pages/AdminUserManagementPage.jsx'));
+const InspectionViewPage      = lazy(() => import('@/pages/InspectionViewPage.jsx'));
+const InspectorDashboard      = lazy(() => import('@/pages/InspectorDashboard.jsx'));
+const NewInspectionPage       = lazy(() => import('@/pages/NewInspectionPage.jsx'));
+const CustomerDashboard       = lazy(() => import('@/pages/CustomerDashboard.jsx'));
+const AppointmentBookingPage  = lazy(() => import('@/pages/AppointmentBookingPage.jsx'));
+const DownloadsPage           = lazy(() => import('@/pages/DownloadsPage.jsx'));
 
-// Role: Admin
-import AdminDashboard from '@/pages/AdminDashboard.jsx';
-import AdminSettingsPage from '@/pages/AdminSettingsPage.jsx';
-import AdminUserManagementPage from '@/pages/AdminUserManagementPage.jsx';
-import InspectionViewPage from '@/pages/InspectionViewPage.jsx';
-
-// Role: Inspector
-import InspectorDashboard from '@/pages/InspectorDashboard.jsx';
-import NewInspectionPage from '@/pages/NewInspectionPage.jsx';
-
-// Role: Customer
-import CustomerDashboard from '@/pages/CustomerDashboard.jsx';
-import AppointmentBookingPage from '@/pages/AppointmentBookingPage.jsx';
+const RouteFallback = () => (
+  <div className="min-h-screen flex items-center justify-center text-sm text-muted-foreground">
+    Loading…
+  </div>
+);
 
 function App() {
   return (
@@ -42,6 +46,8 @@ function App() {
           <ChatProvider>
             <Router>
               <ScrollToTop />
+              <OfflineBanner />
+            <Suspense fallback={<RouteFallback />}>
             <Routes>
               {/* Public Routes */}
               <Route path="/" element={<HomePage />} />
@@ -189,9 +195,18 @@ function App() {
               />
               
               {/* Catch-all */}
+              <Route
+                path="/downloads"
+                element={
+                  <ProtectedRoute>
+                    <DownloadsPage />
+                  </ProtectedRoute>
+                }
+              />
               <Route path="/thank-you" element={<ThankYouPage />} />
               <Route path="*" element={<NotFoundPage />} />
             </Routes>
+            </Suspense>
             <Toaster position="top-right" richColors closeButton />
           </Router>
           </ChatProvider>

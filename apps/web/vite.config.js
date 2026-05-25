@@ -307,6 +307,35 @@ export default defineConfig({
 				cleanupOutdatedCaches: true,
 				clientsClaim: true,
 				skipWaiting: true,
+				// Level 2 offline support: cache PocketBase API GETs + uploaded files
+				// so users can browse previously-loaded data with no network.
+				// Writes (POST/PATCH/DELETE) are NOT cached — they will fail offline
+				// and the OfflineBanner UI tells the user to reconnect.
+				runtimeCaching: [
+					{
+						// Collection list/view records (e.g. /api/collections/inspections/records)
+						urlPattern: /\/api\/collections\/[^/]+\/records/,
+						method: 'GET',
+						handler: 'NetworkFirst',
+						options: {
+							cacheName: 'pb-api-records',
+							networkTimeoutSeconds: 5,
+							expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 7 },
+							cacheableResponse: { statuses: [0, 200] },
+						},
+					},
+					{
+						// Uploaded files / photos (e.g. /api/files/<collection>/<id>/<name>)
+						urlPattern: /\/api\/files\//,
+						method: 'GET',
+						handler: 'CacheFirst',
+						options: {
+							cacheName: 'pb-api-files',
+							expiration: { maxEntries: 500, maxAgeSeconds: 60 * 60 * 24 * 30 },
+							cacheableResponse: { statuses: [0, 200] },
+						},
+					},
+				],
 			},
 			manifest: {
 				name: 'CheckSquare',
@@ -361,13 +390,39 @@ export default defineConfig({
 		},
 	},
 	build: {
+		// Push the warning threshold higher to silence noise — the heavy report
+		// libs are split into separate chunks below and only load on demand.
+		chunkSizeWarningLimit: 1500,
 		rollupOptions: {
 			external: [
 				'@babel/parser',
 				'@babel/traverse',
 				'@babel/generator',
 				'@babel/types'
-			]
-		}
+			],
+			output: {
+				// Split heavyweight report/export libraries into their own chunks
+				// so the initial JS bundle stays small. Each chunk is only fetched
+				// when the user actually opens a page that imports it.
+				manualChunks: {
+					'vendor-react':    ['react', 'react-dom', 'react-router-dom'],
+					'vendor-docx':     ['docx', 'docx-preview'],
+					'vendor-pdf':      ['html2pdf.js'],
+					'vendor-xlsx':     ['xlsx'],
+					'vendor-charts':   ['recharts'],
+					'vendor-motion':   ['framer-motion'],
+					'vendor-radix':    [
+						'@radix-ui/react-dialog',
+						'@radix-ui/react-dropdown-menu',
+						'@radix-ui/react-select',
+						'@radix-ui/react-tabs',
+						'@radix-ui/react-toast',
+						'@radix-ui/react-tooltip',
+						'@radix-ui/react-popover',
+						'@radix-ui/react-accordion',
+					],
+				},
+			},
+		},
 	}
 });
