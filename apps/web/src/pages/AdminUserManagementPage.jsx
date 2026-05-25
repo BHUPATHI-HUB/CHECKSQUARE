@@ -81,9 +81,16 @@ const AdminUserManagementPage = () => {
     setLoading(true);
     try {
       // getFullList with a generous sort so the newest accounts surface first.
-      const list = await pb.collection('users').getFullList({ sort: '-created' });
+      // $autoCancel:false so rapid navigation away from the page doesn't
+      // surface a noisy autocancel toast — we don't depend on a stale request
+      // ever returning, we always start a fresh one.
+      const list = await pb.collection('users').getFullList({
+        sort: '-created',
+        $autoCancel: false,
+      });
       setUsers(list);
     } catch (err) {
+      if (String(err?.message || '').includes('autocancel')) return;
       console.error('Failed to load users', err);
       toast.error(err?.message || 'Could not load users.');
     } finally {

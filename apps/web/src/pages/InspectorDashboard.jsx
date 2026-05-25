@@ -83,7 +83,10 @@ const InspectorDashboard = () => {
   };
 
   const filteredInspections = inspections.filter((inspection) => {
-    const matchesSearch = inspection.metadata.propertyAddress.toLowerCase().includes(searchTerm.toLowerCase());
+    // Drafts can have an empty / undefined address — default to '' so the
+    // .toLowerCase() never throws and the row still participates in the list.
+    const address = inspection?.metadata?.propertyAddress || '';
+    const matchesSearch = address.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || inspection.status === statusFilter;
     return matchesSearch && matchesStatus;
   });

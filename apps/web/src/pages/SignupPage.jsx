@@ -53,7 +53,18 @@ const SignupPage = () => {
     const newErrors = validate();
     if (Object.keys(newErrors).length) { setErrors(newErrors); return; }
     setLoading(true); setErrors({});
-    const result = signup(formData.name, formData.phone, formData.email, formData.password, formData.role);
+    // AuthContext.signup expects a single object — not positional args. The
+    // previous positional call silently failed because `userData.email` was
+    // undefined, so the PB create request 400'd on missing required fields.
+    // Note: AuthContext.signup currently always provisions a `customer`
+    // account; staff roles are granted by an admin in the PB users page.
+    const result = await signup({
+      name: formData.name,
+      email: formData.email,
+      password: formData.password,
+      phone: formData.phone,
+      role: formData.role,
+    });
     setLoading(false);
     if (result.success) { toast.success('Account created successfully'); navigate('/login'); }
     else { setErrors({ submit: result.error }); toast.error(result.error); }

@@ -16,6 +16,12 @@ const Header = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
+  // Hooks must be declared unconditionally and BEFORE any early return so the
+  // hook count stays stable across renders. Previously `logoBroken` lived
+  // after the `if (!settings) return null` guard — if settings ever flipped
+  // back to null at runtime React would throw "Rendered fewer hooks than
+  // expected".
+  const [logoBroken, setLogoBroken] = useState(false);
 
   const handleLogout = () => {
     logout();
@@ -86,7 +92,6 @@ const Header = () => {
 
   const displayLogo = settings.customLogo || settings.logo || '/logo.svg';
   const displayAppName = settings.appName || 'CheckSquare';
-  const [logoBroken, setLogoBroken] = useState(false);
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
