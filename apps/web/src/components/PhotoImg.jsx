@@ -8,13 +8,22 @@
 // For storageKey-only photos it asynchronously resolves a 1-hour signed URL
 // via `getInspectionPhotoUrl` from the Supabase storage helper.
 //
-// Use this in place of every `<img src={photo.url}>` in the codebase so the
-// rest of the app stays oblivious to whether Supabase is wired up or not.
+// Default `fit="contain"` shows the FULL captured image (no cropping) and
+// fills the leftover space with a subtle background so defects, room
+// corners, switchboards etc. stay readable in any aspect ratio.  Pass
+// `fit="cover"` for decorative banners where cropping is wanted.
 
 import React, { useEffect, useState } from 'react';
 import { getInspectionPhotoUrl } from '@/lib/supabasePhotoStorage.js';
 
-const PhotoImg = ({ photo, alt = 'photo', className = '', loading = 'lazy', ...rest }) => {
+const PhotoImg = ({
+  photo,
+  alt = 'photo',
+  className = '',
+  fit = 'contain',
+  loading = 'lazy',
+  ...rest
+}) => {
   const [src, setSrc] = useState(photo?.url || '');
 
   useEffect(() => {
@@ -26,6 +35,11 @@ const PhotoImg = ({ photo, alt = 'photo', className = '', loading = 'lazy', ...r
     return () => { cancelled = true; };
   }, [photo?.url, photo?.storageKey]);
 
+  // Default container shading helps `object-contain` letterboxing look
+  // intentional instead of broken.  Callers can override by passing their
+  // own background class in `className`.
+  const fitClass = fit === 'cover' ? 'object-cover' : 'object-contain bg-muted/30';
+
   if (!src) {
     return (
       <div
@@ -36,7 +50,15 @@ const PhotoImg = ({ photo, alt = 'photo', className = '', loading = 'lazy', ...r
       />
     );
   }
-  return <img src={src} alt={alt} className={className} loading={loading} {...rest} />;
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className={`${fitClass} ${className}`}
+      loading={loading}
+      {...rest}
+    />
+  );
 };
 
 export default PhotoImg;

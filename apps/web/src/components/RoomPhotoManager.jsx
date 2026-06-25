@@ -76,7 +76,7 @@ const PhotoSlot = ({ label, photo, onChange, onRemove, compact = false, ariaLabe
       {label && <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">{label}</p>}
       {photo ? (
         <div className="relative aspect-video rounded-lg overflow-hidden group">
-          <PhotoImg photo={photo} alt={label || ariaLabel || 'photo'} className="w-full h-full object-cover" />
+          <PhotoImg photo={photo} alt={label || ariaLabel || 'photo'} className="w-full h-full" />
           <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
             <Button
               type="button"
@@ -186,7 +186,7 @@ const DefectPhotoGallery = ({ defect, onAdd, onUpdate, onRemove }) => {
           {photos.map((p, i) => (
             <div key={p.id} className="border rounded-lg overflow-hidden bg-muted/30">
               <div className="relative">
-                <PhotoImg photo={p} alt={`Defect photo ${i + 1}`} className="w-full h-44 object-cover" />
+                <PhotoImg photo={p} alt={`Defect photo ${i + 1}`} className="w-full h-44" />
                 <Button
                   type="button"
                   size="icon"

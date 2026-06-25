@@ -14,6 +14,7 @@ import {
   ArrowRight, FileText, Plus,
 } from 'lucide-react';
 import pb from '@/lib/pocketbaseClient.js';
+import data from '@/services/dataService.js';
 import AdminDownloadReport from '@/components/AdminDownloadReport.jsx';
 
 const formatDate = (iso) => {
@@ -46,9 +47,7 @@ const CustomerDashboard = () => {
     let cancelled = false;
     (async () => {
       try {
-        const admins = await pb.collection('users').getFullList({
-          filter: 'role = "admin"', fields: 'id', $autoCancel: false,
-        });
+        const admins = await data.listUsers({ filter: 'role = "admin"', fields: 'id' });
         if (cancelled || admins.length === 0) return;
         await createChat([user.id, admins[0].id], 'direct', '');
       } catch (err) {
@@ -66,13 +65,13 @@ const CustomerDashboard = () => {
       try {
         const nowIso = new Date().toISOString().replace('T', ' ');
         const [appts, insps] = await Promise.all([
-          pb.collection('appointments').getFullList({
+          data.listAppointments({
             filter: `customer = "${user.id}" && status = "scheduled" && scheduledAt >= "${nowIso}"`,
-            sort: 'scheduledAt', expand: 'inspector', $autoCancel: false,
+            sort: 'scheduledAt',
           }),
-          pb.collection('inspections').getFullList({
+          data.listInspections({
             filter: `customer = "${user.id}" && deletedAt = null`,
-            sort: '-created', $autoCancel: false,
+            sort: '-created',
           }),
         ]);
         if (!cancelled) {

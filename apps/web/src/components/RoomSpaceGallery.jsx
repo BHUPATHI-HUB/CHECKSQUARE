@@ -187,7 +187,7 @@ const RoomSpaceGallery = ({ roomSpaces = [], onUpdate }) => {
               )}
               
               <div className="aspect-[4/3] bg-muted relative">
-                <PhotoImg photo={space} alt="Room Space" className="w-full h-full object-cover" />
+                <PhotoImg photo={space} alt="Room Space" className="w-full h-full" />
               </div>
               <div className="p-3 bg-card border-t">
                 <Input 

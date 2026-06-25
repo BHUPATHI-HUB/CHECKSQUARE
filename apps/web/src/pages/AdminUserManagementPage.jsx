@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner';
 import { Loader2, Plus, Trash2, Users, ShieldCheck, HardHat, UserRound, Search, RefreshCw, Mail, Phone, KeyRound, Upload, Camera } from 'lucide-react';
 import pb from '@/lib/pocketbaseClient.js';
+import data from '@/services/dataService.js';
 import { useAuth } from '@/contexts/AuthContext.jsx';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -84,10 +85,7 @@ const AdminUserManagementPage = () => {
       // $autoCancel:false so rapid navigation away from the page doesn't
       // surface a noisy autocancel toast — we don't depend on a stale request
       // ever returning, we always start a fresh one.
-      const list = await pb.collection('users').getFullList({
-        sort: '-created',
-        $autoCancel: false,
-      });
+      const list = await data.listUsers({ sort: '-created' });
       setUsers(list);
     } catch (err) {
       if (String(err?.message || '').includes('autocancel')) return;
@@ -131,7 +129,7 @@ const AdminUserManagementPage = () => {
     }
     setCreating(true);
     try {
-      await pb.collection('users').create({
+      await data.createUser({
         name: createForm.name,
         email: createForm.email,
         password: createForm.password,
@@ -157,7 +155,7 @@ const AdminUserManagementPage = () => {
     if (!deleteTarget) return;
     setDeleting(true);
     try {
-      await pb.collection('users').delete(deleteTarget.id);
+      await data.deleteUser(deleteTarget.id);
       toast.success(`Removed ${deleteTarget.name || deleteTarget.email}.`);
       setDeleteTarget(null);
       refresh();
@@ -176,7 +174,7 @@ const AdminUserManagementPage = () => {
       return;
     }
     try {
-      await pb.collection('users').update(u.id, { role: nextRole });
+      await data.updateUser(u.id, { role: nextRole });
       toast.success(`${u.name || u.email} is now ${ROLE_META[nextRole]?.label || nextRole}.`);
       refresh();
     } catch (err) {
@@ -194,7 +192,7 @@ const AdminUserManagementPage = () => {
     }
     setPwSaving(true);
     try {
-      await pb.collection('users').update(pwTarget.user.id, {
+      await data.updateUser(pwTarget.user.id, {
         password: pwTarget.password,
         passwordConfirm: pwTarget.password,
       });
@@ -231,7 +229,7 @@ const AdminUserManagementPage = () => {
     try {
       const fd = new FormData();
       fd.append('avatar', file);
-      await pb.collection('users').update(target.id, fd);
+      await data.updateUser(target.id, fd);
       toast.success(`Avatar updated for ${target.name || target.email}.`);
       refresh();
     } catch (err) {

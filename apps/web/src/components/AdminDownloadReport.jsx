@@ -10,6 +10,7 @@ import {
 } from '@/utils/ReportGenerator.jsx';
 import { useSettings } from '@/contexts/SettingsContext.jsx';
 import pb from '@/lib/pocketbaseClient.js';
+import dataService from '@/services/dataService.js';
 
 /**
  * Admin "download report" dialog.
@@ -59,7 +60,7 @@ const AdminDownloadReport = ({ inspection, variant = 'icon' }) => {
     setHydrating(true);
     (async () => {
       try {
-        const full = await pb.collection('inspections').getOne(inspection.id, { $autoCancel: false });
+        const full = await dataService.getInspection(inspection.id);
         if (!cancelled) setFullInspection(full);
       } catch (err) {
         console.error('Failed to hydrate inspection for report', err);
@@ -127,7 +128,7 @@ const AdminDownloadReport = ({ inspection, variant = 'icon' }) => {
     let data = fullInspection;
     if (!Array.isArray(data.roomInspections) && inspection?.id) {
       try {
-        data = await pb.collection('inspections').getOne(inspection.id, { $autoCancel: false });
+        data = await dataService.getInspection(inspection.id);
         setFullInspection(data);
       } catch (err) {
         console.error('Failed to fetch inspection for download', err);

@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import pb from '@/lib/pocketbaseClient.js';
+import data from '@/services/dataService.js';
 import { useAuth } from '@/contexts/AuthContext.jsx';
 import { useSettings } from '@/contexts/SettingsContext.jsx';
 
@@ -120,9 +121,7 @@ const AppointmentBookingPage = () => {
     let cancelled = false;
     (async () => {
       try {
-        const records = await pb.collection('users').getFullList({
-          filter: 'role = "inspector"', sort: 'name', $autoCancel: false,
-        });
+        const records = await data.listUsersByRole('inspector');
         if (!cancelled) setInspectors(records);
       } catch (e) {
         console.error('Failed to load inspectors', e);
@@ -165,7 +164,7 @@ const AppointmentBookingPage = () => {
         return;
       }
 
-      const appt = await pb.collection('appointments').create({
+      const appt = await data.createAppointment({
         customer: user.id,
         inspector: inspector === 'any' ? null : inspector,
         scheduledAt: scheduled.toISOString(),
@@ -177,16 +176,13 @@ const AppointmentBookingPage = () => {
 
       // Auto-provision a group chat. Best effort — never block the booking.
       try {
-        const adminIds = await pb.collection('users').getFullList({
-          filter: 'role = "admin"', fields: 'id', $autoCancel: false,
-        }).then((rows) => rows.map((r) => r.id));
+        const adminIds = await data.listUsers({ filter: 'role = "admin"', fields: 'id' })
+          .then((rows) => rows.map((r) => r.id));
         const participants = [
           ...new Set([user.id, ...(inspector !== 'any' ? [inspector] : []), ...adminIds].filter(Boolean)),
         ];
         if (participants.length >= 2) {
-          await pb.collection('chats').create({
-            type: 'group', participants, inspectionId: '',
-          }, { $autoCancel: false });
+          await data.createChat({ type: 'group', participants, inspectionId: '' });
         }
       } catch (chatErr) {
         console.warn('Auto-create chat after booking failed:', chatErr?.message || chatErr);

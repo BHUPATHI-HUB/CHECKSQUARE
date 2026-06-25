@@ -198,7 +198,7 @@ const InspectionDetailView = ({ inspection, onUpdate }) => {
                       {room.roomSpaces.map((space) => (
                         <div key={space.id} className="bg-background rounded-lg border overflow-hidden shadow-sm">
                           <div className="aspect-[4/3] relative">
-                            <PhotoImg photo={space} alt="Room space" className="w-full h-full object-cover" />
+                            <PhotoImg photo={space} alt="Room space" className="w-full h-full" />
                           </div>
                           {space.caption && (
                             <div className="p-3 border-t bg-muted/20">
@@ -226,7 +226,7 @@ const InspectionDetailView = ({ inspection, onUpdate }) => {
                                 return (
                                   <div key={dp.id} className="bg-background rounded-lg border overflow-hidden shadow-sm">
                                     <div className="aspect-video relative">
-                                      <PhotoImg photo={dp} alt="defect" className="w-full h-full object-cover" />
+                                      <PhotoImg photo={dp} alt="defect" className="w-full h-full" />
                                       <Badge className="absolute top-2 right-2 shadow-sm" style={{ backgroundColor: sevInfo.color || '#333' }}>
                                         {dp.severity}
                                       </Badge>

@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { useInspectionStatus } from '@/hooks/useInspectionStatus.js';
 import { useFeedback } from '@/contexts/FeedbackContext.jsx';
 import pb from '@/lib/pocketbaseClient.js';
+import data from '@/services/dataService.js';
 
 const DeletedReportsArchive = () => {
   const { getDeletedInspections, restoreInspection, permanentlyDeleteInspection } = useInspectionStatus();
@@ -58,7 +59,7 @@ const DeletedReportsArchive = () => {
       // full record per row so the JSON dump is complete.
       const full = await Promise.all(
         deletedReports.map((r) =>
-          pb.collection('inspections').getOne(r.id, { $autoCancel: false }).catch(() => r),
+          data.getInspection(r.id).catch(() => r),
         ),
       );
       const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(full, null, 2));

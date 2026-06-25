@@ -269,7 +269,7 @@ export const buildReportHTML = (inspection, settings) => {
       /* Property image card on cover */
       .prop-card { display: flex; gap: 24px; align-items: stretch; margin-top: 24px; border: 1px solid ${PRIMARY}; padding: 16px; background: #fff; }
       .prop-card .img-wrap { width: 220px; flex-shrink: 0; height: 160px; border: 1px solid ${RULE}; overflow: hidden; background: #f3f4f6; display: flex; align-items: center; justify-content: center; }
-      .prop-card .img-wrap img { width: 100%; height: 100%; object-fit: cover; }
+      .prop-card .img-wrap img { width: 100%; height: 100%; object-fit: contain; background: #fff; }
       .prop-card .img-wrap .placeholder { font-family: Helvetica, sans-serif; font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase; color: ${MUTED}; padding: 8px; text-align: center; }
       .prop-card .info { flex: 1; display: flex; flex-direction: column; justify-content: center; }
       .prop-card .info .eyebrow { margin-bottom: 8px; }
@@ -361,7 +361,7 @@ export const buildReportHTML = (inspection, settings) => {
         background-color: #f3f4f6;
         background-position: center;
         background-repeat: no-repeat;
-        background-size: cover;
+        background-size: contain;
         border-bottom: 1px solid ${PRIMARY};
       }
       .gallery .cell .cap {
@@ -401,15 +401,14 @@ export const buildReportHTML = (inspection, settings) => {
       }
       .defect-table tr:first-child td { border-top: none; }
       .defect-table .dr-img { width: 38%; padding: 8px; }
-      /* Background-image with cover sizing is honoured reliably by
-         html2canvas (unlike <img object-fit:cover>), so every defect
-         photo stays cropped instead of being shrunk to fit. */
+      /* Background-image with object-fit:contain so the WHOLE photo is
+         visible (no center-crop). Letterbox area shows the muted bg. */
       .defect-table .dr-img .dr-photo {
         display: block; width: 100%; height: 110px;
         background-color: #f3f4f6;
         background-position: center;
         background-repeat: no-repeat;
-        background-size: cover;
+        background-size: contain;
         border: 1px solid ${RULE};
       }
       .defect-table .dr-desc {
@@ -1000,7 +999,7 @@ export const buildReportHTML = (inspection, settings) => {
       : `<div style="display: grid; grid-template-columns: repeat(${waterImages.length === 1 ? 1 : (waterImages.length === 2 ? 2 : 3)}, 1fr); gap: 10px; margin-bottom: 18px;">
           ${waterImages.map((img, i) => `
             <div style="border: 1px solid ${RULE}; background: #fafaf7; overflow: hidden;">
-              <div style="display: block; width: 100%; height: 180px; background-color:#f3f4f6; background-image:url('${img.url}'); background-position:center; background-repeat:no-repeat; background-size:cover;"></div>
+              <div style="display: block; width: 100%; height: 180px; background-color:#f3f4f6; background-image:url('${img.url}'); background-position:center; background-repeat:no-repeat; background-size:contain;"></div>
               <p style="font-family: Helvetica, sans-serif; font-size: 8px; letter-spacing: 0.22em; text-transform: uppercase; color: ${MUTED}; padding: 6px 10px; margin: 0; border-top: 1px solid ${RULE};">Water test · photo ${String(i + 1).padStart(2, '0')}</p>
             </div>
           `).join('')}
@@ -2188,12 +2187,17 @@ const loadDocxImage = async (url) => {
   }
 };
 
-// Center-crop any image to the requested aspect/size and return both the
-// JPEG bytes (for DOCX ImageRun) and a data URL (for HTML/PDF background
-// images). Word's ImageRun stretches its source bytes to the supplied
-// width/height — there is no "object-fit" — so portrait photos get
-// squashed unless we crop them beforehand. We use this for every uploaded
-// inspection photo so the report fills its container without distortion.
+// Scale-to-fit (NEVER crop) any image to the requested target box and return
+// both the JPEG bytes (for DOCX ImageRun) and a data URL (for HTML/PDF
+// background images).  Word's ImageRun stretches its source bytes to the
+// supplied width/height — there is no "object-fit" — so we render onto a
+// canvas of the target size, fit the WHOLE image inside (letterboxing with
+// a white background where necessary), and re-export.  This means a
+// portrait photo placed in a landscape slot keeps its full content visible
+// instead of having half its top/bottom cropped off.
+//
+// Renamed from the old center-cropping helper.  All call-sites that used
+// the cropping behaviour now get fit behaviour automatically.
 const cropImage = (url, targetW, targetH) => new Promise((resolve) => {
   if (!url || typeof url !== 'string') { resolve(null); return; }
   const img = new window.Image();
@@ -2202,28 +2206,33 @@ const cropImage = (url, targetW, targetH) => new Promise((resolve) => {
     try {
       const sw = img.naturalWidth, sh = img.naturalHeight;
       if (!sw || !sh) { resolve(null); return; }
-      const targetAspect = targetW / targetH;
+      // ── object-fit: contain — compute the largest WxH that fits inside
+      //    the target box while preserving the source aspect ratio.
       const srcAspect = sw / sh;
-      let sx = 0, sy = 0, sCropW = sw, sCropH = sh;
+      const targetAspect = targetW / targetH;
+      let drawW, drawH;
       if (srcAspect > targetAspect) {
-        // Source is wider than target — crop the sides.
-        sCropW = sh * targetAspect;
-        sx = (sw - sCropW) / 2;
-      } else if (srcAspect < targetAspect) {
-        // Source is taller than target — crop top/bottom.
-        sCropH = sw / targetAspect;
-        sy = (sh - sCropH) / 2;
+        // Wider than the box → constrain by width, letterbox top+bottom.
+        drawW = targetW;
+        drawH = targetW / srcAspect;
+      } else {
+        // Taller than (or equal to) the box → constrain by height, pillarbox left+right.
+        drawH = targetH;
+        drawW = targetH * srcAspect;
       }
-      // Render to canvas at 2× the requested pixel dimensions so the
-      // image stays crisp on print/Retina without bloating the file.
-      const scale = 2;
+      const scale = 2; // Retina / print-sharpness
       const canvas = document.createElement('canvas');
       canvas.width = Math.round(targetW * scale);
       canvas.height = Math.round(targetH * scale);
       const ctx = canvas.getContext('2d');
+      // White letterbox background so reports stay print-friendly.
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(img, sx, sy, sCropW, sCropH, 0, 0, canvas.width, canvas.height);
+      const dx = (targetW - drawW) / 2 * scale;
+      const dy = (targetH - drawH) / 2 * scale;
+      ctx.drawImage(img, 0, 0, sw, sh, dx, dy, drawW * scale, drawH * scale);
       const dataUrl = canvas.toDataURL('image/jpeg', 0.86);
       const m = /^data:[^;]+;base64,(.+)$/.exec(dataUrl);
       if (!m) { resolve({ dataUrl, data: null, type: 'jpg' }); return; }

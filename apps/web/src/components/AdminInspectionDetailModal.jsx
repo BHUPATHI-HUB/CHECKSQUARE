@@ -12,6 +12,8 @@ import AdminDownloadReport from '@/components/AdminDownloadReport.jsx';
 import ReportPreviewModal from '@/components/ReportPreviewModal.jsx';
 import { MapPin, Calendar, User, Edit2, Save, X, Eye, Loader2 } from 'lucide-react';
 import pb from '@/lib/pocketbaseClient.js';
+import data from '@/services/dataService.js';
+import PhotoImg from '@/components/PhotoImg.jsx';
 
 const AdminInspectionDetailModal = ({ inspection, open, onOpenChange, onInspectionUpdated }) => {
   const [localData, setLocalData] = useState(inspection);
@@ -51,7 +53,7 @@ const AdminInspectionDetailModal = ({ inspection, open, onOpenChange, onInspecti
     setHydrating(true);
     (async () => {
       try {
-        const full = await pb.collection('inspections').getOne(inspection.id, { $autoCancel: false });
+        const full = await data.getInspection(inspection.id);
         if (cancelled) return;
         let safeMeta = full.metadata;
         if (typeof safeMeta === 'string') {
@@ -85,7 +87,7 @@ const AdminInspectionDetailModal = ({ inspection, open, onOpenChange, onInspecti
         preparedFor: editForm.preparedFor,
         propertyAddress: editForm.propertyAddress,
       };
-      await pb.collection('inspections').update(localData.id, { metadata: updatedMetadata });
+      await data.updateInspection(localData.id, { metadata: updatedMetadata });
       setLocalData(prev => ({ ...prev, metadata: updatedMetadata }));
       setIsEditing(false);
       toast.success('Inspection details updated');
@@ -226,7 +228,7 @@ const AdminInspectionDetailModal = ({ inspection, open, onOpenChange, onInspecti
                           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                             {room.cornerPhotos.map(photo => (
                               <div key={photo.id} className="relative aspect-video rounded-md overflow-hidden border bg-muted">
-                                <img src={photo.url} alt={photo.corner} className="w-full h-full object-cover" />
+                                <PhotoImg photo={photo} alt={photo.corner} className="w-full h-full" />
                                 <div className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[10px] p-1 text-center truncate">
                                   {photo.corner}
                                 </div>
@@ -248,9 +250,9 @@ const AdminInspectionDetailModal = ({ inspection, open, onOpenChange, onInspecti
                                     {defect.photos.map(p => (
                                       <div key={p.id} className="bg-background border rounded-md overflow-hidden">
                                         <div className="aspect-video relative bg-muted">
-                                          <img
-                                            src={p.url}
-                                            className="w-full h-full object-cover"
+                                          <PhotoImg
+                                            photo={p}
+                                            className="w-full h-full"
                                             alt={`Defect photo: ${defect.description || 'Untitled defect'} (severity: ${p.severity || 'unspecified'})`}
                                           />
                                           <Badge className="absolute top-2 right-2 shadow-sm" variant="secondary">{p.severity}</Badge>
@@ -332,7 +334,9 @@ const AdminInspectionDetailModal = ({ inspection, open, onOpenChange, onInspecti
                           <p className="text-sm font-medium text-muted-foreground mb-2">Test Photos</p>
                           <div className="flex gap-4 overflow-x-auto pb-2">
                             {localData.waterQuality.images.map((img, i) => (
-                              <img key={i} src={img.url || img} className="h-32 rounded border object-cover" alt="water test" />
+                              typeof img === 'string'
+                                ? <img key={i} src={img} className="h-32 rounded border object-contain bg-muted/30" alt="water test" />
+                                : <PhotoImg key={i} photo={img} className="h-32 rounded border" alt="water test" />
                             ))}
                           </div>
                         </div>

@@ -25,6 +25,7 @@ import AdminApprovalActions from '@/components/AdminApprovalActions.jsx';
 import AdminDownloadReport from '@/components/AdminDownloadReport.jsx';
 import DeletedReportsArchive from '@/components/DeletedReportsArchive.jsx';
 import pb from '@/lib/pocketbaseClient.js';
+import data from '@/services/dataService.js';
 import { toast } from 'sonner';
 
 const fadeUp = {
@@ -84,10 +85,7 @@ const AdminDashboard = () => {
       let existing = chats.find((c) => c.inspectionId === inspection.id);
       if (!existing) {
         try {
-          existing = await pb.collection('chats').getFirstListItem(
-            `inspectionId = "${inspection.id}"`,
-            { $autoCancel: false },
-          );
+          existing = await data.findChat(`inspectionId = "${inspection.id}"`);
         } catch (_) { /* not found */ }
       }
       if (existing) { navigate(`/chat/${existing.id}`); return; }

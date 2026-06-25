@@ -3,6 +3,7 @@ import { Helmet } from 'react-helmet';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext.jsx';
 import pb from '@/lib/pocketbaseClient';
+import data from '@/services/dataService.js';
 import Header from '@/components/Header.jsx';
 import Footer from '@/components/Footer.jsx';
 import { Button } from '@/components/ui/button';
@@ -39,14 +40,7 @@ const DownloadsPage = () => {
 		if (!user?.id) return;
 		setLoading(true);
 		try {
-			const records = await pb.collection('report_downloads').getFullList({
-				// Parameterized filter — guards against any quote/escape edge cases
-				// in user.id (e.g. a future custom-id scheme). PB SDK ≥0.21.
-				filter: pb.filter('user = {:uid}', { uid: user.id }),
-				sort: '-created',
-				expand: 'inspection',
-				$autoCancel: false,
-			});
+			const records = await data.listReportDownloads(user.id);
 			setItems(records);
 		} catch (err) {
 			if (!String(err?.message || '').includes('autocancel')) {
@@ -67,8 +61,8 @@ const DownloadsPage = () => {
 			return;
 		}
 		try {
-			// Use PB's authenticated file URL so protected files are accessible.
-			const url = pb.files.getUrl(rec, rec.file, { token: await pb.files.getToken() });
+			// Authenticated file URL — PB returns a direct URL, Supabase a signed one.
+			const url = await data.getReportDownloadFileUrl(rec);
 			const res = await fetch(url);
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
 			const blob = await res.blob();
@@ -82,7 +76,7 @@ const DownloadsPage = () => {
 	const handleDelete = async (rec) => {
 		setDeleting(rec.id);
 		try {
-			await pb.collection('report_downloads').delete(rec.id);
+			await data.deleteReportDownload(rec.id);
 			setItems((prev) => prev.filter((x) => x.id !== rec.id));
 			toast.success('Permanently deleted.');
 		} catch (err) {

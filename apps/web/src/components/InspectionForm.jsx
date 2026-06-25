@@ -220,7 +220,7 @@ const WaterQualityPhotos = ({ images, onChange }) => {
         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
           {images.map((img) => (
             <div key={img.id} className="relative aspect-square rounded overflow-hidden border group">
-              <img src={img.url} alt="Water test" className="w-full h-full object-cover" />
+              <img src={img.url} alt="Water test" className="w-full h-full object-contain bg-muted/30" />
               <button
                 type="button"
                 onClick={() => remove(img.id)}
