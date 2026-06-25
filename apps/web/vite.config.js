@@ -287,7 +287,12 @@ logger.error = (msg, options) => {
 
 export default defineConfig({
 	optimizeDeps: {
-		include: allDeps,
+		// @capacitor/android has no Node entry — it's a build-time helper that
+		// ships only Java/Gradle sources.  Excluding it lets `vite dev` start
+		// on workstations that don't have an Android toolchain configured.
+		// Production `vite build` is unaffected (it already skipped this dep).
+		include: allDeps.filter((d) => d !== '@capacitor/android'),
+		exclude: ['@capacitor/android'],
 	},
 	customLogger: logger,
 	plugins: [

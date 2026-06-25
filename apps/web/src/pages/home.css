@@ -121,22 +121,28 @@
  * TYPOGRAPHY MOTION
  * ════════════════════════════════════════════════════════════════════ */
 
-/* Rotating verb under the headline */
-@keyframes word-cycle {
-  0%, 20%  { transform: translateY(0);     opacity: 1; filter: blur(0);  }
-  22%, 23% {                                                              filter: blur(8px); }
-  25%, 100%{ transform: translateY(-110%); opacity: 0; filter: blur(0); }
+/* Rotating verb — driven by JS state (RotatingWord component).  Each
+ * word is absolutely positioned over the mask; data-state controls the
+ * opacity + translateY transition, which is robust against browser
+ * pending-animation quirks that broke the pure-CSS @keyframes version. */
+.home-word-mask {
+  position: relative;
+  display: block;
+  height: 1.15em;
+  overflow: hidden;
 }
-.home-rotate-mask  { display: inline-block; height: 1.1em; overflow: hidden; vertical-align: -0.15em; }
-.home-rotate-track { display: inline-flex; flex-direction: column; }
-.home-rotate-track > span {
-  height: 1.1em; line-height: 1.1em;
-  animation: word-cycle 12s cubic-bezier(0.7, 0, 0.3, 1) infinite;
+.home-word {
+  position: absolute; inset: 0;
+  display: block;
+  white-space: nowrap;
+  transition:
+    transform 700ms cubic-bezier(0.65, 0, 0.35, 1),
+    opacity   600ms cubic-bezier(0.65, 0, 0.35, 1),
+    filter    400ms ease;
 }
-.home-rotate-track > span:nth-child(1) { animation-delay: 0s; }
-.home-rotate-track > span:nth-child(2) { animation-delay: 3s; }
-.home-rotate-track > span:nth-child(3) { animation-delay: 6s; }
-.home-rotate-track > span:nth-child(4) { animation-delay: 9s; }
+.home-word[data-state="hidden"]  { opacity: 0; transform: translateY(110%);  filter: blur(0); pointer-events: none; }
+.home-word[data-state="active"]  { opacity: 1; transform: translateY(0);     filter: blur(0); }
+.home-word[data-state="leaving"] { opacity: 0; transform: translateY(-110%); filter: blur(6px); pointer-events: none; }
 
 /* Per-letter reveal — used by <SplitText> component */
 @keyframes letter-rise {
@@ -340,7 +346,6 @@
   .home-aurora::after,
   .home-aurora > i { animation: none; }
   .home-particles span,
-  .home-rotate-track > span,
   .home-floorplan .defect,
   .home-float,
   .home-statline::after { animation: none !important; }

@@ -169,15 +169,13 @@ const HomePage = () => {
                 <p className="editorial-eyebrow">{brand} &mdash; Home Inspection Services</p>
                 <h1 className="editorial-headline mt-8 text-4xl sm:text-6xl md:text-7xl lg:text-[5.5rem] leading-[0.95]">
                   <SplitText as="span" text={`${brand}.`} className="text-primary block" step={0.035} />
-                  <span className="block mt-2">
-                    We are{' '}
-                    <span className="home-rotate-mask align-baseline">
-                      <span className="home-rotate-track text-secondary italic">
-                        <span>inspecting.</span>
-                        <span>photographing.</span>
-                        <span>documenting.</span>
-                        <span>certifying.</span>
-                      </span>
+                  <span className="block mt-2">We are</span>
+                  <span className="home-rotate-mask text-secondary italic mt-1">
+                    <span className="home-rotate-track">
+                      <span>inspecting.</span>
+                      <span>photographing.</span>
+                      <span>documenting.</span>
+                      <span>certifying.</span>
                     </span>
                   </span>
                 </h1>

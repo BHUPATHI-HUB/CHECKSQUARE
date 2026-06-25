@@ -11,7 +11,6 @@
  *  mobile and accessibility-conscious visitors get a calm experience.
  */
 import React, { useEffect, useRef } from 'react';
-
 const isTouchOnly = () =>
   typeof window !== 'undefined' && window.matchMedia('(hover: none)').matches;
 const prefersReducedMotion = () =>
@@ -90,6 +89,43 @@ export const SplitText = ({ text, className = '', delayBase = 0, step = 0.02, as
         </span>
       ))}
     </As>
+  );
+};
+
+/* ─── <RotatingWord> ──────────────────────────────────────────────────
+ *
+ *  Cycles through `words` with a JS interval.  Replaces a pure-CSS
+ *  @keyframes implementation that kept getting stuck in 'pending' state
+ *  in some Chromium builds (animation reports playState='running' but
+ *  startTime=null, currentTime=0 forever).  Driving the active index
+ *  from React state is bulletproof and only ~30 LoC.
+ *
+ *  Honors prefers-reduced-motion by jumping rather than animating.
+ */
+export const RotatingWord = ({ words = [], interval = 3000, className = '' }) => {
+  const [idx, setIdx] = React.useState(0);
+  React.useEffect(() => {
+    if (prefersReducedMotion()) return undefined;
+    const id = setInterval(() => setIdx((v) => (v + 1) % words.length), interval);
+    return () => clearInterval(id);
+  }, [interval, words.length]);
+  return (
+    <span className={`home-word-mask ${className}`}>
+      {words.map((w, i) => (
+        <span
+          key={w}
+          className="home-word"
+          data-state={
+            i === idx ? 'active'
+            : i === (idx - 1 + words.length) % words.length ? 'leaving'
+            : 'hidden'
+          }
+          aria-hidden={i !== idx}
+        >
+          {w}
+        </span>
+      ))}
+    </span>
   );
 };
 
