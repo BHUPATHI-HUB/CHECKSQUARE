@@ -7,6 +7,7 @@ import Footer from '@/components/Footer.jsx';
 import { useSettings } from '@/contexts/SettingsContext.jsx';
 import { Button } from '@/components/ui/button';
 import FloorplanHero from '@/components/FloorplanHero.jsx';
+import { Spotlight, TiltCard, SplitText, Particles } from '@/components/HomeInteractions.jsx';
 import './home.css';
 import {
   ArrowRight, ArrowUpRight, CheckCircle2, ShieldCheck, ClipboardList,
@@ -154,26 +155,29 @@ const HomePage = () => {
         <Header />
 
         {/* ─── HERO ─────────────────────────────────────────────────── */}
-        <section className="relative pt-8 sm:pt-12 lg:pt-24 pb-16 sm:pb-20 lg:pb-32 overflow-hidden grain text-foreground">
-          {/* Ornamental CSS-only depth: dot grid + conic light wash.  Zero
-              network bytes — both layers render entirely from gradients. */}
+        <Spotlight className="relative pt-8 sm:pt-12 lg:pt-24 pb-16 sm:pb-20 lg:pb-32 overflow-hidden text-foreground">
+          {/* ── Immersive background stack (all CSS / inline-SVG / ~0 KB on wire) ── */}
+          <div aria-hidden="true" className="home-aurora absolute inset-0"><i /></div>
           <div aria-hidden="true" className="absolute inset-0 home-dotgrid pointer-events-none" />
-          <div aria-hidden="true" className="absolute -top-32 -left-32 w-[640px] h-[640px] home-conic pointer-events-none" />
+          <div aria-hidden="true" className="home-spotlight absolute inset-0" />
+          <div aria-hidden="true" className="home-noise" />
+          <Particles count={14} />
 
           <div className="container mx-auto px-4 sm:px-6 lg:px-12 relative z-10">
             <div className="grid grid-cols-12 gap-y-12 lg:gap-12 items-end">
               <motion.div className="col-span-12 lg:col-span-7" {...fadeUp}>
                 <p className="editorial-eyebrow">{brand} &mdash; Home Inspection Services</p>
-                <h1 className="editorial-headline mt-8 text-4xl sm:text-6xl md:text-7xl lg:text-[5.5rem]">
-                  <span className="text-primary">{brand}.</span>
-                  <br />
-                  We are{' '}
-                  <span className="home-rotate-mask align-baseline">
-                    <span className="home-rotate-track text-secondary italic">
-                      <span>inspecting.</span>
-                      <span>photographing.</span>
-                      <span>documenting.</span>
-                      <span>certifying.</span>
+                <h1 className="editorial-headline mt-8 text-4xl sm:text-6xl md:text-7xl lg:text-[5.5rem] leading-[0.95]">
+                  <SplitText as="span" text={`${brand}.`} className="text-primary block" step={0.035} />
+                  <span className="block mt-2">
+                    We are{' '}
+                    <span className="home-rotate-mask align-baseline">
+                      <span className="home-rotate-track text-secondary italic">
+                        <span>inspecting.</span>
+                        <span>photographing.</span>
+                        <span>documenting.</span>
+                        <span>certifying.</span>
+                      </span>
                     </span>
                   </span>
                 </h1>
@@ -184,7 +188,7 @@ const HomePage = () => {
                 </p>
                 <motion.div
                   className="mt-10 flex flex-col sm:flex-row gap-4"
-                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.35, duration: 0.8 }}
+                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.55, duration: 0.8 }}
                 >
                   <Button size="lg" className="h-14 px-8 rounded-full text-base group home-cta" asChild>
                     <Link to="/signup" data-testid="hero-book-cta">
@@ -192,7 +196,7 @@ const HomePage = () => {
                       <ArrowRight className="w-5 h-5 ml-2 transition-transform group-hover:translate-x-1" />
                     </Link>
                   </Button>
-                  <Button size="lg" variant="outline" className="h-14 px-8 rounded-full text-base" asChild>
+                  <Button size="lg" variant="outline" className="h-14 px-8 rounded-full text-base home-underline" asChild>
                     <Link to="/login" data-testid="hero-login-cta">Returning client</Link>
                   </Button>
                 </motion.div>
@@ -215,32 +219,51 @@ const HomePage = () => {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.9, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
               >
-                <div className="relative">
-                  {/* Animated SVG floorplan — replaces the legacy 100 KB
-                      Unsplash photo with ~3 KB of inline geometry that
-                      draws itself in front of the user.  This is the
-                      single biggest data-saving in the redesign. */}
-                  <div className="relative aspect-[5/6] border bg-background/60 backdrop-blur-sm overflow-hidden">
+                {/* TiltCard gives the floorplan a subtle 3D parallax when
+                    the cursor moves — desktop only.  On touch devices the
+                    transform is bypassed entirely. */}
+                <TiltCard className="relative" max={6}>
+                  <div className="relative aspect-[5/6] home-glass overflow-hidden">
                     <FloorplanHero />
                     {/* Corner tick marks — pure typography */}
                     <span className="absolute top-3 left-3  text-[10px] tracking-[0.25em] text-muted-foreground">FP / 01</span>
                     <span className="absolute top-3 right-3 text-[10px] tracking-[0.25em] text-muted-foreground">SCALE 1:60</span>
                     <span className="absolute bottom-3 right-3 text-[10px] tracking-[0.25em] text-muted-foreground">REV.04 / 26</span>
                   </div>
-                  <div className="absolute -bottom-6 left-2 sm:-bottom-8 sm:-left-8 bg-card border shadow-xl px-5 py-4 sm:px-7 sm:py-5 max-w-[240px] sm:max-w-[260px]">
+                  <div className="absolute -bottom-6 left-2 sm:-bottom-8 sm:-left-8 home-glass shadow-xl px-5 py-4 sm:px-7 sm:py-5 max-w-[240px] sm:max-w-[260px] home-float home-tilt-pop">
                     <p className="editorial-eyebrow text-[10px]">Field note</p>
                     <p className="mt-3 font-display text-lg leading-snug">
                       &ldquo;Trim returns under the south sill suggest a former leak. Documented.&rdquo;
                     </p>
                     <p className="mt-3 text-xs text-muted-foreground">— Inspector M. Chen, 04.12</p>
                   </div>
-                </div>
+                </TiltCard>
               </motion.div>
+            </div>
+          </div>
+        </Spotlight>
+
+        {/* ─── CREDENTIALS MARQUEE ──────────────────────────────────── */}
+        <section className="border-y bg-muted/10 py-6">
+          <div className="home-marquee">
+            <div className="home-marquee-track text-xs tracking-[0.3em] uppercase text-muted-foreground">
+              {[
+                'INTERNACHI Certified', 'ASHI Member', 'RERA Compliant',
+                'Lead-Safe EPA', 'Termite Licensed', 'Thermography L1',
+                'Mould Assessment', 'INTERNACHI Certified', 'ASHI Member',
+                'RERA Compliant', 'Lead-Safe EPA', 'Termite Licensed',
+                'Thermography L1', 'Mould Assessment',
+              ].map((c, i) => (
+                <span key={i} className="inline-flex items-center gap-3">
+                  <ShieldCheck className="w-4 h-4 text-secondary" />
+                  {c}
+                </span>
+              ))}
             </div>
           </div>
         </section>
 
-        {/* ─── METRICS STRIP — animated counters ────────────────────── */}
+        {/* ─── METRICS STRIP — animated counters with draw-on underline ─ */}
         <section className="border-y bg-muted/30">
           <div className="container mx-auto px-4 sm:px-6 lg:px-12 py-12 lg:py-16">
             <motion.div className="grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-10" {...stagger} initial="initial" whileInView="whileInView">
@@ -250,8 +273,8 @@ const HomePage = () => {
                 { v: 24,   suffix: 'h',  label: 'Report turnaround' },
                 { v: 4.96, suffix: '/5', label: 'Customer rating' },
               ].map((s) => (
-                <motion.div key={s.label} variants={fadeUp} className="stat-card">
-                  <span className="stat-value">
+                <motion.div key={s.label} variants={fadeUp} className="stat-card group">
+                  <span className="stat-value home-statline">
                     <Counter to={s.v} suffix={s.suffix} />
                   </span>
                   <span className="stat-label">{s.label}</span>
@@ -326,13 +349,15 @@ const HomePage = () => {
             />
             <motion.div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-10 mt-16" {...stagger} initial="initial" whileInView="whileInView">
               {services.map((s) => (
-                <motion.div key={s.title} variants={fadeUp} className="border-t pt-6 group cursor-pointer">
-                  <div className="flex items-baseline justify-between">
-                    <p className="editorial-eyebrow text-[10px]">{s.tag}</p>
-                    <ArrowUpRight className="w-5 h-5 text-muted-foreground group-hover:text-secondary group-hover:rotate-12 transition-all" />
-                  </div>
-                  <h3 className="font-display text-3xl md:text-4xl mt-4 leading-tight">{s.title}</h3>
-                  <p className="text-muted-foreground mt-3">{s.meta}</p>
+                <motion.div key={s.title} variants={fadeUp}>
+                  <TiltCard className="border-t pt-6 group cursor-pointer p-6 bg-background/40 home-glass" max={4}>
+                    <div className="flex items-baseline justify-between home-tilt-pop">
+                      <p className="editorial-eyebrow text-[10px]">{s.tag}</p>
+                      <ArrowUpRight className="w-5 h-5 text-muted-foreground group-hover:text-secondary group-hover:rotate-12 transition-all" />
+                    </div>
+                    <h3 className="font-display text-3xl md:text-4xl mt-4 leading-tight home-tilt-pop">{s.title}</h3>
+                    <p className="text-muted-foreground mt-3">{s.meta}</p>
+                  </TiltCard>
                 </motion.div>
               ))}
             </motion.div>
