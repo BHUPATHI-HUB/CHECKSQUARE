@@ -74,6 +74,23 @@ const CustomerDashboard = () => {
             sort: '-created',
           }),
         ]);
+
+        // Re-hydrate the inspector display name for every upcoming appointment.
+        // We dropped the PB `expand: 'inspector'` shortcut when migrating to
+        // dataService — a separate batched lookup keeps the dashboard text
+        // ("with Inspector X") intact without inventing a new service method.
+        const inspectorIds = [...new Set(appts.map((a) => a.inspector).filter(Boolean))];
+        if (inspectorIds.length) {
+          const inspectors = await Promise.all(
+            inspectorIds.map((id) => data.getUser(id).catch(() => null)),
+          );
+          const byId = Object.fromEntries(inspectors.filter(Boolean).map((u) => [u.id, u]));
+          appts.forEach((a) => {
+            if (a.inspector && byId[a.inspector]) {
+              a.expand = { ...(a.expand || {}), inspector: byId[a.inspector] };
+            }
+          });
+        }
         if (!cancelled) {
           setUpcomingAppointments(appts);
           setPastInspections(insps);

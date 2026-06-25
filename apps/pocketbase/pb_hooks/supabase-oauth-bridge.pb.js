@@ -53,9 +53,13 @@ routerAdd("POST", "/api/supabase/oauth-bridge", (e) => {
     try {
         record = $app.findFirstRecordByData("users", "email", profile.email);
     } catch (_) {
-        // Create a brand-new customer (default).  Admin / inspector roles
-        // must be assigned manually from the PB admin UI for security.
-        const role = $os.getenv("SUPABASE_DEFAULT_ROLE") || "customer";
+        // Create a brand-new customer (default).  We deliberately REFUSE
+        // to auto-create admins via OAuth — admin/inspector roles must be
+        // promoted manually from the PB admin UI for security.
+        const requestedRole = $os.getenv("SUPABASE_DEFAULT_ROLE") || "customer";
+        const role = (requestedRole === "admin" || requestedRole === "inspector")
+            ? "customer"
+            : requestedRole;
         record = new Record(usersCol);
         record.set("email",            profile.email);
         record.set("emailVisibility",  false);

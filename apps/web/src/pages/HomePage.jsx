@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
 import { motion } from 'framer-motion';
@@ -6,6 +6,8 @@ import Header from '@/components/Header.jsx';
 import Footer from '@/components/Footer.jsx';
 import { useSettings } from '@/contexts/SettingsContext.jsx';
 import { Button } from '@/components/ui/button';
+import FloorplanHero from '@/components/FloorplanHero.jsx';
+import './home.css';
 import {
   ArrowRight, ArrowUpRight, CheckCircle2, ShieldCheck, ClipboardList,
   Camera, FileText, Sparkles, Quote, Plus, Minus,
@@ -22,6 +24,37 @@ const fadeUp = {
 const stagger = {
   whileInView: { transition: { staggerChildren: 0.08 } },
   viewport: { once: true, amount: 0.2 },
+};
+
+// ─── Counter — lightweight number ticker (IntersectionObserver + rAF) ─
+// 24 LoC, zero deps.  Animates only once when the element scrolls into
+// view to keep CPU cost negligible for low-end devices.
+const Counter = ({ to, suffix = '', duration = 1400 }) => {
+  const ref = useRef(null);
+  const [val, setVal] = useState(0);
+  useEffect(() => {
+    if (!ref.current) return undefined;
+    const el = ref.current;
+    const obs = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        const start = performance.now();
+        const ease = (t) => 1 - Math.pow(1 - t, 3);
+        const step = (now) => {
+          const t = Math.min(1, (now - start) / duration);
+          setVal(to * ease(t));
+          if (t < 1) requestAnimationFrame(step);
+          else setVal(to);
+        };
+        requestAnimationFrame(step);
+        obs.disconnect();
+      });
+    }, { threshold: 0.4 });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [to, duration]);
+  const display = Number.isInteger(to) ? Math.round(val).toLocaleString() : val.toFixed(2);
+  return <span ref={ref} className="home-counter-value">{display}{suffix}</span>;
 };
 
 // ─── Reusable section heading ────────────────────────────────────────
@@ -121,15 +154,28 @@ const HomePage = () => {
         <Header />
 
         {/* ─── HERO ─────────────────────────────────────────────────── */}
-        <section className="relative pt-8 sm:pt-12 lg:pt-24 pb-16 sm:pb-20 lg:pb-32 overflow-hidden grain">
+        <section className="relative pt-8 sm:pt-12 lg:pt-24 pb-16 sm:pb-20 lg:pb-32 overflow-hidden grain text-foreground">
+          {/* Ornamental CSS-only depth: dot grid + conic light wash.  Zero
+              network bytes — both layers render entirely from gradients. */}
+          <div aria-hidden="true" className="absolute inset-0 home-dotgrid pointer-events-none" />
+          <div aria-hidden="true" className="absolute -top-32 -left-32 w-[640px] h-[640px] home-conic pointer-events-none" />
+
           <div className="container mx-auto px-4 sm:px-6 lg:px-12 relative z-10">
             <div className="grid grid-cols-12 gap-y-12 lg:gap-12 items-end">
               <motion.div className="col-span-12 lg:col-span-7" {...fadeUp}>
                 <p className="editorial-eyebrow">{brand} &mdash; Home Inspection Services</p>
                 <h1 className="editorial-headline mt-8 text-4xl sm:text-6xl md:text-7xl lg:text-[5.5rem]">
-                  <span className="text-primary">{brand}</span>
+                  <span className="text-primary">{brand}.</span>
                   <br />
-                  Home Inspection Services
+                  We are{' '}
+                  <span className="home-rotate-mask align-baseline">
+                    <span className="home-rotate-track text-secondary italic">
+                      <span>inspecting.</span>
+                      <span>photographing.</span>
+                      <span>documenting.</span>
+                      <span>certifying.</span>
+                    </span>
+                  </span>
                 </h1>
                 <p className="editorial-deck mt-8 text-lg md:text-xl max-w-xl">
                   A modern inspection studio for the people who take the structural truth of a property
@@ -140,19 +186,19 @@ const HomePage = () => {
                   className="mt-10 flex flex-col sm:flex-row gap-4"
                   initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.35, duration: 0.8 }}
                 >
-                  <Button size="lg" className="h-14 px-8 rounded-full text-base group" asChild>
-                    <Link to="/signup">
+                  <Button size="lg" className="h-14 px-8 rounded-full text-base group home-cta" asChild>
+                    <Link to="/signup" data-testid="hero-book-cta">
                       Book an inspection
                       <ArrowRight className="w-5 h-5 ml-2 transition-transform group-hover:translate-x-1" />
                     </Link>
                   </Button>
                   <Button size="lg" variant="outline" className="h-14 px-8 rounded-full text-base" asChild>
-                    <Link to="/login">Returning client</Link>
+                    <Link to="/login" data-testid="hero-login-cta">Returning client</Link>
                   </Button>
                 </motion.div>
                 <div className="mt-10 sm:mt-12 flex flex-wrap items-center gap-x-6 gap-y-3 text-sm text-muted-foreground">
                   <span className="inline-flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-secondary" /> Insured & bonded
+                    <CheckCircle2 className="w-4 h-4 text-secondary" /> Insured &amp; bonded
                   </span>
                   <span className="inline-flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-secondary" /> 24-hour delivery
@@ -165,17 +211,21 @@ const HomePage = () => {
 
               <motion.div
                 className="col-span-12 lg:col-span-5"
-                initial={{ opacity: 0, scale: 0.97 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.9, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
+                initial={{ opacity: 0, y: 24 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.9, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
               >
                 <div className="relative">
-                  <div className="aspect-[4/5] rounded-sm overflow-hidden bg-muted">
-                    <img
-                      src="https://images.unsplash.com/photo-1564013799919-ab600027ffc6?auto=format&fit=crop&w=900&q=80"
-                      alt="Architectural detail of a quiet residential interior"
-                      className="w-full h-full object-cover"
-                    />
+                  {/* Animated SVG floorplan — replaces the legacy 100 KB
+                      Unsplash photo with ~3 KB of inline geometry that
+                      draws itself in front of the user.  This is the
+                      single biggest data-saving in the redesign. */}
+                  <div className="relative aspect-[5/6] border bg-background/60 backdrop-blur-sm overflow-hidden">
+                    <FloorplanHero />
+                    {/* Corner tick marks — pure typography */}
+                    <span className="absolute top-3 left-3  text-[10px] tracking-[0.25em] text-muted-foreground">FP / 01</span>
+                    <span className="absolute top-3 right-3 text-[10px] tracking-[0.25em] text-muted-foreground">SCALE 1:60</span>
+                    <span className="absolute bottom-3 right-3 text-[10px] tracking-[0.25em] text-muted-foreground">REV.04 / 26</span>
                   </div>
                   <div className="absolute -bottom-6 left-2 sm:-bottom-8 sm:-left-8 bg-card border shadow-xl px-5 py-4 sm:px-7 sm:py-5 max-w-[240px] sm:max-w-[260px]">
                     <p className="editorial-eyebrow text-[10px]">Field note</p>
@@ -190,18 +240,20 @@ const HomePage = () => {
           </div>
         </section>
 
-        {/* ─── METRICS STRIP ────────────────────────────────────────── */}
+        {/* ─── METRICS STRIP — animated counters ────────────────────── */}
         <section className="border-y bg-muted/30">
           <div className="container mx-auto px-4 sm:px-6 lg:px-12 py-12 lg:py-16">
             <motion.div className="grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-10" {...stagger} initial="initial" whileInView="whileInView">
               {[
-                { value: '2,847', label: 'Properties inspected' },
-                { value: '14yr', label: 'Average inspector tenure' },
-                { value: '24h', label: 'Report turnaround' },
-                { value: '4.96', label: 'Customer rating, of 5' },
+                { v: 2847, suffix: '',   label: 'Properties inspected' },
+                { v: 14,   suffix: 'yr', label: 'Avg inspector tenure' },
+                { v: 24,   suffix: 'h',  label: 'Report turnaround' },
+                { v: 4.96, suffix: '/5', label: 'Customer rating' },
               ].map((s) => (
                 <motion.div key={s.label} variants={fadeUp} className="stat-card">
-                  <span className="stat-value">{s.value}</span>
+                  <span className="stat-value">
+                    <Counter to={s.v} suffix={s.suffix} />
+                  </span>
                   <span className="stat-label">{s.label}</span>
                 </motion.div>
               ))}

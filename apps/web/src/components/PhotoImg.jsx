@@ -25,15 +25,27 @@ const PhotoImg = ({
   ...rest
 }) => {
   const [src, setSrc] = useState(photo?.url || '');
+  // Re-fetch the signed URL once if the browser returns 404 — Supabase
+  // signed URLs expire after 1 h, and a long inspector session can outlive
+  // the original mint.  The retry flag short-circuits infinite loops.
+  const [retried, setRetried] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
+    setRetried(false);
     if (photo?.url) { setSrc(photo.url); return undefined; }
     if (photo?.storageKey) {
       getInspectionPhotoUrl(photo).then((u) => { if (!cancelled) setSrc(u); });
     }
     return () => { cancelled = true; };
   }, [photo?.url, photo?.storageKey]);
+
+  const handleError = async () => {
+    if (retried || !photo?.storageKey) return;
+    setRetried(true);
+    const fresh = await getInspectionPhotoUrl(photo);
+    if (fresh) setSrc(`${fresh}#r=${Date.now()}`); // cache-bust the <img>
+  };
 
   // Default container shading helps `object-contain` letterboxing look
   // intentional instead of broken.  Callers can override by passing their
@@ -56,6 +68,7 @@ const PhotoImg = ({
       alt={alt}
       className={`${fitClass} ${className}`}
       loading={loading}
+      onError={handleError}
       {...rest}
     />
   );

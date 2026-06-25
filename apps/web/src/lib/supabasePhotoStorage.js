@@ -158,10 +158,15 @@ export async function getInspectionPhotoDataUrl(photo) {
  * ONCE at the start of report generation so the rest of the generator can
  * continue to use `photo.url` exactly as it did before Supabase.
  *
- * The inspection object is mutated in place AND returned for convenience.
+ * Returns a DEEP CLONE — mutating the live inspection object while the PDF
+ * is still rendering would cause flicker and racy re-renders.  The caller
+ * should treat the returned object as a snapshot.
  */
 export async function materializeInspectionPhotos(inspection) {
   if (!inspection) return inspection;
+
+  // Defensive deep-clone — caller's React state stays pristine.
+  const clone = JSON.parse(JSON.stringify(inspection));
 
   const queue = [];
   const visit = (val) => {
@@ -170,7 +175,7 @@ export async function materializeInspectionPhotos(inspection) {
     if (Array.isArray(val)) val.forEach(visit);
     else Object.values(val).forEach(visit);
   };
-  visit(inspection);
+  visit(clone);
 
   // Fetch in parallel but cap concurrency to 8 so we don't hammer Supabase.
   const CONCURRENCY = 8;
@@ -182,5 +187,5 @@ export async function materializeInspectionPhotos(inspection) {
       if (dataUrl) photo.url = dataUrl;
     }));
   }
-  return inspection;
+  return clone;
 }

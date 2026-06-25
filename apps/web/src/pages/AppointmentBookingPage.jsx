@@ -66,7 +66,10 @@ const EditorialCalendar = ({ selected, onSelect }) => {
 
       <div className="grid grid-cols-7 gap-1 text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-2">
         {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
-          <div key={d} className="text-center py-2">{d.slice(0, 1)}</div>
+          // Three-letter abbreviation avoids the S/M/T/W/T/F/S ambiguity
+          // (the old `.slice(0,1)` showed duplicate T and S).  At 10px /
+          // 0.2em tracking the header is still narrow & uncrowded.
+          <div key={d} className="text-center py-2">{d}</div>
         ))}
       </div>
 

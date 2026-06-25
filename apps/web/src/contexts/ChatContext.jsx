@@ -290,8 +290,17 @@ export const ChatProvider = ({ children }) => {
       });
       if (callback) callback(e);
     };
-    pb.collection('messages').subscribe('*', handle);
-    const unsub = () => pb.collection('messages').unsubscribe('*');
+    // PocketBase realtime: `.subscribe()` returns an UNSUBSCRIBE function
+    // for *this specific handler*.  The old code called `.unsubscribe('*')`
+    // on teardown which destroyed every other open chat's subscription
+    // (bug C5 from the gap analysis) — switching to the returned function
+    // means closing chat A no longer silences chat B.
+    let perHandlerUnsub = () => {};
+    pb.collection('messages')
+      .subscribe('*', handle)
+      .then((u) => { perHandlerUnsub = u; })
+      .catch((err) => console.error('[chat] subscribe failed:', err));
+    const unsub = () => { try { perHandlerUnsub(); } catch (_) {} };
     subscriptions.current[chatId] = unsub;
     return () => {
       subscriptions.current[chatId]?.();
