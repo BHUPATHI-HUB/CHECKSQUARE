@@ -6,6 +6,7 @@ import {
 } from 'docx';
 import { saveFile } from './saveFile';
 import { computeInspectionScore, DEFAULT_SCORE_EXPLANATION_HTML, explainScore } from './scoring';
+import { materializeInspectionPhotos } from '@/lib/supabasePhotoStorage.js';
 
 // ─── Inline editorial SVG art (no network deps; render-safe in html2pdf) ──
 const HOUSE_SVG = (gold = '#c19a4b', ink = '#1f2937') => `
@@ -1803,6 +1804,9 @@ export const buildReportHTML = (inspection, settings) => {
 };
 
 export const generatePDF = async (inspection, settings) => {
+  // Resolve any Supabase storageKey-only photos to inline base64 dataURLs
+  // BEFORE html2pdf runs.  Signed URLs would expire mid-render in long reports.
+  await materializeInspectionPhotos(inspection);
   const refId = String(inspection.id || '').substring(0, 8).toUpperCase();
   const html = buildReportHTML(inspection, settings);
   const element = document.createElement('div');
@@ -2282,6 +2286,8 @@ const svgToPng = (svgString, widthPx, heightPx) => new Promise((resolve) => {
 });
 
 export const generateDOCX = async (inspection, settings, opts) => {
+  // Same dance as PDF — inline every Supabase storageKey photo as base64.
+  await materializeInspectionPhotos(inspection);
   const cName = settings?.companyName || settings?.appName || 'CheckSquare';
   const refId = String(inspection.id || '').substring(0, 8).toUpperCase();
   const severities = settings?.severityLevels || [];

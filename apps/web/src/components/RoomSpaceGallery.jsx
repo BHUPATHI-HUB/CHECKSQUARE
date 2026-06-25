@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Trash2, GripVertical, ImagePlus, Camera, UploadCloud, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext.jsx';
 import WebcamCaptureModal from '@/components/WebcamCaptureModal.jsx';
+import PhotoImg from '@/components/PhotoImg.jsx';
 import { toast } from 'sonner';
 
 const RoomSpaceGallery = ({ roomSpaces = [], onUpdate }) => {
@@ -186,7 +187,7 @@ const RoomSpaceGallery = ({ roomSpaces = [], onUpdate }) => {
               )}
               
               <div className="aspect-[4/3] bg-muted relative">
-                <img src={space.url} alt="Room Space" className="w-full h-full object-cover" />
+                <PhotoImg photo={space} alt="Room Space" className="w-full h-full object-cover" />
               </div>
               <div className="p-3 bg-card border-t">
                 <Input 

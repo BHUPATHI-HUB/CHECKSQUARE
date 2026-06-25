@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { ArrowRight, Mail, Lock, AlertCircle, CheckSquare } from 'lucide-react';
+import GoogleSignInButton from '@/components/GoogleSignInButton.jsx';
 
 const fadeUp = { initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.6, ease: [0.22, 1, 0.36, 1] } };
 
@@ -152,6 +153,17 @@ const LoginPage = () => {
                 {loading ? 'Signing in…' : <>Sign in <ArrowRight className="w-4 h-4 ml-2 transition-transform group-hover:translate-x-1" /></>}
               </Button>
             </form>
+
+            {/* OAuth — visible only when VITE_SUPABASE_URL is configured */}
+            <div className="mt-6 space-y-3">
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center"><span className="w-full border-t" /></div>
+                <div className="relative flex justify-center text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                  <span className="bg-background px-3">or</span>
+                </div>
+              </div>
+              <GoogleSignInButton />
+            </div>
 
             <p className="mt-10 text-sm text-muted-foreground">
               First time?{' '}

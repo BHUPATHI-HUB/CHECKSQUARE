@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import RoomPhotoManager from '@/components/RoomPhotoManager.jsx';
+import PhotoImg from '@/components/PhotoImg.jsx';
 import { toast } from 'sonner';
 import { generatePDF, generateDOCX } from '@/utils/ReportGenerator.jsx';
 import { Edit, Download, CheckCircle, XCircle, AlertCircle, FileText, Image as ImageIcon, Trash2 } from 'lucide-react';
@@ -197,7 +198,7 @@ const InspectionDetailView = ({ inspection, onUpdate }) => {
                       {room.roomSpaces.map((space) => (
                         <div key={space.id} className="bg-background rounded-lg border overflow-hidden shadow-sm">
                           <div className="aspect-[4/3] relative">
-                            <img src={space.url} alt="Room space" className="w-full h-full object-cover" />
+                            <PhotoImg photo={space} alt="Room space" className="w-full h-full object-cover" />
                           </div>
                           {space.caption && (
                             <div className="p-3 border-t bg-muted/20">
@@ -225,7 +226,7 @@ const InspectionDetailView = ({ inspection, onUpdate }) => {
                                 return (
                                   <div key={dp.id} className="bg-background rounded-lg border overflow-hidden shadow-sm">
                                     <div className="aspect-video relative">
-                                      <img src={dp.url} alt="defect" className="w-full h-full object-cover" />
+                                      <PhotoImg photo={dp} alt="defect" className="w-full h-full object-cover" />
                                       <Badge className="absolute top-2 right-2 shadow-sm" style={{ backgroundColor: sevInfo.color || '#333' }}>
                                         {dp.severity}
                                       </Badge>

@@ -12,6 +12,12 @@ import { Trash2, Plus, X, Camera, Upload, Lock, ShieldAlert } from 'lucide-react
 import WebcamCaptureModal from '@/components/WebcamCaptureModal.jsx';
 import { toast } from 'sonner';
 import { normalizeCommentLibrary, getClassifications } from '@/utils/commentLibrary';
+import {
+  uploadInspectionPhoto,
+  getInspectionPhotoUrl,
+  deleteInspectionPhoto,
+} from '@/lib/supabasePhotoStorage.js';
+import PhotoImg from '@/components/PhotoImg.jsx';
 
 const DEFAULT_SEVERITIES = [
   { id: 'major',    name: 'Major',    color: '#dc2626', definition: 'Compromises safety, structure or habitability.' },
@@ -31,7 +37,7 @@ const fileToDataUrl = (file) => new Promise((resolve, reject) => {
  * actions. iOS/Android show the camera UI only when `capture` is set; some
  * desktop browsers ignore `capture` entirely and fall back to file picker.
  */
-const PhotoSlot = ({ label, photo, onChange, onRemove, compact = false, ariaLabel }) => {
+const PhotoSlot = ({ label, photo, onChange, onRemove, compact = false, ariaLabel, inspectionId, roomKey }) => {
   const camRef = useRef(null);
   const fileRef = useRef(null);
   const [camOpen, setCamOpen] = useState(false);
@@ -44,10 +50,17 @@ const PhotoSlot = ({ label, photo, onChange, onRemove, compact = false, ariaLabe
   const consumeFile = async (file) => {
     if (!file) return;
     try {
-      const url = await fileToDataUrl(file);
-      onChange({ id: `photo_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`, url, capturedAt: new Date().toISOString() });
+      // Supabase-first: uploads to inspection-photos bucket and returns
+      // { id, storageKey, capturedAt }.  Falls back to legacy base64 when
+      // Supabase isn't configured (see lib/supabasePhotoStorage.js).
+      const record = await uploadInspectionPhoto(file, {
+        inspectionId: inspectionId || 'draft',
+        roomKey: roomKey || 'misc',
+      });
+      onChange(record);
       toast.success('Photo added');
-    } catch {
+    } catch (e) {
+      console.error(e);
       toast.error('Failed to read photo');
     }
   };
@@ -63,13 +76,13 @@ const PhotoSlot = ({ label, photo, onChange, onRemove, compact = false, ariaLabe
       {label && <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">{label}</p>}
       {photo ? (
         <div className="relative aspect-video rounded-lg overflow-hidden group">
-          <img src={photo.url} alt={label || ariaLabel || 'photo'} className="w-full h-full object-cover" />
+          <PhotoImg photo={photo} alt={label || ariaLabel || 'photo'} className="w-full h-full object-cover" />
           <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
             <Button
               type="button"
               variant="destructive"
               size="icon"
-              onClick={() => { onRemove(); toast.success('Photo removed'); }}
+              onClick={() => { deleteInspectionPhoto(photo); onRemove(); toast.success('Photo removed'); }}
             >
               <Trash2 className="w-4 h-4" />
             </Button>
@@ -173,13 +186,13 @@ const DefectPhotoGallery = ({ defect, onAdd, onUpdate, onRemove }) => {
           {photos.map((p, i) => (
             <div key={p.id} className="border rounded-lg overflow-hidden bg-muted/30">
               <div className="relative">
-                <img src={p.url} alt={`Defect photo ${i + 1}`} className="w-full h-44 object-cover" />
+                <PhotoImg photo={p} alt={`Defect photo ${i + 1}`} className="w-full h-44 object-cover" />
                 <Button
                   type="button"
                   size="icon"
                   variant="destructive"
                   className="absolute top-1.5 right-1.5 h-7 w-7"
-                  onClick={() => onRemove(p.id)}
+                  onClick={() => { deleteInspectionPhoto(p); onRemove(p.id); }}
                   title="Remove photo"
                 >
                   <X className="w-3.5 h-3.5" />

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { DEFAULT_WEIGHTS, DEFAULT_SCORE_EXPLANATION_HTML, PROPCHK_WEIGHTS, PROPCHK_ITEMS_PER_ROOM, DEFAULT_ROOM_SCORE_EXPR, DEFAULT_PRIORITY_EXPR } from '@/utils/scoring';
 import { STARTER_COMMENT_LIBRARY } from '@/utils/commentLibrary';
+import pb from '@/lib/pocketbaseClient.js';
 
 const SettingsContext = createContext(null);
 
@@ -118,53 +119,70 @@ export const SettingsProvider = ({ children }) => {
   const [settings, setSettings] = useState(defaultSettings);
   const [loading, setLoading] = useState(true);
 
-  // Bump this whenever the default brand identity changes so stale
-  // localStorage copies don't override the new defaults (appName, colors, etc).
-  const BRAND_VERSION = 'checksquare-2026-05-v3';
-  // Keys that belong to the brand identity — wiped when BRAND_VERSION changes
-  // so the new defaults take effect without the user resetting anything else.
-  const BRAND_KEYS = [
-    'appName', 'companyName', 'companyTagline', 'companySubtitle',
-    'companyEmail', 'companyPhone1', 'companyPhone2', 'phone', 'address',
-    'primaryColor', 'primaryBrandColor', 'secondaryColor', 'secondaryBrandColor',
-    'accentColor', 'patternColor', 'footer', 'aboutInfo',
-    'commentLibrary',
-  ];
+  // ─── Server-backed settings ────────────────────────────────────────────
+  // Fix for gap A2: settings now live in the PocketBase `app_settings`
+  // collection (single-row id="single") instead of per-browser localStorage.
+  // We still keep a localStorage write-through as an OFFLINE cache so the
+  // header/logo render instantly on cold-start without a network round-trip
+  // and so an offline inspector still sees the brand.
+  //
+  // Realtime: a `pb.collection('app_settings').subscribe('single', ...)`
+  // hook means every open tab/device re-renders within ~100 ms of an admin
+  // saving a change — no F5 needed.
+
+  const APP_SETTINGS_ID = 'single';
 
   useEffect(() => {
-    try {
-      const savedSettings = localStorage.getItem('app-settings');
-      if (savedSettings) {
-        const parsed = JSON.parse(savedSettings);
-        if (parsed.__brandVersion !== BRAND_VERSION) {
-          // Drop brand-identity fields so the new defaults win, keep everything
-          // else (comment library, scoring weights, disclaimers, etc).
-          BRAND_KEYS.forEach((k) => { delete parsed[k]; });
-          parsed.__brandVersion = BRAND_VERSION;
-          localStorage.setItem('app-settings', JSON.stringify(parsed));
-        }
-        setSettings(prev => ({ ...prev, ...parsed }));
-      }
-    } catch (err) {
-      console.error('Failed to parse settings', err);
-    } finally {
-      setLoading(false);
-    }
+    let cancelled = false;
+    let unsub = null;
 
-    // Spec §8 DoD: whitelabel changes cascade across all open tabs without
-    // requiring a reload. The `storage` event fires in *other* tabs when
-    // localStorage is mutated, so we rehydrate from it.
-    const onStorage = (e) => {
-      if (e.key !== 'app-settings' || !e.newValue) return;
+    const hydrateFromCache = () => {
       try {
-        const parsed = JSON.parse(e.newValue);
-        setSettings(prev => ({ ...prev, ...parsed }));
+        const cached = localStorage.getItem('app-settings');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          setSettings((prev) => ({ ...prev, ...parsed }));
+        }
       } catch (err) {
-        console.error('Failed to sync settings from storage event', err);
+        console.error('Failed to parse cached settings', err);
       }
     };
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
+
+    const fetchFromServer = async () => {
+      try {
+        const row = await pb.collection('app_settings').getOne(APP_SETTINGS_ID, { $autoCancel: false });
+        const payload = row?.payload || {};
+        if (cancelled) return;
+        if (Object.keys(payload).length > 0) {
+          setSettings((prev) => ({ ...prev, ...payload }));
+          localStorage.setItem('app-settings', JSON.stringify(payload));
+        }
+      } catch (_) {
+        // First boot or unauthed visitor — silently fall back to cache + defaults.
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    hydrateFromCache();
+    fetchFromServer();
+
+    // Realtime: refresh whenever an admin saves changes elsewhere.
+    try {
+      pb.collection('app_settings').subscribe(APP_SETTINGS_ID, (e) => {
+        if (e.action === 'update' || e.action === 'create') {
+          const payload = e.record?.payload || {};
+          setSettings((prev) => ({ ...prev, ...payload }));
+          localStorage.setItem('app-settings', JSON.stringify(payload));
+        }
+      });
+      unsub = () => pb.collection('app_settings').unsubscribe(APP_SETTINGS_ID);
+    } catch (_) { /* offline / unauthed — skip */ }
+
+    return () => {
+      cancelled = true;
+      if (unsub) unsub();
+    };
   }, []);
 
   useEffect(() => {
@@ -195,26 +213,37 @@ export const SettingsProvider = ({ children }) => {
     }
   }, [settings.primaryBrandColor, settings.primaryColor, settings.secondaryBrandColor, settings.secondaryColor, settings.accentColor, settings.favicon, settings.appName]);
 
-  const updateSettings = (newSettings) => {
+  const updateSettings = async (newSettings) => {
     try {
       const updated = { ...settings, ...newSettings };
       setSettings(updated);
+      // Optimistic local write-through.
       localStorage.setItem('app-settings', JSON.stringify({
         ...updated,
-        __brandVersion: BRAND_VERSION,
-        lastUpdated: new Date().toISOString()
+        lastUpdated: new Date().toISOString(),
       }));
+      // Persist to server (admins only — the API rule rejects non-admins
+      // and the UI never invokes this for them).
+      const { lastUpdated, __brandVersion, ...payload } = updated; // eslint-disable-line no-unused-vars
+      try {
+        await pb.collection('app_settings').update(APP_SETTINGS_ID, { payload }, { $autoCancel: false });
+      } catch (e) {
+        // Row doesn't exist yet — try a create with the fixed id.
+        if (String(e?.status) === '404') {
+          await pb.collection('app_settings').create({ id: APP_SETTINGS_ID, payload }, { $autoCancel: false });
+        } else {
+          throw e;
+        }
+      }
       return { success: true };
     } catch (err) {
-      return { success: false, error: 'Failed to update settings' };
+      console.error('Failed to persist settings:', err);
+      return { success: false, error: err?.message || 'Failed to update settings' };
     }
   };
 
-  const resetDisclaimers = () => {
-    const result = updateSettings({ disclaimerPage1: defaultDisclaimer1, disclaimerPage2: defaultDisclaimer2 });
-    // Return the freshly-applied defaults alongside the success flag so callers
-    // can immediately rehydrate their local form state without waiting for a
-    // settings re-read.
+  const resetDisclaimers = async () => {
+    const result = await updateSettings({ disclaimerPage1: defaultDisclaimer1, disclaimerPage2: defaultDisclaimer2 });
     return {
       ...result,
       disclaimerPage1: defaultDisclaimer1,

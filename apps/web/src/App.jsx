@@ -5,6 +5,7 @@ import { AuthProvider } from '@/contexts/AuthContext.jsx';
 import { SettingsProvider } from '@/contexts/SettingsContext.jsx';
 import { ChatProvider } from '@/contexts/ChatContext.jsx';
 import { FeedbackProvider } from '@/contexts/FeedbackContext.jsx';
+import { SupabaseAuthProvider } from '@/contexts/SupabaseAuthContext.jsx';
 import ScrollToTop from '@/components/ScrollToTop.jsx';
 import ProtectedRoute from '@/components/ProtectedRoute.jsx';
 import OfflineBanner from '@/components/OfflineBanner.jsx';
@@ -42,6 +43,7 @@ function App() {
   return (
     <SettingsProvider>
       <AuthProvider>
+        <SupabaseAuthProvider>
         <FeedbackProvider>
           <ChatProvider>
             <Router>
@@ -211,6 +213,7 @@ function App() {
           </Router>
           </ChatProvider>
         </FeedbackProvider>
+        </SupabaseAuthProvider>
       </AuthProvider>
     </SettingsProvider>
   );
