@@ -65,3 +65,8 @@ apps/web/.capacitor/
 *.aab
 *.keystore
 *.jks
+*.env
+credentials.json
+*.pem
+*.key
+.credentials
