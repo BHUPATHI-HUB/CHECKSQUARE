@@ -125,6 +125,46 @@ export async function outboxCount() {
   catch { return 0; }
 }
 
+// Aggregate queue stats: total pending + how many have already failed at least
+// one attempt (so the UI can flag "waiting" vs "needs attention").
+export async function outboxStats() {
+  try {
+    const all = await listOutbox();
+    return { total: all.length, failed: all.filter((o) => (o.tries || 0) > 0).length };
+  } catch { return { total: 0, failed: 0 }; }
+}
+
+// Clear the backoff timers so a manual "retry" attempts every op immediately.
+export async function resetOutboxBackoff() {
+  try {
+    const all = await listOutbox();
+    for (const o of all) { o.nextAttemptAt = Date.now(); await updateOutbox(o); }
+  } catch { /* non-fatal */ }
+}
+
+// ─── storage durability ──────────────────────────────────────────────────
+// Ask the browser to make our storage persistent so it is NOT evicted under
+// pressure (critical when an inspector holds many un-synced photos offline).
+export async function requestPersistentStorage() {
+  try {
+    if (typeof navigator === 'undefined' || !navigator.storage?.persist) return false;
+    if (navigator.storage.persisted && await navigator.storage.persisted()) return true;
+    return await navigator.storage.persist();
+  } catch { return false; }
+}
+
+// Current on-device storage usage (bytes) + quota, for a "storage getting full"
+// warning before an inspector loses the ability to add more photos offline.
+export async function getStorageEstimate() {
+  try {
+    if (typeof navigator === 'undefined' || !navigator.storage?.estimate) {
+      return { usage: 0, quota: 0, ratio: 0 };
+    }
+    const { usage = 0, quota = 0 } = await navigator.storage.estimate();
+    return { usage, quota, ratio: quota ? usage / quota : 0 };
+  } catch { return { usage: 0, quota: 0, ratio: 0 }; }
+}
+
 // ─── inspections (offline-saved) ─────────────────────────────────────────
 export async function putPendingInspection(inspection) {
   try {

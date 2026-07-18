@@ -13,7 +13,8 @@ import data from '@/services/dataService.js';
 import {
   listOutbox, updateOutbox, deleteOutbox,
   getPhotoBlob, markPhotoSynced, deletePhotoBlob,
-  getPendingInspection, deletePendingInspection, outboxCount,
+  getPendingInspection, deletePendingInspection, outboxStats,
+  resetOutboxBackoff, requestPersistentStorage,
 } from '@/lib/localStore.js';
 
 export const isNetworkError = (e) => {
@@ -27,8 +28,8 @@ export const isNetworkError = (e) => {
 const listeners = new Set();
 export const onSyncChange = (fn) => { listeners.add(fn); return () => listeners.delete(fn); };
 const notify = async () => {
-  const count = await outboxCount();
-  listeners.forEach((l) => { try { l(count); } catch { /* ignore */ } });
+  const stats = await outboxStats();
+  listeners.forEach((l) => { try { l(stats); } catch { /* ignore */ } });
 };
 
 let running = false;
@@ -90,10 +91,18 @@ export function requestSync() {
   scheduled = setTimeout(() => { scheduled = null; drainOutbox(); }, 300);
 }
 
+// Force every queued op to retry now (clears backoff), e.g. from a "Retry" tap.
+export async function retryFailed() {
+  await resetOutboxBackoff();
+  drainOutbox();
+}
+
 let started = false;
 export function startSyncEngine() {
   if (started || typeof window === 'undefined') return;
   started = true;
+  // Ask for durable storage so queued photos aren't evicted under pressure.
+  requestPersistentStorage();
   window.addEventListener('online', () => requestSync());
   // Periodic safety-net flush.
   setInterval(() => { if (navigator.onLine !== false) drainOutbox(); }, 30000);
