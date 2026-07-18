@@ -231,11 +231,30 @@ const AdminSettingsPage = () => {
     setLocalSettings(prev => ({ ...prev, [field]: value }));
   };
 
+  // Quick quality presets for report images. Selecting one fills the granular
+  // fields; editing any granular field flips the preset to 'custom'.
+  const IMAGE_PRESETS = {
+    balanced: { quality: 0.86, uploadMaxEdge: 1600, uploadQuality: 0.85 },
+    high:     { quality: 0.95, uploadMaxEdge: 2400, uploadQuality: 0.92 },
+    maximum:  { quality: 1.0,  uploadMaxEdge: 0,    uploadQuality: 1.0 },
+  };
+  const applyImagePreset = (preset) => {
+    setLocalSettings(prev => ({
+      ...prev,
+      reportImages: { ...(prev.reportImages || {}), ...(IMAGE_PRESETS[preset] || {}), preset },
+    }));
+  };
+
   // Nested updater for the reportImages group (crop/resize/quality controls).
   const handleImageChange = (key, value) => {
     setLocalSettings(prev => ({
       ...prev,
-      reportImages: { ...(prev.reportImages || {}), [key]: value },
+      reportImages: {
+        ...(prev.reportImages || {}),
+        [key]: value,
+        // Fine-tuning a quality/resolution field means we're no longer on a preset.
+        ...(['quality', 'uploadMaxEdge', 'uploadQuality'].includes(key) ? { preset: 'custom' } : {}),
+      },
     }));
   };
 
@@ -1361,6 +1380,23 @@ const AdminSettingsPage = () => {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-8">
+                  <div className="space-y-2 max-w-xl">
+                    <Label>Quality preset</Label>
+                    <Select
+                      value={localSettings.reportImages?.preset || 'balanced'}
+                      onValueChange={applyImagePreset}
+                    >
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="balanced">Balanced — good quality, small files (default)</SelectItem>
+                        <SelectItem value="high">High quality — sharper photos, larger files</SelectItem>
+                        <SelectItem value="maximum">Maximum — full resolution, no compression</SelectItem>
+                        <SelectItem value="custom">Custom — use the exact values below</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">Presets fill the quality &amp; resize fields below. You can still fine-tune any value — doing so switches this to “Custom”.</p>
+                  </div>
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div className="space-y-2">
                       <Label>Photo fit</Label>

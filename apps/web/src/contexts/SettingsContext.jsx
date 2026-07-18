@@ -118,6 +118,7 @@ export const SettingsProvider = ({ children }) => {
     // reads these live from app_settings, so changing them here changes the
     // crop/resize/quality behaviour everywhere immediately.
     reportImages: {
+      preset: 'balanced',    // 'balanced' | 'high' | 'maximum' | 'custom' — quick quality presets
       fit: 'contain',        // 'contain' (letterbox, no distortion) | 'cover' (crop to fill)
       quality: 0.86,         // JPEG quality (0.5–1.0) for report-embedded photos
       uploadMaxEdge: 1600,   // resize new photos so the longest edge ≤ this many px (0 = keep original)

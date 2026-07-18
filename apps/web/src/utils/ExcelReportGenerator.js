@@ -14,16 +14,51 @@ import saveFile from '@/utils/saveFile.js';
 
 const CM_TO_PX = 96 / 2.54; // ≈ 37.7953
 
-const stripDataUrlPrefix = (url) => {
-  const m = /^data:[^;]+;base64,(.+)$/.exec(url || '');
-  return m ? m[1] : null;
-};
-const extFromDataUrl = (url) => {
-  const m = /^data:image\/(png|jpe?g|gif|webp)/i.exec(url || '');
-  if (!m) return 'jpeg';
-  const e = m[1].toLowerCase();
-  return e === 'jpg' ? 'jpeg' : e; // exceljs expects 'jpeg', 'png', or 'gif'
-};
+const loadImage = (dataUrl) => new Promise((resolve, reject) => {
+  const img = new Image();
+  img.onload = () => resolve(img);
+  img.onerror = reject;
+  img.src = dataUrl;
+});
+
+// Render a photo to its final Excel size WITHOUT distortion.
+//   cover   → crop to fill the box (uniform grid, some edges cropped)
+//   contain → fit inside the box, ext = the fitted size (no crop, no stretch)
+// Supersamples 2× for print sharpness and re-encodes JPEG at `quality`.
+// Returns { base64, wPx, hPx } (display pixels) or null.
+async function processForExcel(dataUrl, boxWpx, boxHpx, fit, quality) {
+  let img;
+  try { img = await loadImage(dataUrl); } catch { return null; }
+  const sw = img.naturalWidth, sh = img.naturalHeight;
+  if (!sw || !sh) return null;
+  const scale = 2;
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  let outW, outH;
+  if (fit === 'cover') {
+    outW = boxWpx; outH = boxHpx;
+    canvas.width = boxWpx * scale;
+    canvas.height = boxHpx * scale;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const cs = Math.max(canvas.width / sw, canvas.height / sh);
+    const dw = sw * cs, dh = sh * cs;
+    ctx.drawImage(img, 0, 0, sw, sh, (canvas.width - dw) / 2, (canvas.height - dh) / 2, dw, dh);
+  } else {
+    const cs = Math.min(boxWpx / sw, boxHpx / sh);
+    outW = Math.max(1, Math.round(sw * cs));
+    outH = Math.max(1, Math.round(sh * cs));
+    canvas.width = outW * scale;
+    canvas.height = outH * scale;
+    ctx.drawImage(img, 0, 0, sw, sh, 0, 0, canvas.width, canvas.height);
+  }
+  const q = Math.min(1, Math.max(0.4, Number(quality) || 0.86));
+  const out = canvas.toDataURL('image/jpeg', q);
+  const m = /^data:[^;]+;base64,(.+)$/.exec(out);
+  return m ? { base64: m[1], wPx: outW, hPx: outH } : null;
+}
 
 /**
  * Build the inspection workbook as a Blob (does not trigger a download).
@@ -42,9 +77,9 @@ export async function buildXLSXBlob(inspection, settings) {
   const boxW = Number(ri.boxWidthCm) || 8.45;
   const boxH = Number(ri.boxHeightCm) || 6.4;
   const fit = ri.fit === 'cover' ? 'cover' : 'contain';
+  const quality = Math.min(1, Math.max(0.4, Number(ri.quality) || 0.86));
   const imgWpx = Math.round(boxW * CM_TO_PX);
   const imgHpx = Math.round(boxH * CM_TO_PX);
-  const rowHeightPt = Math.round((imgHpx * 72) / 96) + 6; // points; +padding
   const photoColWidthChars = Math.max(20, (imgWpx - 5) / 7);
 
   const primary = (settings?.primaryBrandColor || settings?.primaryColor || '#2DB4C6')
@@ -98,7 +133,7 @@ export async function buildXLSXBlob(inspection, settings) {
 
   const rooms = Array.isArray(inspection.roomInspections) ? inspection.roomInspections : [];
 
-  const addPhotoRow = ({ n, room, loc, desc, sev, url }) => {
+  const addPhotoRow = async ({ n, room, loc, desc, sev, url }) => {
     const row = ws.getRow(r);
     row.getCell('n').value = n ?? '';
     row.getCell('room').value = room || '';
@@ -107,25 +142,25 @@ export async function buildXLSXBlob(inspection, settings) {
     row.getCell('sev').value = sev || '';
     row.alignment = { vertical: 'middle', wrapText: true };
 
-    const b64 = url ? stripDataUrlPrefix(url) : null;
-    if (b64) {
-      const imgId = wb.addImage({ base64: b64, extension: extFromDataUrl(url) });
-      row.height = rowHeightPt;
-      // One-cell anchor at column F (0-indexed col 5) with an absolute pixel
-      // extent → Excel renders the image at exactly boxW × boxH cm. exceljs
-      // does not do object-fit, so we anchor at the cell and let the fixed
-      // ext size it; 'contain' vs 'cover' is honoured by matching the box
-      // aspect (near 4:3) — portrait shots keep their aspect via ext scaling.
-      ws.addImage(imgId, {
-        tl: { col: 5, row: r - 1 },
-        ext: { width: imgWpx, height: imgHpx },
-        editAs: 'oneCell',
-      });
+    if (url) {
+      const processed = await processForExcel(url, imgWpx, imgHpx, fit, quality);
+      if (processed) {
+        const imgId = wb.addImage({ base64: processed.base64, extension: 'jpeg' });
+        row.height = Math.round((processed.hPx * 72) / 96) + 6;
+        // One-cell anchor at column F (0-indexed 5) with the processed image's
+        // own pixel size → no stretching. 'contain' fits inside the box,
+        // 'cover' fills it (pre-cropped above).
+        ws.addImage(imgId, {
+          tl: { col: 5, row: r - 1 },
+          ext: { width: processed.wPx, height: processed.hPx },
+          editAs: 'oneCell',
+        });
+      }
     }
     r += 1;
   };
 
-  rooms.forEach((room) => {
+  for (const room of rooms) {
     const roomName = room?.name || 'Room';
     const corners = Array.isArray(room?.cornerPhotos) ? room.cornerPhotos : [];
     const defects = Array.isArray(room?.defects) ? room.defects : [];
@@ -139,12 +174,17 @@ export async function buildXLSXBlob(inspection, settings) {
     hr.getCell(1).alignment = { vertical: 'middle' };
     r += 1;
 
-    corners.forEach((p, i) => addPhotoRow({
-      n: '', room: roomName, loc: p.corner || `Corner ${i + 1}`,
-      desc: 'Ambient photo', sev: '', url: p.url,
-    }));
+    for (let i = 0; i < corners.length; i += 1) {
+      const p = corners[i];
+      // eslint-disable-next-line no-await-in-loop
+      await addPhotoRow({
+        n: '', room: roomName, loc: p.corner || `Corner ${i + 1}`,
+        desc: 'Ambient photo', sev: '', url: p.url,
+      });
+    }
 
-    defects.forEach((d, di) => {
+    for (let di = 0; di < defects.length; di += 1) {
+      const d = defects[di];
       let photos = Array.isArray(d.photos) ? d.photos.filter((p) => p && p.url) : [];
       if (photos.length === 0) {
         if (d.beforePhoto?.url) photos.push({ url: d.beforePhoto.url });
@@ -153,19 +193,24 @@ export async function buildXLSXBlob(inspection, settings) {
       const desc = d.description || d.title || 'Observation';
       const loc = d.location || d.area || '';
       if (photos.length === 0) {
-        addPhotoRow({ n: di + 1, room: roomName, loc, desc, sev: d.severity || '', url: null });
+        // eslint-disable-next-line no-await-in-loop
+        await addPhotoRow({ n: di + 1, room: roomName, loc, desc, sev: d.severity || '', url: null });
       } else {
-        photos.forEach((p, pi) => addPhotoRow({
-          n: pi === 0 ? di + 1 : '',
-          room: roomName,
-          loc,
-          desc: pi === 0 ? desc : (p.caption || ''),
-          sev: pi === 0 ? (d.severity || '') : '',
-          url: p.url,
-        }));
+        for (let pi = 0; pi < photos.length; pi += 1) {
+          const p = photos[pi];
+          // eslint-disable-next-line no-await-in-loop
+          await addPhotoRow({
+            n: pi === 0 ? di + 1 : '',
+            room: roomName,
+            loc,
+            desc: pi === 0 ? desc : (p.caption || ''),
+            sev: pi === 0 ? (d.severity || '') : '',
+            url: p.url,
+          });
+        }
       }
-    });
-  });
+    }
+  }
 
   const buffer = await wb.xlsx.writeBuffer();
   return new Blob([buffer], {
