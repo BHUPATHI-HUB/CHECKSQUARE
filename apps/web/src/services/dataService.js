@@ -205,10 +205,24 @@ const pbAdapter = {
 // The Supabase adapter mirrors the PB API.  Translates PB-style filter
 // strings into PostgREST query-builder calls in the common cases used by
 // the React app.  More complex filters can be added on demand.
+
+// Lightweight column set for LIST views. Deliberately excludes the heavy
+// JSON columns — `room_inspections` alone averages ~900 kB (and can exceed
+// 7 MB) per row because it embeds photo data, so `select('*')` made every
+// dashboard load pull megabytes it never renders. The full record is fetched
+// on demand by getInspection() when a row is opened / downloaded.
+const INSPECTION_LIST_COLUMNS = [
+  'id', 'inspector_id', 'inspector_name', 'customer_id', 'status',
+  'property_type', 'metadata', 'score', 'score_breakdown', 'include_score',
+  'property_metrics', 'approved_by', 'approved_at', 'rejected_by',
+  'rejected_at', 'rejection_reason', 'deleted_at', 'deleted_by',
+  'deletion_reason', 'created_at', 'updated_at',
+].join(',');
+
 const supaAdapter = {
   // ─── inspections ─────────────────────────────────────────────────────
   async listInspections({ filter = '', sort = '-created' } = {}) {
-    let q = supabase.from('inspections').select('*');
+    let q = supabase.from('inspections').select(INSPECTION_LIST_COLUMNS);
     q = applyPbFilter(q, filter);
     q = applyPbSort(q, sort, 'created_at');
     const { data, error } = await q;

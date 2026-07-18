@@ -4,7 +4,7 @@ import { Helmet } from 'react-helmet';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext.jsx';
 import { useChatContext } from '@/contexts/ChatContext.jsx';
-import { useInspectionStatus } from '@/hooks/useInspectionStatus.js';
+import { useInspectionStatus, getCachedInspectorInspections } from '@/hooks/useInspectionStatus.js';
 import { useSettings } from '@/contexts/SettingsContext.jsx';
 import Header from '@/components/Header.jsx';
 import Footer from '@/components/Footer.jsx';
@@ -33,20 +33,22 @@ const InspectorDashboard = () => {
   const { showSuccess } = useFeedback();
   const { settings } = useSettings();
   const brand = settings?.appName || 'CheckSquare';
-  const [inspections, setInspections] = useState([]);
+  const [inspections, setInspections] = useState(() => getCachedInspectorInspections(user.id) || []);
+  const [loading, setLoading] = useState(() => !getCachedInspectorInspections(user.id));
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
 
   const reload = async () => {
     const records = await getInspectionsForInspector(user.id);
     setInspections(records);
+    setLoading(false);
   };
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       const records = await getInspectionsForInspector(user.id);
-      if (!cancelled) setInspections(records);
+      if (!cancelled) { setInspections(records); setLoading(false); }
     })();
     return () => { cancelled = true; };
   }, [user.id, getInspectionsForInspector]);
@@ -300,6 +302,11 @@ const InspectorDashboard = () => {
                         </div>
                       </div>
                     ))}
+                  </div>
+                ) : loading ? (
+                  <div className="py-20 text-center">
+                    <div className="w-10 h-10 mx-auto mb-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                    <p className="text-sm uppercase tracking-[0.2em] text-muted-foreground">Loading inspections…</p>
                   </div>
                 ) : (
                   <div className="py-20 text-center">

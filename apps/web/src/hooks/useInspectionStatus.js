@@ -2,6 +2,19 @@ import { useCallback } from 'react';
 import { toast } from 'sonner';
 import data from '@/services/dataService.js';
 
+// Stale-while-revalidate cache so navigating away from a dashboard and back
+// shows the last known list INSTANTLY instead of a blank screen plus a full
+// re-fetch every time. Dashboards seed their initial state from here and then
+// refresh in the background. Mutations clear it so stale rows don't linger.
+const inspectionListCache = { all: null, byInspector: {}, deleted: null };
+export const getCachedAllInspections = () => inspectionListCache.all;
+export const getCachedInspectorInspections = (id) => inspectionListCache.byInspector[id] || null;
+const clearInspectionListCache = () => {
+  inspectionListCache.all = null;
+  inspectionListCache.byInspector = {};
+  inspectionListCache.deleted = null;
+};
+
 // Fields needed to render the dashboard list rows + drive sort/search/filter
 // + power inline actions (approve/reject/chat/delete). Crucially we DO NOT
 // fetch the four large JSON fields (`roomInspections`, `areaCalculations`,
@@ -34,25 +47,29 @@ export const useInspectionStatus = () => {
   // only get their own.
   const getAllInspections = useCallback(async (options = {}) => {
     try {
-      return await data.listInspections({ filter: 'deletedAt = null', sort: '-created', ...options });
+      const records = await data.listInspections({ filter: 'deletedAt = null', sort: '-created', ...options });
+      inspectionListCache.all = records;
+      return records;
     } catch (error) {
-      if (error?.isAbort) return [];
+      if (error?.isAbort) return inspectionListCache.all || [];
       console.error('Failed to fetch inspections', error);
-      return [];
+      return inspectionListCache.all || [];
     }
   }, []);
 
   const getInspectionsForInspector = useCallback(async (inspectorId) => {
     if (!inspectorId) return [];
     try {
-      return await data.listInspections({
+      const records = await data.listInspections({
         filter: `inspector = "${inspectorId}" && deletedAt = null`,
         sort: '-created',
       });
+      inspectionListCache.byInspector[inspectorId] = records;
+      return records;
     } catch (error) {
-      if (error?.isAbort) return [];
+      if (error?.isAbort) return inspectionListCache.byInspector[inspectorId] || [];
       console.error('Failed to fetch inspector inspections', error);
-      return [];
+      return inspectionListCache.byInspector[inspectorId] || [];
     }
   }, []);
 
@@ -88,6 +105,7 @@ export const useInspectionStatus = () => {
         payload.rejectedAt = new Date().toISOString();
       }
       await data.updateInspection(inspectionId, payload);
+      clearInspectionListCache();
       return true;
     } catch (error) {
       console.error('Failed to update inspection status', error);
@@ -103,6 +121,7 @@ export const useInspectionStatus = () => {
         deletedBy: user?.name || user?.email || 'Admin',
         deletionReason: reason,
       });
+      clearInspectionListCache();
       return true;
     } catch (error) {
       console.error('Failed to delete inspection', error);
@@ -118,6 +137,7 @@ export const useInspectionStatus = () => {
         deletedBy: null,
         deletionReason: null,
       });
+      clearInspectionListCache();
       return true;
     } catch (error) {
       console.error('Failed to restore inspection', error);
@@ -129,6 +149,7 @@ export const useInspectionStatus = () => {
   const permanentlyDeleteInspection = useCallback(async (inspectionId) => {
     try {
       await data.deleteInspection(inspectionId);
+      clearInspectionListCache();
       return true;
     } catch (error) {
       console.error('Failed to permanently delete inspection', error);
@@ -194,6 +215,7 @@ export const useInspectionStatus = () => {
           console.warn('Auto-create chat thread skipped:', chatErr?.message || chatErr);
         }
       }
+      clearInspectionListCache();
       return record;
     } catch (error) {
       console.error('Failed to save inspection', error);

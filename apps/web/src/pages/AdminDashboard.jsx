@@ -15,7 +15,7 @@ import {
   Search, FileText, Clock, ArrowUpDown, Eye, Edit, Trash2, MessageCircle,
   Plus, Settings as SettingsIcon, MessageSquare, CheckCircle, XCircle, Shield,
 } from 'lucide-react';
-import { useInspectionStatus } from '@/hooks/useInspectionStatus.js';
+import { useInspectionStatus, getCachedAllInspections } from '@/hooks/useInspectionStatus.js';
 import { useAuth } from '@/contexts/AuthContext.jsx';
 import { useChatContext } from '@/contexts/ChatContext.jsx';
 import { useFeedback } from '@/contexts/FeedbackContext.jsx';
@@ -41,7 +41,8 @@ const AdminDashboard = () => {
   const { getAllInspections, softDeleteInspection } = useInspectionStatus();
   const { settings } = useSettings();
   const brand = settings?.appName || 'CheckSquare';
-  const [inspections, setInspections] = useState([]);
+  const [inspections, setInspections] = useState(() => getCachedAllInspections() || []);
+  const [loading, setLoading] = useState(() => !getCachedAllInspections());
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [sortConfig, setSortConfig] = useState({ key: 'date', direction: 'desc' });
@@ -53,6 +54,7 @@ const AdminDashboard = () => {
   const loadData = async () => {
     const records = await getAllInspections();
     setInspections(records);
+    setLoading(false);
   };
 
   useEffect(() => {
@@ -381,6 +383,11 @@ const AdminDashboard = () => {
                             </div>
                           </div>
                         ))}
+                      </div>
+                    ) : loading ? (
+                      <div className="py-20 text-center">
+                        <div className="w-10 h-10 mx-auto mb-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                        <p className="text-sm uppercase tracking-[0.2em] text-muted-foreground">Loading inspections…</p>
                       </div>
                     ) : (
                       <div className="py-20 text-center">
