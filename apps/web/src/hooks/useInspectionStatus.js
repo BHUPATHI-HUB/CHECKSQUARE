@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { toast } from 'sonner';
 import data from '@/services/dataService.js';
-import { putPendingInspection, enqueue, listPendingInspections } from '@/lib/localStore.js';
+import { putPendingInspection, enqueue, listPendingInspections, getPendingInspection, putCachedList, getCachedList } from '@/lib/localStore.js';
 import { requestSync, isNetworkError } from '@/services/syncEngine.js';
 
 // Stale-while-revalidate cache so navigating away from a dashboard and back
@@ -61,15 +61,17 @@ export const useInspectionStatus = () => {
     try {
       records = await data.listInspections({ filter: 'deletedAt = null', sort: '-created', ...options });
       inspectionListCache.all = records;
+      putCachedList('inspections:all', records);
     } catch (error) {
       if (!error?.isAbort) console.error('Failed to fetch inspections', error);
-      records = inspectionListCache.all || [];
+      records = inspectionListCache.all || (await getCachedList('inspections:all')) || [];
     }
     return mergePending(records, await listPendingInspections());
   }, []);
 
   const getInspectionsForInspector = useCallback(async (inspectorId) => {
     if (!inspectorId) return [];
+    const cacheKey = `inspections:inspector:${inspectorId}`;
     let records;
     try {
       records = await data.listInspections({
@@ -77,9 +79,10 @@ export const useInspectionStatus = () => {
         sort: '-created',
       });
       inspectionListCache.byInspector[inspectorId] = records;
+      putCachedList(cacheKey, records);
     } catch (error) {
       if (!error?.isAbort) console.error('Failed to fetch inspector inspections', error);
-      records = inspectionListCache.byInspector[inspectorId] || [];
+      records = inspectionListCache.byInspector[inspectorId] || (await getCachedList(cacheKey)) || [];
     }
     const pending = (await listPendingInspections()).filter((p) => p.inspector === inspectorId);
     return mergePending(records, pending);
@@ -100,7 +103,13 @@ export const useInspectionStatus = () => {
     try {
       return await data.getInspection(inspectionId);
     } catch (error) {
-      if (error?.status === 404 || error?.code === 'PGRST116') return null;
+      // Offline-created inspection not yet synced, or no connectivity → serve
+      // the full local copy so it can still be viewed/edited.
+      if (error?.status === 404 || error?.code === 'PGRST116' || isNetworkError(error)) {
+        const local = await getPendingInspection(inspectionId);
+        if (local) return local;
+        if (error?.status === 404 || error?.code === 'PGRST116') return null;
+      }
       console.error('Failed to fetch inspection', error);
       return null;
     }

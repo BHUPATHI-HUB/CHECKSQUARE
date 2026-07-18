@@ -45,6 +45,33 @@ const guessExtension = (file) => {
 const makePhotoId = () =>
   `photo_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
+// Best-effort: on native (Capacitor/Android) also write the resized photo to
+// app storage so it survives even if the WebView's IndexedDB is cleared.
+// Never throws — IndexedDB remains the primary local store.
+async function mirrorToNativeFilesystem(path, blob) {
+  try {
+    const { Capacitor } = await import('@capacitor/core');
+    if (!Capacitor?.isNativePlatform?.()) return;
+    const { Filesystem, Directory } = await import('@capacitor/filesystem');
+    const base64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const r = String(reader.result || '');
+        const comma = r.indexOf(',');
+        resolve(comma >= 0 ? r.slice(comma + 1) : r);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+    await Filesystem.writeFile({
+      path: `checksquare-photos/${path}`,
+      data: base64,
+      directory: Directory.Data,
+      recursive: true,
+    });
+  } catch { /* non-fatal */ }
+}
+
 // Decode a File/Blob into something drawable on a canvas. Prefers the fast
 // createImageBitmap path and falls back to an <img> + object URL.
 async function decodeImage(file) {
@@ -138,6 +165,8 @@ export async function uploadInspectionPhoto(file, { inspectionId = 'draft', room
   // Local-first: keep the resized Blob on-device so the photo renders
   // instantly, survives a reload, and is NEVER lost with no signal.
   await putPhotoBlob({ path, blob, contentType, inspectionId: safeInsp });
+  // Extra durability on Android — mirror to native storage (best-effort).
+  mirrorToNativeFilesystem(path, blob);
 
   // Upload directly to Supabase Storage (authorised by the user's session via
   // RLS — no PocketBase hook needed). If offline or the upload fails, queue it

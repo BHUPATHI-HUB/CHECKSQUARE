@@ -13,8 +13,8 @@
 // resolve to no-ops / nulls so the online flow is never blocked.
 
 const DB_NAME = 'checksquare-offline';
-const DB_VERSION = 1;
-const STORES = { photos: 'photos', outbox: 'outbox', inspections: 'inspections' };
+const DB_VERSION = 2;
+const STORES = { photos: 'photos', outbox: 'outbox', inspections: 'inspections', lists: 'lists' };
 
 let dbPromise = null;
 
@@ -37,6 +37,9 @@ function openDB() {
       }
       if (!db.objectStoreNames.contains(STORES.inspections)) {
         db.createObjectStore(STORES.inspections, { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains(STORES.lists)) {
+        db.createObjectStore(STORES.lists, { keyPath: 'key' });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -189,4 +192,19 @@ export async function listPendingInspections() {
 export async function deletePendingInspection(id) {
   try { await tx(STORES.inspections, 'readwrite', (s) => s.delete(id)); }
   catch { /* non-fatal */ }
+}
+
+// ─── cached lists (offline dashboard browsing) ───────────────────────────
+// Snapshot the last successfully-fetched list so dashboards still render with
+// no connectivity. Keyed by a caller-defined string (e.g. 'inspections:all').
+export async function putCachedList(key, rows) {
+  try { await tx(STORES.lists, 'readwrite', (s) => s.put({ key, rows: rows || [], at: Date.now() })); }
+  catch { /* non-fatal */ }
+}
+
+export async function getCachedList(key) {
+  try {
+    const rec = await tx(STORES.lists, 'readonly', (s) => reqToPromise(s.get(key)));
+    return rec?.rows || null;
+  } catch { return null; }
 }

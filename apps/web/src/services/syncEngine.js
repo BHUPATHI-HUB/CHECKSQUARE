@@ -104,6 +104,13 @@ export function startSyncEngine() {
   // Ask for durable storage so queued photos aren't evicted under pressure.
   requestPersistentStorage();
   window.addEventListener('online', () => requestSync());
+  // Flush whenever the app returns to the foreground (covers the "reopened
+  // after being backgrounded / closed" case without a service-worker sync).
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') requestSync();
+    });
+  }
   // Periodic safety-net flush.
   setInterval(() => { if (navigator.onLine !== false) drainOutbox(); }, 30000);
   // Kick once on start.
