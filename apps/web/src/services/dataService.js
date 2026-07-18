@@ -43,6 +43,15 @@ const pbAdapter = {
     const pb = await getPB();
     return pb.collection('inspections').create(payload, { $autoCancel: false });
   },
+  async upsertInspection(payload) {
+    const pb = await getPB();
+    if (payload.id) {
+      try {
+        return await pb.collection('inspections').update(payload.id, payload, { $autoCancel: false });
+      } catch (_) { /* not found → create below */ }
+    }
+    return pb.collection('inspections').create(payload, { $autoCancel: false });
+  },
   async updateInspection(id, payload) {
     const pb = await getPB();
     return pb.collection('inspections').update(id, payload, { $autoCancel: false });
@@ -236,6 +245,13 @@ const supaAdapter = {
   },
   async createInspection(payload) {
     const { data, error } = await supabase.from('inspections').insert(inspectionToRow(payload)).select().single();
+    if (error) throw error;
+    return rowToInspection(data);
+  },
+  async upsertInspection(payload) {
+    const row = inspectionToRow(payload);
+    if (payload.id) row.id = payload.id;
+    const { data, error } = await supabase.from('inspections').upsert(row, { onConflict: 'id' }).select().single();
     if (error) throw error;
     return rowToInspection(data);
   },

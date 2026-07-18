@@ -1,6 +1,8 @@
 import { useCallback } from 'react';
 import { toast } from 'sonner';
 import data from '@/services/dataService.js';
+import { putPendingInspection, enqueue, listPendingInspections } from '@/lib/localStore.js';
+import { requestSync, isNetworkError } from '@/services/syncEngine.js';
 
 // Stale-while-revalidate cache so navigating away from a dashboard and back
 // shows the last known list INSTANTLY instead of a blank screen plus a full
@@ -13,6 +15,15 @@ const clearInspectionListCache = () => {
   inspectionListCache.all = null;
   inspectionListCache.byInspector = {};
   inspectionListCache.deleted = null;
+};
+
+// Prepend locally-saved (not-yet-synced) inspections that the server list
+// doesn't have yet, so offline work stays visible on the dashboards.
+const mergePending = (serverRows, pending) => {
+  if (!pending || pending.length === 0) return serverRows;
+  const ids = new Set((serverRows || []).map((r) => r.id));
+  const extra = pending.filter((p) => !ids.has(p.id));
+  return [...extra, ...(serverRows || [])];
 };
 
 // Fields needed to render the dashboard list rows + drive sort/search/filter
@@ -46,31 +57,32 @@ export const useInspectionStatus = () => {
   // enforced by the collection rules, so admins get everything and inspectors
   // only get their own.
   const getAllInspections = useCallback(async (options = {}) => {
+    let records;
     try {
-      const records = await data.listInspections({ filter: 'deletedAt = null', sort: '-created', ...options });
+      records = await data.listInspections({ filter: 'deletedAt = null', sort: '-created', ...options });
       inspectionListCache.all = records;
-      return records;
     } catch (error) {
-      if (error?.isAbort) return inspectionListCache.all || [];
-      console.error('Failed to fetch inspections', error);
-      return inspectionListCache.all || [];
+      if (!error?.isAbort) console.error('Failed to fetch inspections', error);
+      records = inspectionListCache.all || [];
     }
+    return mergePending(records, await listPendingInspections());
   }, []);
 
   const getInspectionsForInspector = useCallback(async (inspectorId) => {
     if (!inspectorId) return [];
+    let records;
     try {
-      const records = await data.listInspections({
+      records = await data.listInspections({
         filter: `inspector = "${inspectorId}" && deletedAt = null`,
         sort: '-created',
       });
       inspectionListCache.byInspector[inspectorId] = records;
-      return records;
     } catch (error) {
-      if (error?.isAbort) return inspectionListCache.byInspector[inspectorId] || [];
-      console.error('Failed to fetch inspector inspections', error);
-      return inspectionListCache.byInspector[inspectorId] || [];
+      if (!error?.isAbort) console.error('Failed to fetch inspector inspections', error);
+      records = inspectionListCache.byInspector[inspectorId] || [];
     }
+    const pending = (await listPendingInspections()).filter((p) => p.inspector === inspectorId);
+    return mergePending(records, pending);
   }, []);
 
   const getDeletedInspections = useCallback(async () => {
@@ -159,65 +171,81 @@ export const useInspectionStatus = () => {
   }, []);
 
   const saveInspection = useCallback(async (inspectionData, existingId = null) => {
-    try {
-      const payload = {
-        metadata: inspectionData.metadata || {},
-        areaCalculations: inspectionData.areaCalculations || [],
-        // Phase 2 free-form metrics (door height, ceiling height, wall height, …).
-        // Schema column added in migration 1779800002; before that, PB silently
-        // dropped this field on every save and the metrics never made it into
-        // the generated PDF/DOCX.
-        propertyMetrics: inspectionData.propertyMetrics || [],
-        waterQuality: inspectionData.waterQuality || {},
-        roomInspections: inspectionData.roomInspections || [],
-        propertyType: inspectionData.propertyType || 'Residential',
-        status: inspectionData.status || 'pending',
-        inspector: inspectionData.inspector,
-        inspectorName: inspectionData.inspectorName,
-        customer: inspectionData.customer || null,
-        // Scoring fields — passed through so PDF/DOCX can honour them.
-        includeScore: inspectionData.includeScore ?? null,
-        scoreOverrides: inspectionData.scoreOverrides || {},
-        // Optional status-related fields supplied by the form (e.g. when
-        // re-submitting a previously rejected inspection we want to clear
-        // the prior rejection metadata).
-        ...(inspectionData.rejectedBy !== undefined && { rejectedBy: inspectionData.rejectedBy }),
-        ...(inspectionData.rejectedAt !== undefined && { rejectedAt: inspectionData.rejectedAt }),
-        ...(inspectionData.approvedBy !== undefined && { approvedBy: inspectionData.approvedBy }),
-        ...(inspectionData.approvedAt !== undefined && { approvedAt: inspectionData.approvedAt }),
+    const payload = {
+      metadata: inspectionData.metadata || {},
+      areaCalculations: inspectionData.areaCalculations || [],
+      // Phase 2 free-form metrics (door height, ceiling height, wall height, …).
+      propertyMetrics: inspectionData.propertyMetrics || [],
+      waterQuality: inspectionData.waterQuality || {},
+      roomInspections: inspectionData.roomInspections || [],
+      propertyType: inspectionData.propertyType || 'Residential',
+      status: inspectionData.status || 'pending',
+      inspector: inspectionData.inspector,
+      inspectorName: inspectionData.inspectorName,
+      customer: inspectionData.customer || null,
+      // Scoring fields — passed through so PDF/DOCX can honour them.
+      includeScore: inspectionData.includeScore ?? null,
+      scoreOverrides: inspectionData.scoreOverrides || {},
+      // Optional status-related fields supplied by the form (e.g. when
+      // re-submitting a previously rejected inspection we want to clear
+      // the prior rejection metadata).
+      ...(inspectionData.rejectedBy !== undefined && { rejectedBy: inspectionData.rejectedBy }),
+      ...(inspectionData.rejectedAt !== undefined && { rejectedAt: inspectionData.rejectedAt }),
+      ...(inspectionData.approvedBy !== undefined && { approvedBy: inspectionData.approvedBy }),
+      ...(inspectionData.approvedAt !== undefined && { approvedAt: inspectionData.approvedAt }),
+    };
+
+    // Client-stable id so an offline draft has a permanent identity that the
+    // sync engine can upsert later without creating duplicates.
+    const clientId = existingId || inspectionData.id
+      || (typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `local_${Date.now()}_${Math.random().toString(36).slice(2)}`);
+
+    // Persist locally + queue for sync. Used when offline OR when a network
+    // write fails, so the inspector never loses a submission with no signal.
+    const queueLocally = async () => {
+      const now = new Date().toISOString();
+      const localRecord = {
+        id: clientId, ...payload, created: now, updated: now, syncStatus: 'pending',
       };
+      await putPendingInspection(localRecord);
+      await enqueue({ type: 'upsertInspection', id: clientId });
+      requestSync();
+      clearInspectionListCache();
+      toast.success("Saved on device — it'll sync automatically when you're back online.");
+      return localRecord;
+    };
+
+    const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+    if (offline) return queueLocally();
+
+    try {
       let record;
       if (existingId) {
         record = await data.updateInspection(existingId, payload);
       } else {
         record = await data.createInspection(payload);
 
-        // Spec §7: every new inspection auto-provisions a group chat
-        // thread that includes the assigned inspector, the customer (if any)
-        // and every admin in the system so all sides can collaborate in
-        // context. We do this best-effort -- a failure here must NOT block
-        // the inspection from being saved.
+        // Every new inspection auto-provisions a group chat thread (inspector +
+        // customer + admins). Best-effort — a failure must NOT block the save.
         try {
           const adminIds = await data.listUsersByRole('admin').then((rows) => rows.map((r) => r.id));
-
           const participants = Array.from(new Set([
-            ...adminIds,
-            record.inspector,
-            record.customer,
+            ...adminIds, record.inspector, record.customer,
           ].filter(Boolean)));
-
           if (participants.length >= 2) {
             await data.createChat({ type: 'group', participants, inspectionId: record.id });
           }
         } catch (chatErr) {
-          // Likely cause: chats.participants maxSelect not yet bumped by the
-          // 1779500003 migration on this PB instance. Log and move on.
           console.warn('Auto-create chat thread skipped:', chatErr?.message || chatErr);
         }
       }
       clearInspectionListCache();
       return record;
     } catch (error) {
+      // Lost connectivity mid-save → don't fail, queue it instead.
+      if (isNetworkError(error)) return queueLocally();
       console.error('Failed to save inspection', error);
       toast.error('Failed to save inspection');
       return null;

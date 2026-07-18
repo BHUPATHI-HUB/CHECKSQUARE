@@ -1,5 +1,5 @@
 
-import React, { Suspense, lazy } from 'react';
+import React, { Suspense, lazy, useEffect } from 'react';
 import { Route, Routes, BrowserRouter as Router, Navigate } from 'react-router-dom';
 import { AuthProvider } from '@/contexts/AuthContext.jsx';
 import { SettingsProvider } from '@/contexts/SettingsContext.jsx';
@@ -9,6 +9,8 @@ import { SupabaseAuthProvider } from '@/contexts/SupabaseAuthContext.jsx';
 import ScrollToTop from '@/components/ScrollToTop.jsx';
 import ProtectedRoute from '@/components/ProtectedRoute.jsx';
 import OfflineBanner from '@/components/OfflineBanner.jsx';
+import SyncStatusBadge from '@/components/SyncStatusBadge.jsx';
+import { startSyncEngine } from '@/services/syncEngine.js';
 import { Toaster } from 'sonner';
 
 // Public pages stay eager-loaded — they're tiny and needed on first paint.
@@ -40,6 +42,11 @@ const RouteFallback = () => (
 );
 
 function App() {
+  // Kick off the offline sync engine once, app-wide. It drains the outbox on
+  // reconnect / foreground / a periodic timer so queued inspections + photos
+  // upload automatically when connectivity returns.
+  useEffect(() => { startSyncEngine(); }, []);
+
   return (
     <SettingsProvider>
       <AuthProvider>
@@ -49,6 +56,7 @@ function App() {
             <Router>
               <ScrollToTop />
               <OfflineBanner />
+              <SyncStatusBadge />
             <Suspense fallback={<RouteFallback />}>
             <Routes>
               {/* Public Routes */}

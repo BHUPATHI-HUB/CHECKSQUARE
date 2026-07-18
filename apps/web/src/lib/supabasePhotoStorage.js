@@ -18,6 +18,10 @@
 // by the `supabase-storage.pb.js` PB hook).
 
 import { supabase, isSupabaseConfigured, SUPABASE_PHOTO_BUCKET } from '@/lib/supabaseClient.js';
+import {
+  putPhotoBlob, getPhotoBlob, markPhotoSynced, deletePhotoBlob, enqueue,
+} from '@/lib/localStore.js';
+import { requestSync } from '@/services/syncEngine.js';
 
 const SIGNED_URL_TTL_SECONDS = 60 * 60; // 1 h
 const PB_BASE_URL = (import.meta.env?.VITE_PB_URL || 'http://127.0.0.1:8090').replace(/\/$/, '');
@@ -113,8 +117,7 @@ async function resizeImageFile(file, maxEdge, quality) {
  */
 export async function uploadInspectionPhoto(file, { inspectionId = 'draft', roomKey = 'misc', maxEdge = 0, quality = 0.85 } = {}) {
   const id = makePhotoId();
-  // Resize/compress up-front so BOTH the Supabase path and the legacy base64
-  // fallback store the smaller image.
+  // Resize/compress up-front so BOTH the upload and the local cache are small.
   file = await resizeImageFile(file, maxEdge, quality);
   const capturedAt = new Date().toISOString();
 
@@ -129,46 +132,33 @@ export async function uploadInspectionPhoto(file, { inspectionId = 'draft', room
   const safeRoom = String(roomKey).replace(/[^a-z0-9_-]+/gi, '-').toLowerCase();
   const safeInsp = String(inspectionId || 'draft').replace(/[^a-z0-9_-]+/gi, '-');
   const path = `${safeInsp}/${safeRoom}/${id}.${ext}`;
+  const contentType = file.type || 'image/jpeg';
+  const blob = file instanceof Blob ? file : new Blob([file], { type: contentType });
 
-  // Ask the PocketBase hook to validate the upload (the inspector must own the
-  // inspection) and mint a signed-upload URL.  The hook returns:
-  //   { token: string, path: string }
-  // which the official SDK consumes via uploadToSignedUrl().
-  let signed;
-  try {
-    const res = await fetch(`${PB_BASE_URL}/api/supabase/signed-upload`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path, inspectionId, contentType: file.type || 'image/jpeg' }),
-    });
-    if (!res.ok) {
-      throw new Error(`signed-upload failed (${res.status})`);
+  // Local-first: keep the resized Blob on-device so the photo renders
+  // instantly, survives a reload, and is NEVER lost with no signal.
+  await putPhotoBlob({ path, blob, contentType, inspectionId: safeInsp });
+
+  // Upload directly to Supabase Storage (authorised by the user's session via
+  // RLS — no PocketBase hook needed). If offline or the upload fails, queue it
+  // for the sync engine; the photo still renders from the local Blob meanwhile.
+  const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+  if (!offline) {
+    try {
+      const { error } = await supabase.storage
+        .from(SUPABASE_PHOTO_BUCKET)
+        .upload(path, blob, { contentType, upsert: true });
+      if (error) throw error;
+      await markPhotoSynced(path);
+      await deletePhotoBlob(path); // synced — signed URLs serve it from now on
+      return { id, storageKey: path, capturedAt };
+    } catch (e) {
+      console.warn('[supabase] direct upload failed, queuing for sync:', e?.message || e);
     }
-    signed = await res.json();
-  } catch (e) {
-    // PB hook missing or refused — fall back to base64 so the form still works.
-    // (Logged but non-fatal — Phase 1 is additive.)
-    console.warn('[supabase] signed-upload mint failed, falling back to base64:', e?.message || e);
-    const url = await fileToDataUrl(file);
-    return { id, url, capturedAt, _legacy: true };
   }
-
-  const { error: upErr } = await supabase
-    .storage
-    .from(SUPABASE_PHOTO_BUCKET)
-    .uploadToSignedUrl(signed.path, signed.token, file, {
-      contentType: file.type || 'image/jpeg',
-      upsert: false,
-    });
-
-  if (upErr) {
-    console.error('[supabase] upload failed:', upErr);
-    // Final fallback so the inspector never loses the photo.
-    const url = await fileToDataUrl(file);
-    return { id, url, capturedAt, _legacy: true };
-  }
-
-  return { id, storageKey: signed.path, capturedAt };
+  await enqueue({ type: 'uploadPhoto', path, contentType });
+  requestSync();
+  return { id, storageKey: path, capturedAt };
 }
 
 /**
@@ -182,6 +172,11 @@ export async function getInspectionPhotoUrl(photo) {
   if (!photo) return '';
   if (photo.url) return photo.url;
   if (!photo.storageKey || !isSupabaseConfigured) return '';
+  // Local-first: if we still hold the Blob (not yet synced), render it directly.
+  try {
+    const local = await getPhotoBlob(photo.storageKey);
+    if (local?.blob) return URL.createObjectURL(local.blob);
+  } catch { /* ignore */ }
   const { data, error } = await supabase
     .storage
     .from(SUPABASE_PHOTO_BUCKET)
@@ -207,6 +202,20 @@ export async function deleteInspectionPhoto(photo) {
 export async function getInspectionPhotoDataUrl(photo) {
   if (!photo) return '';
   if (photo.url) return photo.url;            // already a dataURL or external URL
+  // Local-first for reports too — embed the on-device Blob if not yet synced.
+  try {
+    if (photo.storageKey) {
+      const local = await getPhotoBlob(photo.storageKey);
+      if (local?.blob) {
+        return await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(local.blob);
+        });
+      }
+    }
+  } catch { /* ignore */ }
   const signed = await getInspectionPhotoUrl(photo);
   if (!signed) return '';
   const res = await fetch(signed);
