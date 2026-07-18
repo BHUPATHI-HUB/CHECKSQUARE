@@ -12,7 +12,8 @@ import RoomPhotoManager from '@/components/RoomPhotoManager.jsx';
 import PhotoImg from '@/components/PhotoImg.jsx';
 import { toast } from 'sonner';
 import { generatePDF, generateDOCX } from '@/utils/ReportGenerator.jsx';
-import { Edit, Download, CheckCircle, XCircle, AlertCircle, FileText, Image as ImageIcon, Trash2 } from 'lucide-react';
+import { generateXLSX } from '@/utils/ExcelReportGenerator.js';
+import { Edit, Download, CheckCircle, XCircle, AlertCircle, FileText, FileSpreadsheet, Image as ImageIcon, Trash2 } from 'lucide-react';
 
 const InspectionDetailView = ({ inspection, onUpdate }) => {
   const { user, role } = useAuth();
@@ -99,6 +100,8 @@ const InspectionDetailView = ({ inspection, onUpdate }) => {
     try {
       if (format === 'pdf') {
         await generatePDF(localInspection, settings);
+      } else if (format === 'xlsx') {
+        await generateXLSX(localInspection, settings);
       } else {
         await generateDOCX(localInspection, settings);
       }
@@ -146,6 +149,10 @@ const InspectionDetailView = ({ inspection, onUpdate }) => {
               <Button onClick={() => handleDownload('docx')} variant="outline" disabled={generating}>
                 <FileText className="w-4 h-4 mr-2" />
                 DOCX
+              </Button>
+              <Button onClick={() => handleDownload('xlsx')} variant="outline" disabled={generating}>
+                <FileSpreadsheet className="w-4 h-4 mr-2" />
+                Excel
               </Button>
             </>
           )}

@@ -114,6 +114,17 @@ export const SettingsProvider = ({ children }) => {
       // rendered at the bottom of the Thank-You page. Toggle off to omit.
       { key: 'signoff',          enabled: true },
     ],
+    // Admin-controlled image handling for reports + uploads. Every device
+    // reads these live from app_settings, so changing them here changes the
+    // crop/resize/quality behaviour everywhere immediately.
+    reportImages: {
+      fit: 'contain',        // 'contain' (letterbox, no distortion) | 'cover' (crop to fill)
+      quality: 0.86,         // JPEG quality (0.5–1.0) for report-embedded photos
+      uploadMaxEdge: 1600,   // resize new photos so the longest edge ≤ this many px (0 = keep original)
+      uploadQuality: 0.85,   // JPEG quality applied when a photo is resized on upload
+      boxWidthCm: 8.45,      // printed photo width  (used by the Excel export)
+      boxHeightCm: 6.4,      // printed photo height (used by the Excel export)
+    },
   };
 
   const [settings, setSettings] = useState(defaultSettings);

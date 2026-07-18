@@ -231,6 +231,14 @@ const AdminSettingsPage = () => {
     setLocalSettings(prev => ({ ...prev, [field]: value }));
   };
 
+  // Nested updater for the reportImages group (crop/resize/quality controls).
+  const handleImageChange = (key, value) => {
+    setLocalSettings(prev => ({
+      ...prev,
+      reportImages: { ...(prev.reportImages || {}), [key]: value },
+    }));
+  };
+
   // ── PDF report-section ordering & toggles ─────────────────────────
   // `reportSections` is stored as an ordered array of
   //   { key, enabled, title?, html? }
@@ -363,6 +371,7 @@ const AdminSettingsPage = () => {
                 {[
                   ['branding','Global branding'],
                   ['pdf','PDF export'],
+                  ['images','Report images'],
                   ['disclaimers','Disclaimer pages'],
                   ['comments','Comment library'],
                   ['severity','Severity levels'],
@@ -1339,6 +1348,90 @@ const AdminSettingsPage = () => {
                 </CardContent>
                 <CardFooter className="border-t py-4 justify-end">
                   <Button onClick={handleSave}><Save className="w-4 h-4 mr-2" /> Save Legal Pages</Button>
+                </CardFooter>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="images">
+              <Card className="card-elevated">
+                <CardHeader>
+                  <CardTitle>Report Images</CardTitle>
+                  <CardDescription>
+                    Control how inspection photos are cropped, compressed and sized across every report and the Excel export. Changes apply on every device the moment you save.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-8">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="space-y-2">
+                      <Label>Photo fit</Label>
+                      <Select
+                        value={localSettings.reportImages?.fit || 'contain'}
+                        onValueChange={v => handleImageChange('fit', v)}
+                      >
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="contain">Contain — whole photo, letterboxed (no distortion)</SelectItem>
+                          <SelectItem value="cover">Cover — fill the box, crop the overflow</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">Applies to PDF, DOCX, Excel and on-screen galleries.</p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Report photo quality (JPEG)</Label>
+                      <Input
+                        type="number" min={0.4} max={1} step={0.02}
+                        value={localSettings.reportImages?.quality ?? 0.86}
+                        onChange={e => handleImageChange('quality', Math.min(1, Math.max(0.4, parseFloat(e.target.value) || 0.86)))}
+                      />
+                      <p className="text-xs text-muted-foreground">0.4 (smaller file) → 1.0 (best quality). Default 0.86.</p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Resize new photos — max edge (px)</Label>
+                      <Input
+                        type="number" min={0} step={100}
+                        value={localSettings.reportImages?.uploadMaxEdge ?? 1600}
+                        onChange={e => handleImageChange('uploadMaxEdge', Math.max(0, parseInt(e.target.value, 10) || 0))}
+                      />
+                      <p className="text-xs text-muted-foreground">New uploads are shrunk so the longest edge ≤ this. 0 = keep original (uses more storage). Default 1600.</p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Upload compression (JPEG)</Label>
+                      <Input
+                        type="number" min={0.4} max={1} step={0.02}
+                        value={localSettings.reportImages?.uploadQuality ?? 0.85}
+                        onChange={e => handleImageChange('uploadQuality', Math.min(1, Math.max(0.4, parseFloat(e.target.value) || 0.85)))}
+                      />
+                      <p className="text-xs text-muted-foreground">Quality applied when a new photo is resized. Default 0.85.</p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Excel photo width (cm)</Label>
+                      <Input
+                        type="number" min={1} max={25} step={0.05}
+                        value={localSettings.reportImages?.boxWidthCm ?? 8.45}
+                        onChange={e => handleImageChange('boxWidthCm', Math.max(1, parseFloat(e.target.value) || 8.45))}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Excel photo height (cm)</Label>
+                      <Input
+                        type="number" min={1} max={25} step={0.05}
+                        value={localSettings.reportImages?.boxHeightCm ?? 6.4}
+                        onChange={e => handleImageChange('boxHeightCm', Math.max(1, parseFloat(e.target.value) || 6.4))}
+                      />
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-muted-foreground">
+                    Excel embeds each photo at exactly the width × height above (at 96 DPI, 8.45 × 6.4 cm ≈ 319 × 242 px). Resizing only affects photos taken after you save — existing photos are unchanged.
+                  </p>
+                </CardContent>
+                <CardFooter className="border-t py-4 justify-end">
+                  <Button onClick={handleSave}><Save className="w-4 h-4 mr-2" /> Save Image Settings</Button>
                 </CardFooter>
               </Card>
             </TabsContent>

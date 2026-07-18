@@ -41,6 +41,8 @@ const PhotoSlot = ({ label, photo, onChange, onRemove, compact = false, ariaLabe
   const camRef = useRef(null);
   const fileRef = useRef(null);
   const [camOpen, setCamOpen] = useState(false);
+  const { settings } = useSettings();
+  const ri = settings?.reportImages || {};
 
   // Mobile UA detection — on phones the native file-input `capture` attribute
   // is the best UX. On desktop we open our own webcam modal because browsers
@@ -56,6 +58,8 @@ const PhotoSlot = ({ label, photo, onChange, onRemove, compact = false, ariaLabe
       const record = await uploadInspectionPhoto(file, {
         inspectionId: inspectionId || 'draft',
         roomKey: roomKey || 'misc',
+        maxEdge: ri.uploadMaxEdge ?? 1600,
+        quality: ri.uploadQuality ?? 0.85,
       });
       onChange(record);
       toast.success('Photo added');

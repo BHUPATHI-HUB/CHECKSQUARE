@@ -5,9 +5,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
-import { Loader2, FileText, FileType2, Save, RefreshCw } from 'lucide-react';
+import { Loader2, FileText, FileType2, FileSpreadsheet, Save, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { buildReportHTML, generatePDF, generateDOCX, buildDOCXBlob } from '@/utils/ReportGenerator.jsx';
+import { generateXLSX } from '@/utils/ExcelReportGenerator.js';
 import { useSettings } from '@/contexts/SettingsContext.jsx';
 import { useInspectionStatus } from '@/hooks/useInspectionStatus.js';
 import { useAuth } from '@/contexts/AuthContext.jsx';
@@ -162,6 +163,7 @@ const ReportPreviewModal = ({ open, onOpenChange, inspection, onSaved }) => {
     toast.info(`Composing ${format.toUpperCase()}…`);
     try {
       if (format === 'pdf') await generatePDF(draft, settings);
+      else if (format === 'xlsx') await generateXLSX(draft, settings);
       else await generateDOCX(draft, settings);
       toast.success('Report downloaded.');
     } catch (err) {
@@ -345,7 +347,7 @@ const ReportPreviewModal = ({ open, onOpenChange, inspection, onSaved }) => {
                 {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
                 {dirty ? 'Save changes' : 'No changes to save'}
               </Button>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <Button
                   variant="outline"
                   onClick={() => handleDownload('pdf')}
@@ -361,6 +363,14 @@ const ReportPreviewModal = ({ open, onOpenChange, inspection, onSaved }) => {
                 >
                   {generating === 'docx' ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <FileType2 className="w-4 h-4 mr-2" />}
                   DOCX
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => handleDownload('xlsx')}
+                  disabled={generating !== null}
+                >
+                  {generating === 'xlsx' ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <FileSpreadsheet className="w-4 h-4 mr-2" />}
+                  Excel
                 </Button>
               </div>
             </div>

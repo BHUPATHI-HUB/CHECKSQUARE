@@ -3,11 +3,12 @@ import { Button } from '@/components/ui/button';
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog';
-import { Download, FileText, FileType2, Loader2 } from 'lucide-react';
+import { Download, FileText, FileType2, FileSpreadsheet, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   buildReportHTML, buildDOCXBlob, generatePDF, generateDOCX,
 } from '@/utils/ReportGenerator.jsx';
+import { generateXLSX } from '@/utils/ExcelReportGenerator.js';
 import { useSettings } from '@/contexts/SettingsContext.jsx';
 import dataService from '@/services/dataService.js';
 
@@ -139,6 +140,7 @@ const AdminDownloadReport = ({ inspection, variant = 'icon' }) => {
     toast.info(`Composing ${format.toUpperCase()}…`);
     try {
       if (format === 'pdf') await generatePDF(data, settings);
+      else if (format === 'xlsx') await generateXLSX(data, settings);
       else await generateDOCX(data, settings);
       toast.success('Report downloaded.');
       setOpen(false);
@@ -218,6 +220,19 @@ const AdminDownloadReport = ({ inspection, variant = 'icon' }) => {
                   ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
                   : <FileType2 className="w-3.5 h-3.5 mr-1.5" />}
                 DOCX
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleDownload('xlsx')}
+                disabled={generating !== null || hydrating}
+                className="rounded-full"
+                title="Excel workbook with photos sized per admin settings"
+              >
+                {generating === 'xlsx'
+                  ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                  : <FileSpreadsheet className="w-3.5 h-3.5 mr-1.5" />}
+                Excel
               </Button>
             </div>
           </div>

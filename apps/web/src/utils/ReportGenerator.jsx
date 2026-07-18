@@ -170,6 +170,9 @@ export const buildReportHTML = (inspection, settings) => {
   const MUTED    = '#6b7280';
   const RULE     = '#e5e7eb';
   const PAPER    = '#ffffff';
+  // Admin-controlled photo fit for report images (contain = letterbox, no
+  // distortion; cover = crop to fill). Drives the CSS background-size below.
+  const imgFit   = settings?.reportImages?.fit === 'cover' ? 'cover' : 'contain';
 
   const cName  = settings?.companyName || settings?.appName || 'CheckSquare';
   const logo   = settings?.customLogo || settings?.logo || '/logo.svg';
@@ -361,7 +364,7 @@ export const buildReportHTML = (inspection, settings) => {
         background-color: #f3f4f6;
         background-position: center;
         background-repeat: no-repeat;
-        background-size: contain;
+        background-size: ${imgFit};
         border-bottom: 1px solid ${PRIMARY};
       }
       .gallery .cell .cap {
@@ -408,7 +411,7 @@ export const buildReportHTML = (inspection, settings) => {
         background-color: #f3f4f6;
         background-position: center;
         background-repeat: no-repeat;
-        background-size: contain;
+        background-size: ${imgFit};
         border: 1px solid ${RULE};
       }
       .defect-table .dr-desc {
@@ -2198,7 +2201,8 @@ const loadDocxImage = async (url) => {
 //
 // Renamed from the old center-cropping helper.  All call-sites that used
 // the cropping behaviour now get fit behaviour automatically.
-const cropImage = (url, targetW, targetH) => new Promise((resolve) => {
+const cropImage = (url, targetW, targetH, opts = {}) => new Promise((resolve) => {
+  const { fit = 'contain', quality = 0.86 } = opts;
   if (!url || typeof url !== 'string') { resolve(null); return; }
   const img = new window.Image();
   img.crossOrigin = 'anonymous';
@@ -2206,26 +2210,25 @@ const cropImage = (url, targetW, targetH) => new Promise((resolve) => {
     try {
       const sw = img.naturalWidth, sh = img.naturalHeight;
       if (!sw || !sh) { resolve(null); return; }
-      // ── object-fit: contain — compute the largest WxH that fits inside
-      //    the target box while preserving the source aspect ratio.
+      // Compute the draw size for the chosen fit mode while preserving aspect.
+      //   • contain → largest WxH that fits INSIDE the box (letterbox).
+      //   • cover   → smallest WxH that COVERS the box (crop overflow).
       const srcAspect = sw / sh;
       const targetAspect = targetW / targetH;
       let drawW, drawH;
-      if (srcAspect > targetAspect) {
-        // Wider than the box → constrain by width, letterbox top+bottom.
-        drawW = targetW;
-        drawH = targetW / srcAspect;
+      if (fit === 'cover') {
+        if (srcAspect > targetAspect) { drawH = targetH; drawW = targetH * srcAspect; }
+        else                          { drawW = targetW; drawH = targetW / srcAspect; }
       } else {
-        // Taller than (or equal to) the box → constrain by height, pillarbox left+right.
-        drawH = targetH;
-        drawW = targetH * srcAspect;
+        if (srcAspect > targetAspect) { drawW = targetW; drawH = targetW / srcAspect; }
+        else                          { drawH = targetH; drawW = targetH * srcAspect; }
       }
       const scale = 2; // Retina / print-sharpness
       const canvas = document.createElement('canvas');
       canvas.width = Math.round(targetW * scale);
       canvas.height = Math.round(targetH * scale);
       const ctx = canvas.getContext('2d');
-      // White letterbox background so reports stay print-friendly.
+      // White background so `contain` letterboxing stays print-friendly.
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.imageSmoothingEnabled = true;
@@ -2233,7 +2236,8 @@ const cropImage = (url, targetW, targetH) => new Promise((resolve) => {
       const dx = (targetW - drawW) / 2 * scale;
       const dy = (targetH - drawH) / 2 * scale;
       ctx.drawImage(img, 0, 0, sw, sh, dx, dy, drawW * scale, drawH * scale);
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.86);
+      const q = Math.min(1, Math.max(0.4, Number(quality) || 0.86));
+      const dataUrl = canvas.toDataURL('image/jpeg', q);
       const m = /^data:[^;]+;base64,(.+)$/.exec(dataUrl);
       if (!m) { resolve({ dataUrl, data: null, type: 'jpg' }); return; }
       const bin = atob(m[1]);
@@ -2474,7 +2478,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
     // column's natural text height so the row doesn't overflow the page.
     const PHOTO_W = 310; // a bit under 320 so it never spills into the gutter
     const PHOTO_H = 720; // ~ matches the height of the right-column stack
-    const heroImg = heroSrc ? await cropImage(heroSrc, PHOTO_W, PHOTO_H) : null;
+    const heroImg = heroSrc ? await cropImage(heroSrc, PHOTO_W, PHOTO_H, { fit: settings?.reportImages?.fit || 'contain', quality: settings?.reportImages?.quality ?? 0.86 }) : null;
 
     const leftCellChildren = heroImg
       ? [new Paragraph({
@@ -3570,8 +3574,9 @@ export const generateDOCX = async (inspection, settings, opts) => {
     if (waterImages.length > 0) {
       const slice = waterImages.slice(0, 3);
       const cellTargetW = slice.length === 1 ? 460 : slice.length === 2 ? 224 : 148;
+      const imgOpts = { fit: settings?.reportImages?.fit || 'contain', quality: settings?.reportImages?.quality ?? 0.86 };
       // eslint-disable-next-line no-await-in-loop
-      const imgs = await Promise.all(slice.map((p) => cropImage(p.url, cellTargetW, 130)));
+      const imgs = await Promise.all(slice.map((p) => cropImage(p.url, cellTargetW, 130, imgOpts)));
       const cells = slice.map((p, k) => {
         const children = [];
         if (imgs[k]) {

@@ -41,6 +41,64 @@ const guessExtension = (file) => {
 const makePhotoId = () =>
   `photo_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
+// Decode a File/Blob into something drawable on a canvas. Prefers the fast
+// createImageBitmap path and falls back to an <img> + object URL.
+async function decodeImage(file) {
+  if (typeof createImageBitmap === 'function') {
+    try { return { bitmap: await createImageBitmap(file) }; } catch { /* fall through */ }
+  }
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((res, rej) => {
+      const i = new Image();
+      i.onload = () => res(i);
+      i.onerror = rej;
+      i.src = url;
+    });
+    return { img, url };
+  } catch {
+    URL.revokeObjectURL(url);
+    return {};
+  }
+}
+
+// Downscale a raster photo so its longest edge is <= maxEdge, re-encoding as
+// JPEG at `quality`. Returns a NEW File, or the original file when resizing is
+// disabled / unnecessary / unsupported (e.g. HEIC/GIF/SVG). This is what makes
+// new uploads 5-10x smaller without visible loss at report/print sizes.
+async function resizeImageFile(file, maxEdge, quality) {
+  if (!maxEdge || maxEdge <= 0) return file;
+  if (!/^image\/(jpe?g|png|webp)$/i.test(file.type || '')) return file;
+  let decoded = {};
+  try {
+    decoded = await decodeImage(file);
+    const src = decoded.bitmap || decoded.img;
+    if (!src) return file;
+    const width  = decoded.bitmap ? decoded.bitmap.width  : decoded.img.naturalWidth;
+    const height = decoded.bitmap ? decoded.bitmap.height : decoded.img.naturalHeight;
+    if (!width || !height || Math.max(width, height) <= maxEdge) return file;
+    const scale = maxEdge / Math.max(width, height);
+    const w = Math.round(width * scale);
+    const h = Math.round(height * scale);
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(src, 0, 0, w, h);
+    const blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', quality ?? 0.85));
+    if (!blob) return file;
+    const name = (file.name || 'photo').replace(/\.[^.]+$/, '') + '.jpg';
+    return new File([blob], name, { type: 'image/jpeg' });
+  } catch {
+    return file;
+  } finally {
+    if (decoded.url) URL.revokeObjectURL(decoded.url);
+    if (decoded.bitmap?.close) decoded.bitmap.close();
+  }
+}
+
 /**
  * Upload an inspection photo.
  *
@@ -48,11 +106,16 @@ const makePhotoId = () =>
  * @param {Object}    ctx
  * @param {string}    ctx.inspectionId — id of the parent inspection (empty for drafts is OK)
  * @param {string}    ctx.roomKey      — slug of the room (e.g. "kitchen", "bathroom_01")
+ * @param {number}    [ctx.maxEdge]    — resize so the longest edge <= this many px (0 = keep original)
+ * @param {number}    [ctx.quality]    — JPEG quality (0-1) applied when resizing
  * @returns {Promise<{id, storageKey?, url?, capturedAt}>}
  *           — storageKey when Supabase succeeded; url when falling back to base64.
  */
-export async function uploadInspectionPhoto(file, { inspectionId = 'draft', roomKey = 'misc' } = {}) {
+export async function uploadInspectionPhoto(file, { inspectionId = 'draft', roomKey = 'misc', maxEdge = 0, quality = 0.85 } = {}) {
   const id = makePhotoId();
+  // Resize/compress up-front so BOTH the Supabase path and the legacy base64
+  // fallback store the smaller image.
+  file = await resizeImageFile(file, maxEdge, quality);
   const capturedAt = new Date().toISOString();
 
   // Fallback path keeps the old behaviour alive when Supabase isn't set up yet.
