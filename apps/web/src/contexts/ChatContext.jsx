@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAuth } from './AuthContext.jsx';
-import pb from '@/lib/pocketbaseClient.js';
+import data from '@/services/dataService.js';
 
 const ChatContext = createContext(null);
 
@@ -36,46 +36,25 @@ export const ChatProvider = ({ children }) => {
   const getChats = useCallback(async () => {
     if (!user) return;
     try {
-      const records = await pb.collection('chats').getFullList({
-        filter: `participants ~ "${user.id}"`,
-        expand: 'participants',
-        sort: '-updated',
-        $autoCancel: false,
-      });
-      // Normalize `participants` to always be an array. Rows created before
-      // migration 1779500003 (when the field was maxSelect=1) may come back
-      // as a bare string instead of an array of ids, which would break
-      // every `chat.participants.includes(...)` call downstream.
+      const records = await data.listChats(user.id);
+      // Normalize participants to array
       const normalized = records.map((c) => ({
         ...c,
-        participants: Array.isArray(c.participants)
-          ? c.participants
-          : (c.participants ? [c.participants] : []),
+        participants: Array.isArray(c.participants) ? c.participants : (c.participants ? [c.participants] : []),
       }));
       setChats(normalized);
 
-      // Backfill inspection metadata for any new inspectionIds we haven't seen.
-      // Use setState callback to read latest inspectionsMap without making it a
-      // hook dep (would cause getChats identity to change → cascading re-renders
-      // and chat-list "blink").
       setInspectionsMap((current) => {
-        const missing = [...new Set(
-          records.map((c) => c.inspectionId).filter((id) => id && !current[id]),
-        )];
+        const missing = [...new Set(normalized.map((c) => c.inspectionId || c.inspection_id).filter((id) => id && !current[id]))];
         if (missing.length === 0) return current;
-        Promise.allSettled(
-          missing.map((id) =>
-            pb.collection('inspections').getOne(id, { fields: 'id,metadata' }),
-          ),
-        ).then((fetched) => {
-          setInspectionsMap((prev) => {
-            const next = { ...prev };
-            fetched.forEach((r, i) => {
-              if (r.status === 'fulfilled') next[missing[i]] = r.value;
+        Promise.allSettled(missing.map((id) => data.getInspection(id)))
+          .then((fetched) => {
+            setInspectionsMap((prev) => {
+              const next = { ...prev };
+              fetched.forEach((r, i) => { if (r.status === 'fulfilled') next[missing[i]] = r.value; });
+              return next;
             });
-            return next;
           });
-        });
         return current;
       });
     } catch (error) {
@@ -89,11 +68,7 @@ export const ChatProvider = ({ children }) => {
   const getMessages = useCallback(async (chatId) => {
     if (!user || !chatId) return [];
     try {
-      const records = await pb.collection('messages').getFullList({
-        filter: `chatId = "${chatId}"`,
-        sort: 'created',
-        $autoCancel: false,
-      });
+      const records = await data.listMessages(chatId);
       setMessages((prev) => ({ ...prev, [chatId]: records }));
       return records;
     } catch (error) {
@@ -135,9 +110,13 @@ export const ChatProvider = ({ children }) => {
       form.append('readBy', JSON.stringify([user.id]));
       (attachments || []).forEach((f) => form.append('attachments', f));
 
-      await pb.collection('messages').create(form, { $autoCancel: false });
-      // Bump the chat's updated timestamp so it floats to the top.
-      await pb.collection('chats').update(chatId, { updated: new Date().toISOString() }, { $autoCancel: false });
+      await data.sendMessage({
+        chatId, senderId: user.id,
+        senderName: user.name || user.email,
+        senderRole: ['Admin', 'Inspector', 'Customer'].includes(role) ? role : 'Customer',
+        content: content?.trim() || '📎 Attachment',
+        readBy: [user.id],
+      });
     } catch (error) {
       console.error('Error sending message:', error);
       throw error;
@@ -169,11 +148,7 @@ export const ChatProvider = ({ children }) => {
     try {
       await Promise.allSettled(
         unread.map((m) =>
-          pb.collection('messages').update(
-            m.id,
-            { readBy: [...(m.readBy || []), user.id] },
-            { $autoCancel: false },
-          ),
+          data.updateMessage(m.id, { readBy: [...(m.readBy || []), user.id] }),
         ),
       );
     } catch (error) {
@@ -200,10 +175,7 @@ export const ChatProvider = ({ children }) => {
         );
         if (existing) return existing;
       }
-      const newChat = await pb.collection('chats').create(
-        { type, participants, inspectionId },
-        { $autoCancel: false }
-      );
+      const newChat = await data.createChat({ type, participants, inspectionId });
       await getChats();
       return newChat;
     } catch (error) {
@@ -231,7 +203,7 @@ export const ChatProvider = ({ children }) => {
   const deleteMessage = useCallback(async (messageId, chatId) => {
     if (!messageId) return false;
     try {
-      await pb.collection('messages').delete(messageId, { $autoCancel: false });
+        await data.deleteMessage(messageId);
       setMessages((prev) => ({
         ...prev,
         [chatId]: (prev[chatId] || []).filter((m) => m.id !== messageId),
@@ -250,7 +222,7 @@ export const ChatProvider = ({ children }) => {
       // PocketBase atomically removes every message when the chat row is
       // deleted. No need to delete each message client-side, which would
       // also fail for messages the actor doesn't own.
-      await pb.collection('chats').delete(chatId, { $autoCancel: false });
+      await data.deleteChat(chatId);
 
       // Tear down subscription for this chat
       subscriptions.current[chatId]?.();
@@ -290,17 +262,7 @@ export const ChatProvider = ({ children }) => {
       });
       if (callback) callback(e);
     };
-    // PocketBase realtime: `.subscribe()` returns an UNSUBSCRIBE function
-    // for *this specific handler*.  The old code called `.unsubscribe('*')`
-    // on teardown which destroyed every other open chat's subscription
-    // (bug C5 from the gap analysis) — switching to the returned function
-    // means closing chat A no longer silences chat B.
-    let perHandlerUnsub = () => {};
-    pb.collection('messages')
-      .subscribe('*', handle)
-      .then((u) => { perHandlerUnsub = u; })
-      .catch((err) => console.error('[chat] subscribe failed:', err));
-    const unsub = () => { try { perHandlerUnsub(); } catch (_) {} };
+    const unsub = data.subscribe('messages', handle);
     subscriptions.current[chatId] = unsub;
     return () => {
       subscriptions.current[chatId]?.();
@@ -345,10 +307,10 @@ export const ChatProvider = ({ children }) => {
           }
         }
       };
-      pb.collection('chats').subscribe('*', chatHandler);
+      const chatsUnsub = data.subscribe('chats', chatHandler);
 
       return () => {
-        pb.collection('chats').unsubscribe('*');
+        chatsUnsub?.();
         Object.values(subscriptions.current).forEach((fn) => fn?.());
         subscriptions.current = {};
       };

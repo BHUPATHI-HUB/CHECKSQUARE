@@ -11,7 +11,6 @@
 // single env-var flip switches the whole app over after the data
 // migration has been run.
 
-import pb from '@/lib/pocketbaseClient.js';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient.js';
 
 const USE_SUPABASE = isSupabaseConfigured
@@ -19,62 +18,89 @@ const USE_SUPABASE = isSupabaseConfigured
 
 export const dataBackend = USE_SUPABASE ? 'supabase' : 'pocketbase';
 
+let pbClientPromise = null;
+const getPB = async () => {
+  if (!pbClientPromise) {
+    pbClientPromise = import('@/lib/pocketbaseClient.js').then((m) => m.default);
+  }
+  return pbClientPromise;
+};
+
 // ─── Adapter: PocketBase ─────────────────────────────────────────────────
 const pbAdapter = {
   // ─── inspections ─────────────────────────────────────────────────────
-  listInspections({ filter = '', sort = '-created', expand } = {}) {
+  async listInspections({ filter = '', sort = '-created', expand } = {}) {
+    const pb = await getPB();
     return pb.collection('inspections').getFullList({
       filter, sort, expand, $autoCancel: false,
     });
   },
-  getInspection(id) {
+  async getInspection(id) {
+    const pb = await getPB();
     return pb.collection('inspections').getOne(id, { $autoCancel: false });
   },
-  createInspection(payload) {
+  async createInspection(payload) {
+    const pb = await getPB();
     return pb.collection('inspections').create(payload, { $autoCancel: false });
   },
-  updateInspection(id, payload) {
+  async updateInspection(id, payload) {
+    const pb = await getPB();
     return pb.collection('inspections').update(id, payload, { $autoCancel: false });
+  },
+  async deleteInspection(id) {
+    const pb = await getPB();
+    return pb.collection('inspections').delete(id, { $autoCancel: false });
   },
 
   // ─── appointments ────────────────────────────────────────────────────
-  listAppointments({ filter = '', sort = '-scheduledAt' } = {}) {
+  async listAppointments({ filter = '', sort = '-scheduledAt' } = {}) {
+    const pb = await getPB();
     return pb.collection('appointments').getFullList({ filter, sort, $autoCancel: false });
   },
-  createAppointment(payload) {
+  async createAppointment(payload) {
+    const pb = await getPB();
     return pb.collection('appointments').create(payload, { $autoCancel: false });
   },
-  updateAppointment(id, payload) {
+  async updateAppointment(id, payload) {
+    const pb = await getPB();
     return pb.collection('appointments').update(id, payload, { $autoCancel: false });
   },
 
   // ─── users ───────────────────────────────────────────────────────────
-  listUsers({ filter = '', sort = 'name', fields } = {}) {
+  async listUsers({ filter = '', sort = 'name', fields } = {}) {
+    const pb = await getPB();
     return pb.collection('users').getFullList({ filter, sort, fields, $autoCancel: false });
   },
-  listUsersByRole(role) {
+  async listUsersByRole(role) {
+    const pb = await getPB();
     return pb.collection('users').getFullList({
       filter: `role = "${role}"`, sort: 'name', $autoCancel: false,
     });
   },
-  getUser(id) {
+  async getUser(id) {
+    const pb = await getPB();
     return pb.collection('users').getOne(id, { $autoCancel: false });
   },
-  createUser(payload) {
+  async createUser(payload) {
+    const pb = await getPB();
     return pb.collection('users').create(payload, { $autoCancel: false });
   },
-  updateUser(id, payload) {
+  async updateUser(id, payload) {
+    const pb = await getPB();
     return pb.collection('users').update(id, payload, { $autoCancel: false });
   },
-  deleteUser(id) {
+  async deleteUser(id) {
+    const pb = await getPB();
     return pb.collection('users').delete(id);
   },
-  findUserByEmail(email) {
+  async findUserByEmail(email) {
+    const pb = await getPB();
     return pb.collection('users').getFirstListItem(`email = "${email}"`, { $autoCancel: false });
   },
 
   // ─── chats / messages ────────────────────────────────────────────────
-  listChats(userId) {
+  async listChats(userId) {
+    const pb = await getPB();
     return pb.collection('chats').getFullList({
       filter: `participants ~ "${userId}"`,
       expand: 'participants',
@@ -82,40 +108,96 @@ const pbAdapter = {
       $autoCancel: false,
     });
   },
-  findChat(filter) {
+  async findChat(filter) {
+    const pb = await getPB();
     return pb.collection('chats').getFirstListItem(filter, { $autoCancel: false });
   },
-  createChat(payload) {
+  async createChat(payload) {
+    const pb = await getPB();
     return pb.collection('chats').create(payload, { $autoCancel: false });
   },
-  listMessages(chatId) {
+  async deleteChat(id) {
+    const pb = await getPB();
+    return pb.collection('chats').delete(id, { $autoCancel: false });
+  },
+  async listMessages(chatId) {
+    const pb = await getPB();
     return pb.collection('messages').getFullList({
       filter: `chatId = "${chatId}"`, sort: 'created', $autoCancel: false,
     });
   },
-  sendMessage(payload) {
+  async sendMessage(payload) {
+    const pb = await getPB();
     return pb.collection('messages').create(payload, { $autoCancel: false });
+  },
+  async updateMessage(id, payload) {
+    const pb = await getPB();
+    return pb.collection('messages').update(id, payload, { $autoCancel: false });
+  },
+  async deleteMessage(id) {
+    const pb = await getPB();
+    return pb.collection('messages').delete(id, { $autoCancel: false });
   },
 
   // ─── report_downloads ────────────────────────────────────────────────
-  listReportDownloads(userId) {
+  async listReportDownloads(userId) {
+    const pb = await getPB();
     return pb.collection('report_downloads').getFullList({
       filter: `user = "${userId}"`, sort: '-created', $autoCancel: false,
     });
   },
   getReportDownloadFileUrl: async (rec) => {
+    const pb = await getPB();
     const token = await pb.files.getToken();
     return pb.files.getUrl(rec, rec.file, { token });
   },
-  deleteReportDownload(id) {
+  async deleteReportDownload(id) {
+    const pb = await getPB();
     return pb.collection('report_downloads').delete(id);
+  },
+
+  // ─── app_settings ────────────────────────────────────────────────────
+  async getAppSettings() {
+    try {
+      const pb = await getPB();
+      const row = await pb.collection('app_settings').getOne('single', { $autoCancel: false });
+      return row?.payload || {};
+    } catch (e) {
+      if (String(e?.status) === '404') return {};
+      throw e;
+    }
+  },
+  async upsertAppSettings(payload) {
+    try {
+      const pb = await getPB();
+      await pb.collection('app_settings').update('single', { payload }, { $autoCancel: false });
+    } catch (e) {
+      if (String(e?.status) === '404') {
+        const pb = await getPB();
+        await pb.collection('app_settings').create({ id: 'single', payload }, { $autoCancel: false });
+      } else throw e;
+    }
   },
 
   // ─── realtime ────────────────────────────────────────────────────────
   // Returns an unsubscribe function.
   subscribe(collection, callback, topic = '*') {
-    pb.collection(collection).subscribe(topic, callback);
-    return () => pb.collection(collection).unsubscribe(topic);
+    let active = true;
+    let unsub = () => {};
+    getPB()
+      .then((pb) => pb.collection(collection).subscribe(topic, callback))
+      .then((u) => {
+        if (!active) {
+          try { u(); } catch (_) {}
+          return;
+        }
+        unsub = u;
+      })
+      .catch((err) => console.error(`[dataService] subscribe failed for ${collection}:`, err));
+    return () => {
+      active = false;
+      try { unsub(); } catch (_) {}
+    };
   },
 };
 
@@ -147,6 +229,10 @@ const supaAdapter = {
     const { data, error } = await supabase.from('inspections').update(inspectionToRow(payload)).eq('id', id).select().single();
     if (error) throw error;
     return rowToInspection(data);
+  },
+  async deleteInspection(id) {
+    const { error } = await supabase.from('inspections').delete().eq('id', id);
+    if (error) throw error;
   },
 
   // ─── appointments ────────────────────────────────────────────────────
@@ -221,7 +307,7 @@ const supaAdapter = {
       .contains('participants', [userId])
       .order('updated_at', { ascending: false });
     if (error) throw error;
-    return data || [];
+    return (data || []).map(rowToChat);
   },
   async findChat() {
     throw new Error('findChat with arbitrary filter is not yet implemented for Supabase.');
@@ -229,18 +315,31 @@ const supaAdapter = {
   async createChat(payload) {
     const { data, error } = await supabase.from('chats').insert(snake(payload)).select().single();
     if (error) throw error;
-    return data;
+    return rowToChat(data);
+  },
+  async deleteChat(id) {
+    const { error } = await supabase.from('chats').delete().eq('id', id);
+    if (error) throw error;
   },
   async listMessages(chatId) {
     const { data, error } = await supabase.from('messages').select('*')
       .eq('chat_id', chatId).order('created_at', { ascending: true });
     if (error) throw error;
-    return data || [];
+    return (data || []).map(rowToMessage);
   },
   async sendMessage(payload) {
-    const { data, error } = await supabase.from('messages').insert(snake(payload)).select().single();
+    const { data, error } = await supabase.from('messages').insert(messageToRow(payload)).select().single();
     if (error) throw error;
-    return data;
+    return rowToMessage(data);
+  },
+  async updateMessage(id, payload) {
+    const { data, error } = await supabase.from('messages').update(messageToRow(payload)).eq('id', id).select().single();
+    if (error) throw error;
+    return rowToMessage(data);
+  },
+  async deleteMessage(id) {
+    const { error } = await supabase.from('messages').delete().eq('id', id);
+    if (error) throw error;
   },
 
   // ─── report_downloads ────────────────────────────────────────────────
@@ -261,6 +360,19 @@ const supaAdapter = {
     if (error) throw error;
   },
 
+  // ─── app_settings ────────────────────────────────────────────────────
+  async getAppSettings() {
+    const { data, error } = await supabase.from('app_settings').select('payload').eq('id', 1).maybeSingle();
+    if (error) throw error;
+    return data?.payload || {};
+  },
+  async upsertAppSettings(payload) {
+    const { error } = await supabase
+      .from('app_settings')
+      .upsert({ id: 1, payload, updated_at: new Date().toISOString() }, { onConflict: 'id' });
+    if (error) throw error;
+  },
+
   // ─── realtime ────────────────────────────────────────────────────────
   subscribe(collection, callback) {
     const channel = supabase
@@ -270,7 +382,12 @@ const supaAdapter = {
                      : payload.eventType === 'UPDATE' ? 'update'
                      : payload.eventType === 'DELETE' ? 'delete'
                      : 'unknown';
-        callback({ action, record: payload.new || payload.old });
+        const raw = payload.new || payload.old;
+        const record = collection === 'messages' ? rowToMessage(raw)
+                     : collection === 'chats' ? rowToChat(raw)
+                     : collection === 'app_settings' ? rowToAppSettings(raw)
+                     : raw;
+        callback({ action, record });
       })
       .subscribe();
     return () => supabase.removeChannel(channel);
@@ -378,6 +495,52 @@ function rowToInspection(r) {
     deletionReason:    r.deletion_reason,
     created:           r.created_at,
     updated:           r.updated_at,
+  };
+}
+
+function rowToChat(r) {
+  if (!r) return r;
+  return {
+    ...r,
+    inspectionId: r.inspection_id ?? r.inspectionId,
+    created: r.created_at ?? r.created,
+    updated: r.updated_at ?? r.updated,
+  };
+}
+
+function messageToRow(m) {
+  if (!m) return m;
+  return {
+    chat_id: m.chat_id ?? m.chatId,
+    sender_id: m.sender_id ?? m.senderId,
+    sender_name: m.sender_name ?? m.senderName,
+    sender_role: m.sender_role ?? m.senderRole,
+    content: m.content,
+    attachments: m.attachments,
+    read_by: m.read_by ?? m.readBy,
+  };
+}
+
+function rowToMessage(r) {
+  if (!r) return r;
+  return {
+    ...r,
+    chatId: r.chat_id ?? r.chatId,
+    senderId: r.sender_id ?? r.senderId,
+    senderName: r.sender_name ?? r.senderName,
+    senderRole: r.sender_role ?? r.senderRole,
+    readBy: r.read_by ?? r.readBy,
+    created: r.created_at ?? r.created,
+    updated: r.updated_at ?? r.updated,
+  };
+}
+
+function rowToAppSettings(r) {
+  if (!r) return r;
+  return {
+    ...r,
+    payload: r.payload || {},
+    updated: r.updated_at ?? r.updated,
   };
 }
 

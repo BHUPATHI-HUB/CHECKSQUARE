@@ -24,7 +24,6 @@ import AdminInspectionDetailModal from '@/components/AdminInspectionDetailModal.
 import AdminApprovalActions from '@/components/AdminApprovalActions.jsx';
 import AdminDownloadReport from '@/components/AdminDownloadReport.jsx';
 import DeletedReportsArchive from '@/components/DeletedReportsArchive.jsx';
-import pb from '@/lib/pocketbaseClient.js';
 import data from '@/services/dataService.js';
 import { toast } from 'sonner';
 

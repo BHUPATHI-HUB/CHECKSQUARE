@@ -20,7 +20,6 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import pb from '@/lib/pocketbaseClient.js';
 import { toast } from 'sonner';
 import { useFeedback } from '@/contexts/FeedbackContext.jsx';
 import {
@@ -55,7 +54,12 @@ const matchAttachment = (msg, filter) => {
 // the record's collectionId/id/filename triple.
 const fileUrl = (record, filename) => {
   if (!filename) return null;
-  return `${pb.baseUrl.replace(/\/$/, '')}/api/files/${record.collectionId}/${record.id}/${filename}`;
+  if (/^https?:\/\//i.test(filename)) return filename;
+  if (record?.collectionId && record?.id) {
+    const pbBase = (import.meta.env?.VITE_PB_URL || 'http://127.0.0.1:8090').replace(/\/$/, '');
+    return `${pbBase}/api/files/${record.collectionId}/${record.id}/${filename}`;
+  }
+  return null;
 };
 
 const Attachment = ({ msg, filename }) => {

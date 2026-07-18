@@ -20,10 +20,10 @@ export const isSupabaseConfigured = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 export const supabase = isSupabaseConfigured
   ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       auth: {
-        // PocketBase remains the primary identity store; Supabase Auth is
-        // additive (used only for OAuth providers).  Keep its session in
-        // sessionStorage so it never collides with the PocketBase token.
-        storage: typeof window !== 'undefined' ? window.sessionStorage : undefined,
+        // After the Phase-3 cutover Supabase Auth is the primary identity
+        // store, so persist the session in localStorage — this keeps the
+        // user logged in across tabs and browser restarts.
+        storage: typeof window !== 'undefined' ? window.localStorage : undefined,
         autoRefreshToken: true,
         persistSession: true,
         detectSessionInUrl: true,

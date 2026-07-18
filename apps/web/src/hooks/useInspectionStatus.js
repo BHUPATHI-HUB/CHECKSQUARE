@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { toast } from 'sonner';
-import pb from '@/lib/pocketbaseClient.js';
+import data from '@/services/dataService.js';
 
 // Fields needed to render the dashboard list rows + drive sort/search/filter
 // + power inline actions (approve/reject/chat/delete). Crucially we DO NOT
@@ -34,14 +34,7 @@ export const useInspectionStatus = () => {
   // only get their own.
   const getAllInspections = useCallback(async (options = {}) => {
     try {
-      const records = await pb.collection('inspections').getFullList({
-        filter: 'deletedAt = null',
-        sort: '-created',
-        fields: LIST_FIELDS,
-        $autoCancel: false,
-        ...options,
-      });
-      return records;
+      return await data.listInspections({ filter: 'deletedAt = null', sort: '-created', ...options });
     } catch (error) {
       if (error?.isAbort) return [];
       console.error('Failed to fetch inspections', error);
@@ -52,11 +45,9 @@ export const useInspectionStatus = () => {
   const getInspectionsForInspector = useCallback(async (inspectorId) => {
     if (!inspectorId) return [];
     try {
-      return await pb.collection('inspections').getFullList({
+      return await data.listInspections({
         filter: `inspector = "${inspectorId}" && deletedAt = null`,
         sort: '-created',
-        fields: LIST_FIELDS,
-        $autoCancel: false,
       });
     } catch (error) {
       if (error?.isAbort) return [];
@@ -67,12 +58,7 @@ export const useInspectionStatus = () => {
 
   const getDeletedInspections = useCallback(async () => {
     try {
-      return await pb.collection('inspections').getFullList({
-        filter: 'deletedAt != null',
-        sort: '-deletedAt',
-        fields: LIST_FIELDS,
-        $autoCancel: false,
-      });
+      return await data.listInspections({ filter: 'deletedAt != null', sort: '-deletedAt' });
     } catch (error) {
       if (error?.isAbort) return [];
       console.error('Failed to fetch deleted inspections', error);
@@ -83,9 +69,9 @@ export const useInspectionStatus = () => {
   const getInspectionById = useCallback(async (inspectionId) => {
     if (!inspectionId) return null;
     try {
-      return await pb.collection('inspections').getOne(inspectionId);
+      return await data.getInspection(inspectionId);
     } catch (error) {
-      if (error?.status === 404) return null;
+      if (error?.status === 404 || error?.code === 'PGRST116') return null;
       console.error('Failed to fetch inspection', error);
       return null;
     }
@@ -101,7 +87,7 @@ export const useInspectionStatus = () => {
         payload.rejectedBy = user?.name || user?.email || 'Admin';
         payload.rejectedAt = new Date().toISOString();
       }
-      await pb.collection('inspections').update(inspectionId, payload);
+      await data.updateInspection(inspectionId, payload);
       return true;
     } catch (error) {
       console.error('Failed to update inspection status', error);
@@ -112,7 +98,7 @@ export const useInspectionStatus = () => {
 
   const softDeleteInspection = useCallback(async (inspectionId, user, reason = 'Manual Admin Deletion') => {
     try {
-      await pb.collection('inspections').update(inspectionId, {
+      await data.updateInspection(inspectionId, {
         deletedAt: new Date().toISOString(),
         deletedBy: user?.name || user?.email || 'Admin',
         deletionReason: reason,
@@ -127,7 +113,7 @@ export const useInspectionStatus = () => {
 
   const restoreInspection = useCallback(async (inspectionId) => {
     try {
-      await pb.collection('inspections').update(inspectionId, {
+      await data.updateInspection(inspectionId, {
         deletedAt: null,
         deletedBy: null,
         deletionReason: null,
@@ -142,7 +128,7 @@ export const useInspectionStatus = () => {
 
   const permanentlyDeleteInspection = useCallback(async (inspectionId) => {
     try {
-      await pb.collection('inspections').delete(inspectionId);
+      await data.deleteInspection(inspectionId);
       return true;
     } catch (error) {
       console.error('Failed to permanently delete inspection', error);
@@ -181,9 +167,9 @@ export const useInspectionStatus = () => {
       };
       let record;
       if (existingId) {
-        record = await pb.collection('inspections').update(existingId, payload);
+        record = await data.updateInspection(existingId, payload);
       } else {
-        record = await pb.collection('inspections').create(payload);
+        record = await data.createInspection(payload);
 
         // Spec §7: every new inspection auto-provisions a group chat
         // thread that includes the assigned inspector, the customer (if any)
@@ -191,10 +177,7 @@ export const useInspectionStatus = () => {
         // context. We do this best-effort -- a failure here must NOT block
         // the inspection from being saved.
         try {
-          const adminIds = await pb
-            .collection('users')
-            .getFullList({ filter: 'role = "admin"', fields: 'id', $autoCancel: false })
-            .then((rows) => rows.map((r) => r.id));
+          const adminIds = await data.listUsersByRole('admin').then((rows) => rows.map((r) => r.id));
 
           const participants = Array.from(new Set([
             ...adminIds,
@@ -203,11 +186,7 @@ export const useInspectionStatus = () => {
           ].filter(Boolean)));
 
           if (participants.length >= 2) {
-            await pb.collection('chats').create({
-              type: 'group',
-              participants,
-              inspectionId: record.id,
-            }, { $autoCancel: false });
+            await data.createChat({ type: 'group', participants, inspectionId: record.id });
           }
         } catch (chatErr) {
           // Likely cause: chats.participants maxSelect not yet bumped by the

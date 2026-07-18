@@ -13,7 +13,6 @@ import {
   Calendar, MessageSquare, Clock, MapPin, ChevronRight, UserCircle,
   ArrowRight, FileText, Plus,
 } from 'lucide-react';
-import pb from '@/lib/pocketbaseClient.js';
 import data from '@/services/dataService.js';
 import AdminDownloadReport from '@/components/AdminDownloadReport.jsx';
 

@@ -28,6 +28,7 @@
 
 import PocketBase from 'pocketbase';
 import { createClient } from '@supabase/supabase-js';
+import { createHash } from 'node:crypto';
 
 const DRY = process.argv.includes('--dry-run');
 
@@ -59,6 +60,15 @@ console.log(`✓ Supabase admin client ready${DRY ? '  (DRY RUN)' : ''}`);
 
 // ── Helpers ────────────────────────────────────────────────────────────
 const idMap = new Map(); // pbId → supabase auth.uid
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const toDeterministicUuid = (scope, id) => {
+  if (!id) return null;
+  if (UUID_RE.test(id)) return id;
+  const hex = createHash('sha1').update(`${scope}:${id}`).digest('hex').slice(0, 32);
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+};
+
 const writeBatch = async (table, rows) => {
   if (DRY || rows.length === 0) return;
   for (let i = 0; i < rows.length; i += 500) {
@@ -66,6 +76,21 @@ const writeBatch = async (table, rows) => {
     const { error } = await supa.from(table).upsert(slice, { onConflict: 'id' });
     if (error) throw error;
   }
+};
+
+const normalizeInspectionStatus = (value) => {
+  const v = String(value || '').toLowerCase();
+  if (v === 'draft' || v === 'pending' || v === 'approved' || v === 'rejected') return v;
+  return 'draft';
+};
+
+const normalizePropertyType = (value) => {
+  const v = String(value || '').toLowerCase();
+  if (!v) return null;
+  if (['commercial', 'retail', 'office', 'warehouse', 'shop'].includes(v)) return 'Commercial';
+  if (['industrial', 'factory', 'plant'].includes(v)) return 'Industrial';
+  // Legacy PB values (villa/apartment/house/townhouse/condo/etc.) map to Residential.
+  return 'Residential';
 };
 
 // ── 1. Users → auth.users + public.profiles ────────────────────────────
@@ -92,11 +117,17 @@ for (const u of pbUsers) {
     });
   }
   idMap.set(u.id, existing.id);
-  // The on_auth_user_created trigger fills profiles automatically, but we
-  // also patch phone/address which the trigger doesn't know about.
-  await supa.from('profiles').update({
-    name: u.name, role: u.role, phone: u.phone || null, address: u.address || null,
-  }).eq('id', existing.id);
+  // Ensure profile row exists even for users created before triggers were added.
+  const { error: profileErr } = await supa.from('profiles').upsert({
+    id: existing.id,
+    email: u.email,
+    name: u.name,
+    role: u.role,
+    phone: u.phone || null,
+    address: u.address || null,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'id' });
+  if (profileErr) throw profileErr;
 }
 console.log(`  → ${pbUsers.length} users mapped`);
 
@@ -104,12 +135,12 @@ console.log(`  → ${pbUsers.length} users mapped`);
 console.log('\n[2/8] inspections');
 const pbIns = await pb.collection('inspections').getFullList({ $autoCancel: false });
 const insRows = pbIns.map((r) => ({
-  id:                 r.id,  // PB short id → text uuid would be safer, but UUID PK accepts arbitrary text via overrides; using as-is for traceability
+  id:                 toDeterministicUuid('inspections', r.id),
   inspector_id:       idMap.get(r.inspector),
   inspector_name:     r.inspectorName,
   customer_id:        idMap.get(r.customer) || null,
-  status:             r.status,
-  property_type:      r.propertyType || null,
+  status:             normalizeInspectionStatus(r.status),
+  property_type:      normalizePropertyType(r.propertyType),
   metadata:           r.metadata || {},
   area_calculations:  r.areaCalculations || {},
   water_quality:      r.waterQuality || {},
@@ -161,10 +192,10 @@ console.log('\n[3/8] inspection_photos  — skipped (see SUPABASE_SETUP.md §13)
 console.log('\n[4/8] appointments');
 const pbAppts = await pb.collection('appointments').getFullList({ $autoCancel: false });
 const apptRows = pbAppts.map((r) => ({
-  id:               r.id,
+  id:               toDeterministicUuid('appointments', r.id),
   customer_id:      idMap.get(r.customer),
   inspector_id:     idMap.get(r.inspector) || null,
-  inspection_id:    r.inspection || null,
+  inspection_id:    toDeterministicUuid('inspections', r.inspection),
   scheduled_at:     r.scheduledAt,
   time_slot:        r.timeSlot,
   property_address: r.propertyAddress,
@@ -180,11 +211,11 @@ console.log(`  → ${apptRows.length} appointments`);
 console.log('\n[5/8] chats + messages');
 const pbChats = await pb.collection('chats').getFullList({ $autoCancel: false });
 const chatRows = pbChats.map((r) => ({
-  id:              r.id,
+  id:              toDeterministicUuid('chats', r.id),
   type:            r.type || 'direct',
   participants:    (Array.isArray(r.participants) ? r.participants : [r.participants])
                      .map((id) => idMap.get(id)).filter(Boolean),
-  inspection_id:   r.inspectionId || null,
+  inspection_id:   toDeterministicUuid('inspections', r.inspectionId),
   last_message:    r.lastMessage || null,
   last_message_at: r.lastMessageAt || null,
   created_at:      r.created,
@@ -194,8 +225,8 @@ await writeBatch('chats', chatRows);
 
 const pbMsgs = await pb.collection('messages').getFullList({ $autoCancel: false });
 const msgRows = pbMsgs.map((r) => ({
-  id:           r.id,
-  chat_id:      r.chatId,
+  id:           toDeterministicUuid('messages', r.id),
+  chat_id:      toDeterministicUuid('chats', r.chatId),
   sender_id:    idMap.get(r.senderId),
   sender_name:  r.senderName,
   sender_role:  r.senderRole,
@@ -211,7 +242,7 @@ console.log(`  → ${chatRows.length} chats, ${msgRows.length} messages`);
 console.log('\n[6/8] notifications');
 const pbNotes = await pb.collection('notifications').getFullList({ $autoCancel: false });
 const noteRows = pbNotes.map((r) => ({
-  id:         r.id,
+  id:         toDeterministicUuid('notifications', r.id),
   user_id:    idMap.get(r.userId),
   type:       r.type,
   title:      r.title,
@@ -228,9 +259,9 @@ console.log('\n[7/8] report_downloads');
 try {
   const pbDls = await pb.collection('report_downloads').getFullList({ $autoCancel: false });
   const dlRows = pbDls.map((r) => ({
-    id:            r.id,
+    id:            toDeterministicUuid('report_downloads', r.id),
     user_id:       idMap.get(r.user),
-    inspection_id: r.inspection || null,
+    inspection_id: toDeterministicUuid('inspections', r.inspection),
     filename:      r.filename,
     format:        r.format,
     file_size:     r.fileSize || null,

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
 import { motion } from 'framer-motion';
@@ -15,7 +15,7 @@ import GoogleSignInButton from '@/components/GoogleSignInButton.jsx';
 const fadeUp = { initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.6, ease: [0.22, 1, 0.36, 1] } };
 
 const LoginPage = () => {
-  const { login, requestPasswordReset } = useAuth();
+  const { login, requestPasswordReset, user, isAuthenticated } = useAuth();
   const { settings } = useSettings();
   const navigate = useNavigate();
   const location = useLocation();
@@ -29,6 +29,20 @@ const LoginPage = () => {
 
   const from = location.state?.from?.pathname || null;
   const brand = settings?.appName || 'CheckSquare';
+
+  // OAuth-based sign-in happens outside handleSubmit; once auth state flips to
+  // valid, route users away from /login using the same role-based destinations.
+  useEffect(() => {
+    if (!isAuthenticated || !user) return;
+    if (from) {
+      navigate(from, { replace: true });
+      return;
+    }
+    const path = user.role === 'admin' ? '/admin/dashboard'
+      : user.role === 'inspector' ? '/inspector/dashboard'
+      : '/customer';
+    navigate(path, { replace: true });
+  }, [isAuthenticated, user, from, navigate]);
 
   const handleForgotPassword = async (e) => {
     e.preventDefault();

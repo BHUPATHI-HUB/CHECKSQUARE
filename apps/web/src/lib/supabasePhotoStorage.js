@@ -18,9 +18,9 @@
 // by the `supabase-storage.pb.js` PB hook).
 
 import { supabase, isSupabaseConfigured, SUPABASE_PHOTO_BUCKET } from '@/lib/supabaseClient.js';
-import pb from '@/lib/pocketbaseClient.js';
 
 const SIGNED_URL_TTL_SECONDS = 60 * 60; // 1 h
+const PB_BASE_URL = (import.meta.env?.VITE_PB_URL || 'http://127.0.0.1:8090').replace(/\/$/, '');
 
 // Legacy fallback: read entire file as base64 data-URL (drop-in for the old
 // fileToDataUrl() helper inside RoomPhotoManager.jsx).
@@ -73,10 +73,15 @@ export async function uploadInspectionPhoto(file, { inspectionId = 'draft', room
   // which the official SDK consumes via uploadToSignedUrl().
   let signed;
   try {
-    signed = await pb.send('/api/supabase/signed-upload', {
+    const res = await fetch(`${PB_BASE_URL}/api/supabase/signed-upload`, {
       method: 'POST',
-      body: { path, inspectionId, contentType: file.type || 'image/jpeg' },
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path, inspectionId, contentType: file.type || 'image/jpeg' }),
     });
+    if (!res.ok) {
+      throw new Error(`signed-upload failed (${res.status})`);
+    }
+    signed = await res.json();
   } catch (e) {
     // PB hook missing or refused — fall back to base64 so the form still works.
     // (Logged but non-fatal — Phase 1 is additive.)

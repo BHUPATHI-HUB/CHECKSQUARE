@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Loader2, Plus, Trash2, Users, ShieldCheck, HardHat, UserRound, Search, RefreshCw, Mail, Phone, KeyRound, Upload, Camera } from 'lucide-react';
-import pb from '@/lib/pocketbaseClient.js';
 import data from '@/services/dataService.js';
 import { useAuth } from '@/contexts/AuthContext.jsx';
 import { Button } from '@/components/ui/button';
@@ -605,9 +604,11 @@ const Avatar = ({ user, role, name, size = 36, onUpload, busy }) => {
     .slice(0, 2)
     .join('')
     .toUpperCase();
-  const avatarUrl = user?.avatar && user?.collectionId && user?.id
-    ? pb.files.getURL(user, user.avatar, { thumb: '72x72' })
-    : null;
+  const avatarUrl = user?.avatar_url
+    || user?.avatarUrl
+    || ((user?.avatar && user?.collectionId && user?.id)
+      ? `${import.meta.env?.VITE_PB_URL || 'http://127.0.0.1:8090'}/api/files/${user.collectionId}/${user.id}/${user.avatar}?thumb=72x72`
+      : null);
   return (
     <button
       type="button"

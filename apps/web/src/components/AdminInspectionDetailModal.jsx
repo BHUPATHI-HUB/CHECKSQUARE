@@ -11,7 +11,6 @@ import AdminApprovalActions from '@/components/AdminApprovalActions.jsx';
 import AdminDownloadReport from '@/components/AdminDownloadReport.jsx';
 import ReportPreviewModal from '@/components/ReportPreviewModal.jsx';
 import { MapPin, Calendar, User, Edit2, Save, X, Eye, Loader2 } from 'lucide-react';
-import pb from '@/lib/pocketbaseClient.js';
 import data from '@/services/dataService.js';
 import PhotoImg from '@/components/PhotoImg.jsx';
 

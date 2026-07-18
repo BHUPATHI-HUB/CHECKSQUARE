@@ -13,12 +13,12 @@
 // Net effect: the user signs in once with Google, but the existing
 // PocketBase-based AuthContext + role checks keep working unchanged.
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient.js';
-import pb from '@/lib/pocketbaseClient.js';
 
 const SupabaseAuthContext = createContext(null);
+const USE_SUPABASE_AUTH = isSupabaseConfigured && (import.meta.env?.VITE_USE_SUPABASE_AUTH === 'true');
 
 export const useSupabaseAuth = () => useContext(SupabaseAuthContext) || {
   supabaseEnabled: false,
@@ -29,6 +29,7 @@ export const useSupabaseAuth = () => useContext(SupabaseAuthContext) || {
 export const SupabaseAuthProvider = ({ children }) => {
   const [supabaseSession, setSupabaseSession] = useState(null);
   const [bridging, setBridging] = useState(false);
+  const bridgingRef = useRef(false);
 
   // Listen for Supabase auth-state changes (OAuth callback, sign-out, etc.).
   useEffect(() => {
@@ -47,9 +48,13 @@ export const SupabaseAuthProvider = ({ children }) => {
   // call the bridge to exchange it for a PB token.  Runs once per session.
   useEffect(() => {
     if (!isSupabaseConfigured) return;
-    if (!supabaseSession || pb.authStore.isValid || bridging) return;
+    if (USE_SUPABASE_AUTH) return;
+    if (!supabaseSession || bridgingRef.current) return;
     let cancelled = false;
     (async () => {
+      const { default: pb } = await import('@/lib/pocketbaseClient.js');
+      if (cancelled || pb.authStore.isValid) return;
+      bridgingRef.current = true;
       setBridging(true);
       try {
         const accessToken = supabaseSession.access_token;
@@ -73,11 +78,12 @@ export const SupabaseAuthProvider = ({ children }) => {
           await supabase.auth.signOut();
         }
       } finally {
+        bridgingRef.current = false;
         if (!cancelled) setBridging(false);
       }
     })();
     return () => { cancelled = true; };
-  }, [supabaseSession, bridging]);
+  }, [supabaseSession]);
 
   const signInWithGoogle = async () => {
     if (!isSupabaseConfigured) {

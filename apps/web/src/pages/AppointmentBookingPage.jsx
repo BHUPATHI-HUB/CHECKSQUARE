@@ -16,7 +16,6 @@ import {
   Calendar as CalendarIcon, Clock, MapPin, ArrowRight, CheckCircle2, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import pb from '@/lib/pocketbaseClient.js';
 import data from '@/services/dataService.js';
 import { useAuth } from '@/contexts/AuthContext.jsx';
 import { useSettings } from '@/contexts/SettingsContext.jsx';

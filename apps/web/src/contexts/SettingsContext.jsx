@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { DEFAULT_WEIGHTS, DEFAULT_SCORE_EXPLANATION_HTML, PROPCHK_WEIGHTS, PROPCHK_ITEMS_PER_ROOM, DEFAULT_ROOM_SCORE_EXPR, DEFAULT_PRIORITY_EXPR } from '@/utils/scoring';
 import { STARTER_COMMENT_LIBRARY } from '@/utils/commentLibrary';
-import pb from '@/lib/pocketbaseClient.js';
+import data from '@/services/dataService.js';
 
 const SettingsContext = createContext(null);
 
@@ -150,8 +150,7 @@ export const SettingsProvider = ({ children }) => {
 
     const fetchFromServer = async () => {
       try {
-        const row = await pb.collection('app_settings').getOne(APP_SETTINGS_ID, { $autoCancel: false });
-        const payload = row?.payload || {};
+        const payload = await data.getAppSettings();
         if (cancelled) return;
         if (Object.keys(payload).length > 0) {
           setSettings((prev) => ({ ...prev, ...payload }));
@@ -169,14 +168,13 @@ export const SettingsProvider = ({ children }) => {
 
     // Realtime: refresh whenever an admin saves changes elsewhere.
     try {
-      pb.collection('app_settings').subscribe(APP_SETTINGS_ID, (e) => {
+      unsub = data.subscribe('app_settings', (e) => {
         if (e.action === 'update' || e.action === 'create') {
           const payload = e.record?.payload || {};
           setSettings((prev) => ({ ...prev, ...payload }));
           localStorage.setItem('app-settings', JSON.stringify(payload));
         }
-      });
-      unsub = () => pb.collection('app_settings').unsubscribe(APP_SETTINGS_ID);
+      }, APP_SETTINGS_ID);
     } catch (_) { /* offline / unauthed — skip */ }
 
     return () => {
@@ -226,14 +224,9 @@ export const SettingsProvider = ({ children }) => {
       // and the UI never invokes this for them).
       const { lastUpdated, __brandVersion, ...payload } = updated; // eslint-disable-line no-unused-vars
       try {
-        await pb.collection('app_settings').update(APP_SETTINGS_ID, { payload }, { $autoCancel: false });
-      } catch (e) {
-        // Row doesn't exist yet — try a create with the fixed id.
-        if (String(e?.status) === '404') {
-          await pb.collection('app_settings').create({ id: APP_SETTINGS_ID, payload }, { $autoCancel: false });
-        } else {
-          throw e;
-        }
+        await data.upsertAppSettings(payload);
+      } catch (innerErr) {
+        throw innerErr;
       }
       return { success: true };
     } catch (err) {
@@ -253,7 +246,7 @@ export const SettingsProvider = ({ children }) => {
 
   return (
     <SettingsContext.Provider value={{ settings, updateSettings, resetDisclaimers, loading }}>
-      {!loading && children}
+      {children}
     </SettingsContext.Provider>
   );
 };

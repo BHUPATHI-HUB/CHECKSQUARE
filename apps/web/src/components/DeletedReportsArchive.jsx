@@ -9,7 +9,6 @@ import { Search, RotateCcw, Trash2, Archive, Download, Loader2 } from 'lucide-re
 import { toast } from 'sonner';
 import { useInspectionStatus } from '@/hooks/useInspectionStatus.js';
 import { useFeedback } from '@/contexts/FeedbackContext.jsx';
-import pb from '@/lib/pocketbaseClient.js';
 import data from '@/services/dataService.js';
 
 const DeletedReportsArchive = () => {

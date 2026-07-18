@@ -90,7 +90,9 @@ migrate((app) => {
     try {
         const rec = new Record(app.findCollectionByNameOrId("app_settings"));
         rec.set("id", "single");
-        rec.set("payload", {});
+        // Some PocketBase versions treat {} as blank for required json fields.
+        // Seed with a minimal non-empty payload to keep migration portable.
+        rec.set("payload", { appName: "CheckSquare" });
         app.save(rec);
     } catch (e) {
         if (!e.message || !e.message.includes("unique")) throw e;

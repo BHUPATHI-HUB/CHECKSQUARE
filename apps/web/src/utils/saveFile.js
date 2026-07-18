@@ -9,6 +9,7 @@ import { saveAs } from 'file-saver';
 import { Capacitor } from '@capacitor/core';
 import { toast } from 'sonner';
 import pb from '@/lib/pocketbaseClient';
+import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
 
 const isNative = () => {
 	try {
@@ -86,24 +87,56 @@ export async function saveFile(blob, filename, opts = {}) {
 		saveAs(blob, filename);
 	}
 
-	// 2. Sync to PocketBase (best-effort — silent on failure).
-	// `authStore.record` is the canonical accessor in PB JS SDK ≥0.21;
-	// `authStore.model` is deprecated and undefined on newer builds.
-	const authUser = pb?.authStore?.record || pb?.authStore?.model;
-	if (sync && pb?.authStore?.isValid && authUser?.id) {
+	// 2. Sync report download record (best-effort — silent on failure).
+	const USE_SUPABASE_DB = isSupabaseConfigured && (import.meta.env?.VITE_USE_SUPABASE_DB === 'true');
+
+	if (sync && USE_SUPABASE_DB && supabase) {
 		try {
-			const fd = new FormData();
-			fd.append('user', authUser.id);
-			if (inspectionId) fd.append('inspection', inspectionId);
-			fd.append('filename', filename);
-			fd.append('format', extToFormat(filename));
-			fd.append('fileSize', String(blob.size || 0));
-			fd.append('file', blob, filename);
-			await pb.collection('report_downloads').create(fd);
+			const { data: { user } = {} } = await supabase.auth.getUser();
+			if (user?.id) {
+				// Upload the report blob to the private `reports` bucket so it can be
+				// re-downloaded later from the Downloads page. Best-effort: if the
+				// upload fails we still record the metadata row.
+				let storageKey = null;
+				try {
+					const path = `${user.id}/${Date.now()}-${filename}`;
+					const { error: upErr } = await supabase.storage
+						.from('reports')
+						.upload(path, blob, {
+							contentType: blob.type || 'application/octet-stream',
+							upsert: false,
+						});
+					if (!upErr) storageKey = path;
+				} catch (upErr) {
+					console.warn('Could not upload report to Supabase storage:', upErr?.message || upErr);
+				}
+				await supabase.from('report_downloads').insert({
+					user_id: user.id,
+					inspection_id: inspectionId || null,
+					filename,
+					format: extToFormat(filename),
+					file_size: blob.size || 0,
+					storage_key: storageKey,
+				});
+			}
 		} catch (err) {
-			// Common causes: migration not applied yet, offline, or quota.
-			// Local save already succeeded — don't surface a noisy error.
-			console.warn('Could not sync download to PocketBase:', err?.message || err);
+			console.warn('Could not sync download to Supabase:', err?.message || err);
+		}
+	} else if (sync && pb?.authStore?.isValid) {
+		const authUser = pb?.authStore?.record || pb?.authStore?.model;
+		if (authUser?.id) {
+			try {
+				const fd = new FormData();
+				fd.append('user', authUser.id);
+				if (inspectionId) fd.append('inspection', inspectionId);
+				fd.append('filename', filename);
+				fd.append('format', extToFormat(filename));
+				fd.append('fileSize', String(blob.size || 0));
+				fd.append('file', blob, filename);
+				await pb.collection('report_downloads').create(fd);
+			} catch (err) {
+				console.warn('Could not sync download to PocketBase:', err?.message || err);
+			}
 		}
 	}
 

@@ -9,7 +9,6 @@ import {
   buildReportHTML, buildDOCXBlob, generatePDF, generateDOCX,
 } from '@/utils/ReportGenerator.jsx';
 import { useSettings } from '@/contexts/SettingsContext.jsx';
-import pb from '@/lib/pocketbaseClient.js';
 import dataService from '@/services/dataService.js';
 
 /**

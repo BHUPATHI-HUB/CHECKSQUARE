@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Helmet } from 'react-helmet';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext.jsx';
-import pb from '@/lib/pocketbaseClient';
+
 import data from '@/services/dataService.js';
 import Header from '@/components/Header.jsx';
 import Footer from '@/components/Footer.jsx';

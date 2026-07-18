@@ -1,8 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
-import pb from '@/lib/pocketbaseClient.js';
+import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient.js';
 
 const AuthContext = createContext(null);
+const USE_SUPABASE_AUTH = isSupabaseConfigured && (import.meta.env?.VITE_USE_SUPABASE_AUTH === 'true');
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
@@ -26,42 +27,152 @@ const toUserSession = (record) => {
   };
 };
 
+const toSupabaseUserSession = (authUser, profile) => {
+  if (!authUser) return null;
+  const meta = authUser.user_metadata || {};
+  return {
+    id: authUser.id,
+    email: profile?.email || authUser.email,
+    name: profile?.name || meta.full_name || meta.name || authUser.email,
+    role: profile?.role || meta.role || 'customer',
+    phone: profile?.phone || meta.phone || '',
+    address: profile?.address || meta.address || '',
+  };
+};
+
+const decodeJwtExp = (token) => {
+  if (!token) return null;
+  try {
+    let b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    b64 += '='.repeat((4 - (b64.length % 4)) % 4);
+    const payload = JSON.parse(atob(b64));
+    return payload.exp ? payload.exp * 1000 : null;
+  } catch {
+    return null;
+  }
+};
+
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(toUserSession(pb.authStore.record));
+  const [user, setUser] = useState(null);
+  const [supabaseSession, setSupabaseSession] = useState(null);
+  const [pbToken, setPbToken] = useState(null);
   const [loading, setLoading] = useState(true);
   const [sessionWarning, setSessionWarning] = useState(false);
   const warnedRef = useRef(false);
+  const pbRef = useRef(null);
+
+  const getPB = useCallback(async () => {
+    if (pbRef.current) return pbRef.current;
+    const mod = await import('@/lib/pocketbaseClient.js');
+    pbRef.current = mod.default;
+    return pbRef.current;
+  }, []);
+
+  const loadSupabaseUser = useCallback(async (authUser) => {
+    if (!authUser) return null;
+    let profile = null;
+    // During early migration the profiles table may not exist yet.
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id,email,name,role,phone,address')
+        .eq('id', authUser.id)
+        .maybeSingle();
+      if (!error) profile = data;
+    } catch {
+      // Ignore and fall back to auth metadata.
+    }
+    return toSupabaseUserSession(authUser, profile);
+  }, []);
 
   const logout = useCallback(() => {
-    pb.authStore.clear();
+    if (USE_SUPABASE_AUTH) {
+      supabase.auth.signOut().catch(() => {});
+      setSupabaseSession(null);
+    } else if (pbRef.current) {
+      pbRef.current.authStore.clear();
+    } else {
+      getPB().then((pb) => pb.authStore.clear()).catch(() => {});
+    }
+    setPbToken(null);
     setUser(null);
     setSessionWarning(false);
     warnedRef.current = false;
-  }, []);
+  }, [getPB]);
 
   // Subscribe to PocketBase auth changes so multiple tabs stay in sync and a
   // refresh of the auth record automatically propagates.
   useEffect(() => {
-    const unsubscribe = pb.authStore.onChange(() => {
-      setUser(toUserSession(pb.authStore.record));
-    }, true);
+    if (USE_SUPABASE_AUTH) {
+      let mounted = true;
 
-    // Initial validation: if a token is stored, refresh it once so an expired
-    // session is cleared cleanly on first load.
-    const init = async () => {
-      if (pb.authStore.isValid) {
-        try {
-          await pb.collection('users').authRefresh();
-        } catch (e) {
-          pb.authStore.clear();
+      const init = async () => {
+        const { data } = await supabase.auth.getSession();
+        if (!mounted) return;
+        setSupabaseSession(data.session || null);
+        if (data.session?.user) {
+          const nextUser = await loadSupabaseUser(data.session.user);
+          if (mounted) setUser(nextUser);
+        } else {
+          setUser(null);
         }
-      }
-      setLoading(false);
-    };
-    init();
+        setLoading(false);
+      };
+      init();
 
-    return () => unsubscribe();
-  }, []);
+      const { data: sub } = supabase.auth.onAuthStateChange(async (_event, session) => {
+        setSupabaseSession(session || null);
+        if (!session?.user) {
+          setUser(null);
+          return;
+        }
+        const nextUser = await loadSupabaseUser(session.user);
+        if (mounted) setUser(nextUser);
+      });
+
+      return () => {
+        mounted = false;
+        sub.subscription.unsubscribe();
+      };
+    }
+
+    let cancelled = false;
+    let unsubscribe = () => {};
+
+    const initPb = async () => {
+      try {
+        const pb = await getPB();
+        if (cancelled) return;
+
+        unsubscribe = pb.authStore.onChange(() => {
+          setUser(toUserSession(pb.authStore.record));
+          setPbToken(pb.authStore.token || null);
+        }, true);
+
+        // Initial validation: if a token is stored, refresh it once so an expired
+        // session is cleared cleanly on first load.
+        if (pb.authStore.isValid) {
+          try {
+            await pb.collection('users').authRefresh();
+          } catch (e) {
+            pb.authStore.clear();
+          }
+        }
+
+        if (cancelled) return;
+        setUser(toUserSession(pb.authStore.record));
+        setPbToken(pb.authStore.token || null);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    initPb();
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [loadSupabaseUser, getPB]);
 
   // ---------------------------------------------------------------------------
   // Inactivity guard (Spec §1 / DoD #3)
@@ -106,23 +217,11 @@ export const AuthProvider = ({ children }) => {
 
   // Session expiry warning. PocketBase tokens are JWTs; decode the `exp` claim.
   useEffect(() => {
-    if (!pb.authStore.token) return;
-
-    const decodeExp = (token) => {
-      try {
-        // JWTs use base64url (URL-safe alphabet) which atob() can't parse
-        // directly — translate `-_` → `+/` and right-pad to a multiple of 4.
-        let b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-        b64 += '='.repeat((4 - (b64.length % 4)) % 4);
-        const payload = JSON.parse(atob(b64));
-        return payload.exp ? payload.exp * 1000 : null;
-      } catch {
-        return null;
-      }
-    };
+    const token = USE_SUPABASE_AUTH ? supabaseSession?.access_token : pbToken;
+    if (!token) return;
 
     const interval = setInterval(() => {
-      const exp = decodeExp(pb.authStore.token);
+      const exp = decodeJwtExp(token);
       if (!exp) return;
       const timeLeft = exp - Date.now();
 
@@ -136,11 +235,33 @@ export const AuthProvider = ({ children }) => {
     }, 30000);
 
     return () => clearInterval(interval);
-  }, [user, logout]);
+  }, [user, logout, supabaseSession, pbToken]);
 
   const extendSession = useCallback(async () => {
+    if (USE_SUPABASE_AUTH) {
+      const { data, error } = await supabase.auth.refreshSession();
+      if (error) {
+        toast.error('Could not extend session. Please log in again.');
+        logout();
+        return;
+      }
+      setSupabaseSession(data.session || null);
+      if (data.session?.user) {
+        const nextUser = await loadSupabaseUser(data.session.user);
+        setUser(nextUser);
+      }
+      warnedRef.current = false;
+      setSessionWarning(false);
+      lastActivityRef.current = Date.now();
+      toast.success('Session extended successfully.');
+      return;
+    }
+
     try {
+      const pb = await getPB();
       await pb.collection('users').authRefresh();
+      setUser(toUserSession(pb.authStore.record));
+      setPbToken(pb.authStore.token || null);
       warnedRef.current = false;
       setSessionWarning(false);
       lastActivityRef.current = Date.now();
@@ -149,23 +270,56 @@ export const AuthProvider = ({ children }) => {
       toast.error('Could not extend session. Please log in again.');
       logout();
     }
-  }, [logout]);
+  }, [logout, loadSupabaseUser, getPB]);
 
   // `expectedRole` is accepted for backwards compatibility with the existing
   // login form; the authoritative role lives in the `users.role` field.
   const login = async (email, password, expectedRole) => {
+    if (USE_SUPABASE_AUTH) {
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+
+        setSupabaseSession(data.session || null);
+        const nextUser = await loadSupabaseUser(data.user);
+        setUser(nextUser);
+
+        if (expectedRole && nextUser?.role !== expectedRole) {
+          await supabase.auth.signOut();
+          setSupabaseSession(null);
+          setUser(null);
+          return {
+            success: false,
+            error: `This account is not registered as a ${expectedRole}.`,
+          };
+        }
+        return { success: true };
+      } catch (e) {
+        return {
+          success: false,
+          error: e?.message || 'Invalid email or password.',
+        };
+      }
+    }
+
     try {
+      const pb = await getPB();
       const authData = await pb
         .collection('users')
         .authWithPassword(email, password);
 
       if (expectedRole && authData.record.role !== expectedRole) {
         pb.authStore.clear();
+        setPbToken(null);
+        setUser(null);
         return {
           success: false,
           error: `This account is not registered as a ${expectedRole}.`,
         };
       }
+
+      setUser(toUserSession(pb.authStore.record));
+      setPbToken(pb.authStore.token || null);
 
       return { success: true };
     } catch (e) {
@@ -177,7 +331,61 @@ export const AuthProvider = ({ children }) => {
   };
 
   const signup = async (userData) => {
+    if (USE_SUPABASE_AUTH) {
+      try {
+        const { data, error } = await supabase.auth.signUp({
+          email: userData.email,
+          password: userData.password,
+          options: {
+            data: {
+              full_name: userData.name,
+              role: 'customer',
+              phone: userData.phone || '',
+              address: userData.address || '',
+            },
+          },
+        });
+        if (error) throw error;
+
+        if (data.user) {
+          try {
+            await supabase.from('profiles').upsert({
+              id: data.user.id,
+              email: data.user.email,
+              name: userData.name,
+              role: 'customer',
+              phone: userData.phone || '',
+              address: userData.address || '',
+            }, { onConflict: 'id' });
+          } catch {
+            // Safe to ignore until profiles table exists everywhere.
+          }
+        }
+
+        if (!data.session) {
+          const signedIn = await supabase.auth.signInWithPassword({
+            email: userData.email,
+            password: userData.password,
+          });
+          if (!signedIn.error) {
+            setSupabaseSession(signedIn.data.session || null);
+            const nextUser = await loadSupabaseUser(signedIn.data.user);
+            setUser(nextUser);
+          }
+        } else {
+          setSupabaseSession(data.session);
+          const nextUser = await loadSupabaseUser(data.user);
+          setUser(nextUser);
+        }
+
+        return { success: true };
+      } catch (e) {
+        return { success: false, error: e?.message || 'Could not create account.' };
+      }
+    }
+
     try {
+      const pb = await getPB();
       const payload = {
         email: userData.email,
         password: userData.password,
@@ -193,6 +401,8 @@ export const AuthProvider = ({ children }) => {
 
       await pb.collection('users').create(payload);
       await pb.collection('users').authWithPassword(userData.email, userData.password);
+      setUser(toUserSession(pb.authStore.record));
+      setPbToken(pb.authStore.token || null);
 
       return { success: true };
     } catch (e) {
@@ -205,7 +415,20 @@ export const AuthProvider = ({ children }) => {
   };
 
   const requestPasswordReset = async (email) => {
+    if (USE_SUPABASE_AUTH) {
+      try {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/login`,
+        });
+        if (error) throw error;
+        return { success: true };
+      } catch (e) {
+        return { success: false, error: e?.message || 'Could not send reset email.' };
+      }
+    }
+
     try {
+      const pb = await getPB();
       await pb.collection('users').requestPasswordReset(email);
       return { success: true };
     } catch (e) {
@@ -230,7 +453,7 @@ export const AuthProvider = ({ children }) => {
     extendSession,
     requestPasswordReset,
     hasRole,
-    isAuthenticated: !!user && pb.authStore.isValid,
+    isAuthenticated: USE_SUPABASE_AUTH ? (!!user && !!supabaseSession) : (!!user && !!pbToken),
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
