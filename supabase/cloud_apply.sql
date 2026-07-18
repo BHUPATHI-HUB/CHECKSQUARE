@@ -362,6 +362,33 @@ create policy "inspection_photos_delete"
     )
   );
 
+create policy "inspection_photos_update"
+  on storage.objects for update to authenticated
+  using (
+    bucket_id = 'inspection-photos'
+    and (
+      public.current_role() = 'admin'
+      or exists (
+        select 1 from public.inspections i
+        where i.id::text = split_part(name, '/', 1)
+          and i.inspector_id = auth.uid()
+          and i.status <> 'approved'
+      )
+    )
+  )
+  with check (
+    bucket_id = 'inspection-photos'
+    and (
+      public.current_role() = 'admin'
+      or exists (
+        select 1 from public.inspections i
+        where i.id::text = split_part(name, '/', 1)
+          and i.inspector_id = auth.uid()
+          and i.status <> 'approved'
+      )
+    )
+  );
+
 -- reports bucket: users read/insert/delete their own report files.
 drop policy if exists "reports_read"   on storage.objects;
 drop policy if exists "reports_write"  on storage.objects;
