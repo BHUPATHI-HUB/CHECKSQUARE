@@ -725,7 +725,6 @@ const InspectionForm = ({ existingInspection = null, isEditing = false }) => {
                       type="date"
                       value={formData.metadata.inspectionDate}
                       onChange={e => updateMetadata('inspectionDate', e.target.value)}
-                      max={new Date().toISOString().split('T')[0]}
                       className="pl-9 h-11"
                     />
                   </div>
