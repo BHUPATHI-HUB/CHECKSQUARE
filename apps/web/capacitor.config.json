@@ -3,8 +3,6 @@
   "appName": "CheckSquare",
   "webDir": "../../dist/apps/web",
   "server": {
-    "url": "https://checksquare.pages.dev",
-    "cleartext": false,
     "androidScheme": "https"
   },
   "android": {
