@@ -31,14 +31,18 @@ const fadeUp = {
   transition: { duration: 0.6, ease: [0.22, 1, 0.36, 1] },
 };
 
+// Stale-while-revalidate cache (per customer) so returning to the portal shows
+// the last-loaded appointments + inspections instantly instead of a spinner.
+const customerDashCache = {};
+
 const CustomerDashboard = () => {
   const { user } = useAuth();
   const { unreadCount, chats, createChat } = useChatContext();
   const { settings } = useSettings();
   const brand = settings?.appName || 'CheckSquare';
-  const [upcomingAppointments, setUpcomingAppointments] = useState([]);
-  const [pastInspections, setPastInspections] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [upcomingAppointments, setUpcomingAppointments] = useState(() => customerDashCache[user?.id]?.appts || []);
+  const [pastInspections, setPastInspections] = useState(() => customerDashCache[user?.id]?.insps || []);
+  const [loading, setLoading] = useState(() => !customerDashCache[user?.id]);
 
   // First-visit: ensure customer has a direct line to an admin.
   useEffect(() => {
@@ -60,7 +64,7 @@ const CustomerDashboard = () => {
     if (!user?.id) return;
     let cancelled = false;
     (async () => {
-      setLoading(true);
+      if (!customerDashCache[user.id]) setLoading(true);
       try {
         const nowIso = new Date().toISOString().replace('T', ' ');
         const [appts, insps] = await Promise.all([
@@ -93,6 +97,7 @@ const CustomerDashboard = () => {
         if (!cancelled) {
           setUpcomingAppointments(appts);
           setPastInspections(insps);
+          customerDashCache[user.id] = { appts, insps };
         }
       } catch (e) {
         console.error('Failed to load customer dashboard', e);

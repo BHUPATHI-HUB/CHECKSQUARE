@@ -412,6 +412,7 @@ const supaAdapter = {
 // Covers the limited PB filter dialect actually used in this codebase:
 //   • field = "value"       → .eq(field, value)
 //   • field != "value"      → .neq(field, value)
+//   • field >= / <= / > / < → .gte / .lte / .gt / .lt (dates & numbers)
 //   • field ~ "value"       → .ilike(field, %value%)
 //   • A && B                → chain both
 function applyPbFilter(query, filter) {
@@ -419,8 +420,14 @@ function applyPbFilter(query, filter) {
   const parts = filter.split('&&').map((s) => s.trim()).filter(Boolean);
   for (const part of parts) {
     let m;
-    if ((m = /^(\w+)\s*=\s*"([^"]*)"$/.exec(part)))      query = query.eq(snakeKey(m[1]), m[2]);
+    // Order matters: match the two-char operators (>=, <=, !=) before the
+    // single-char ones (=, >, <) so ">=" isn't mis-parsed as "=".
+    if ((m = /^(\w+)\s*>=\s*"([^"]*)"$/.exec(part)))      query = query.gte(snakeKey(m[1]), m[2]);
+    else if ((m = /^(\w+)\s*<=\s*"([^"]*)"$/.exec(part))) query = query.lte(snakeKey(m[1]), m[2]);
     else if ((m = /^(\w+)\s*!=\s*"([^"]*)"$/.exec(part))) query = query.neq(snakeKey(m[1]), m[2]);
+    else if ((m = /^(\w+)\s*>\s*"([^"]*)"$/.exec(part)))  query = query.gt(snakeKey(m[1]), m[2]);
+    else if ((m = /^(\w+)\s*<\s*"([^"]*)"$/.exec(part)))  query = query.lt(snakeKey(m[1]), m[2]);
+    else if ((m = /^(\w+)\s*=\s*"([^"]*)"$/.exec(part)))  query = query.eq(snakeKey(m[1]), m[2]);
     else if ((m = /^(\w+)\s*~\s*"([^"]*)"$/.exec(part)))  query = query.ilike(snakeKey(m[1]), `%${m[2]}%`);
     // Unsupported tokens: silently skip (caller can fall back to client-side filter).
   }
