@@ -309,15 +309,6 @@ const RoomPhotoManager = ({ open, onOpenChange, room, onSave }) => {
     return lib[roomKey] || lib['General'] || [];
   }, [settings?.commentLibrary, roomKey, libraryEntries.length]);
 
-  // Spec update: corners are now numbered (Corner 1..N). Default to 4 slots
-  // but inspector can add more without limit.
-  const [extraCornerCount, setExtraCornerCount] = useState(0);
-  const totalSlots = Math.max(4 + extraCornerCount, cornerPhotos.length);
-  const cornerSlots = useMemo(
-    () => Array.from({ length: totalSlots }, (_, i) => `Corner ${i + 1}`),
-    [totalSlots],
-  );
-
   const setCornerPhoto = (cornerLabel, newPhoto) => {
     setCornerPhotos(prev => {
       const filtered = prev.filter(p => p.corner !== cornerLabel);
@@ -391,6 +382,7 @@ const RoomPhotoManager = ({ open, onOpenChange, room, onSave }) => {
   };
 
   const phaseBLocked = cornerPhotos.length === 0;
+  const nextCornerLabel = `Corner ${(cornerPhotos.length || 0) + 1}`;
 
   const addDefect = () => {
     if (phaseBLocked) {
@@ -492,39 +484,56 @@ const RoomPhotoManager = ({ open, onOpenChange, room, onSave }) => {
               </Badge>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {cornerSlots.map((cornerLabel) => {
-                const existing = cornerPhotos.find(p => p.corner === cornerLabel);
-                return (
-                  <div key={cornerLabel} className="border rounded-xl p-4 bg-muted/30">
-                    <p className="font-medium text-sm mb-2">{cornerLabel}</p>
-                    <PhotoSlot
-                      label={null}
-                      photo={existing}
-                      onChange={(photo) => setCornerPhoto(cornerLabel, photo)}
-                      onAddMany={(files) => addCornerPhotosFrom(cornerLabel, files)}
-                      multiple
-                      onRemove={() => setCornerPhoto(cornerLabel, null)}
-                      ariaLabel={cornerLabel}
-                      inspectionId={room?.id}
-                      roomKey={roomKey}
-                      disabled={cornerUpload.active}
-                    />
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="mt-4 flex justify-center">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setExtraCornerCount(c => c + 1)}
-              >
-                <Plus className="w-4 h-4 mr-1.5" /> Add another corner slot
-              </Button>
-            </div>
+            {cornerPhotos.length === 0 ? (
+              <div className="rounded-2xl border-2 border-dashed border-primary/25 bg-primary/[0.03] p-4">
+                <p className="mb-3 text-sm font-medium">Start your room album</p>
+                <PhotoSlot
+                  photo={null}
+                  onChange={(photo) => setCornerPhoto('Corner 1', photo)}
+                  onAddMany={(files) => addCornerPhotosFrom('Corner 1', files)}
+                  multiple
+                  onRemove={() => {}}
+                  ariaLabel="Add corner photos"
+                  inspectionId={room?.id}
+                  roomKey={roomKey}
+                  disabled={cornerUpload.active}
+                />
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                {cornerPhotos.map((photo, index) => {
+                  const cornerLabel = photo.corner || `Corner ${index + 1}`;
+                  return (
+                    <div key={photo.id || cornerLabel} className="relative rounded-2xl border bg-background p-2 shadow-sm">
+                      <p className="px-1 pb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{cornerLabel}</p>
+                      <PhotoSlot
+                        photo={photo}
+                        onChange={(next) => setCornerPhoto(cornerLabel, next)}
+                        onRemove={() => setCornerPhoto(cornerLabel, null)}
+                        ariaLabel={cornerLabel}
+                        inspectionId={room?.id}
+                        roomKey={roomKey}
+                        disabled={cornerUpload.active}
+                      />
+                    </div>
+                  );
+                })}
+                <div className="rounded-2xl border-2 border-dashed border-muted-foreground/25 bg-muted/20 p-2">
+                  <p className="px-1 pb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Add photos</p>
+                  <PhotoSlot
+                    photo={null}
+                    onChange={(photo) => setCornerPhoto(nextCornerLabel, photo)}
+                    onAddMany={(files) => addCornerPhotosFrom(nextCornerLabel, files)}
+                    multiple
+                    onRemove={() => {}}
+                    ariaLabel="Add more corner photos"
+                    inspectionId={room?.id}
+                    roomKey={roomKey}
+                    disabled={cornerUpload.active}
+                  />
+                </div>
+              </div>
+            )}
             {cornerUpload.active && (
               <p className="mt-3 text-center text-xs text-muted-foreground" role="status">
                 Adding corner photos {cornerUpload.done}/{cornerUpload.total}… please keep this window open.
