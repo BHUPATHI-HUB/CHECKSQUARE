@@ -57,8 +57,8 @@ async function getSqliteConnection() {
       return db;
     } catch (err) {
       // eslint-disable-next-line no-console
-      console.warn('[localDb] SQLite unavailable, using localStorage fallback:', err?.message || err);
-      return null;
+      sqlitePromise = null;
+      throw new Error('Device database could not be opened. Your inspection has not been saved.', { cause: err });
     }
   })();
   return sqlitePromise;
@@ -66,20 +66,11 @@ async function getSqliteConnection() {
 
 // ── localStorage (fallback) layer ────────────────────────────────────────
 function lsReadCollection(collection) {
-  try {
-    const raw = localStorage.getItem(LS_PREFIX + collection);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
+  const raw = localStorage.getItem(LS_PREFIX + collection);
+  return raw ? JSON.parse(raw) : [];
 }
 function lsWriteCollection(collection, rows) {
-  try {
-    localStorage.setItem(LS_PREFIX + collection, JSON.stringify(rows));
-  } catch (err) {
-    // eslint-disable-next-line no-console
-    console.warn('[localDb] localStorage write failed:', err?.message || err);
-  }
+  localStorage.setItem(LS_PREFIX + collection, JSON.stringify(rows));
 }
 
 // ── Unified document access ──────────────────────────────────────────────
@@ -95,11 +86,11 @@ async function readAll(collection) {
       const rows = (res.values || []).map((r) => {
         try { return JSON.parse(r.data); } catch { return null; }
       }).filter(Boolean);
-      if (rows.length > 0) return rows;
+      return rows;
     }
   } catch (err) {
     // eslint-disable-next-line no-console
-    console.warn('[localDb] readAll SQLite failed, using localStorage:', err?.message || err);
+    throw err;
   }
   return lsReadCollection(collection);
 }
@@ -111,12 +102,13 @@ async function readOne(collection, id) {
       const res = await db.query('SELECT data FROM documents WHERE collection = ? AND id = ? LIMIT 1', [collection, id]);
       const row = res.values?.[0];
       if (row) {
-        try { return JSON.parse(row.data); } catch { /* fall through to LS */ }
+        return JSON.parse(row.data);
       }
+      return null;
     }
   } catch (err) {
     // eslint-disable-next-line no-console
-    console.warn('[localDb] readOne SQLite failed, using localStorage:', err?.message || err);
+    throw err;
   }
   return lsReadCollection(collection).find((r) => r.id === id) || null;
 }
@@ -141,14 +133,15 @@ async function writeOne(collection, record) {
          ON CONFLICT(collection, id) DO UPDATE SET data = excluded.data, updated = excluded.updated`,
         [collection, full.id, JSON.stringify(full), created, updated],
       );
+      return full;
     }
   } catch (err) {
     // eslint-disable-next-line no-console
-    console.warn('[localDb] writeOne SQLite failed, using localStorage:', err?.message || err);
+    throw err;
   }
 
-  // Always mirror to localStorage (best-effort) so a save is never lost.
-  try { lsUpsert(collection, full); } catch { /* quota — SQLite still holds it */ }
+  // Browser fallback must also acknowledge a durable write before success.
+  lsUpsert(collection, full);
 
   return full;
 }
@@ -156,14 +149,15 @@ async function writeOne(collection, record) {
 async function deleteOne(collection, id) {
   try {
     const db = await getSqliteConnection();
-    if (db) await db.run('DELETE FROM documents WHERE collection = ? AND id = ?', [collection, id]);
+    if (db) {
+      await db.run('DELETE FROM documents WHERE collection = ? AND id = ?', [collection, id]);
+      return;
+    }
   } catch (err) {
     // eslint-disable-next-line no-console
-    console.warn('[localDb] deleteOne SQLite failed:', err?.message || err);
+    throw err;
   }
-  try {
-    lsWriteCollection(collection, lsReadCollection(collection).filter((r) => r.id !== id));
-  } catch { /* ignore */ }
+  lsWriteCollection(collection, lsReadCollection(collection).filter((r) => r.id !== id));
 }
 
 // ── Tiny PB-style filter evaluator ───────────────────────────────────────
@@ -183,7 +177,16 @@ function matchesFilter(record, filter) {
       if (m) return record[m[1]] != null;
       m = clause.match(/^(\w+)\s*=\s*"([^"]*)"$/);
       if (m) return String(record[m[1]] ?? '') === m[2];
-      return true; // unknown clause → don't exclude
+      m = clause.match(/^(\w+)\s*(>=|<=|!=|>|<)\s*"([^"]*)"$/);
+      if (m) {
+        const value = record[m[1]] ?? '';
+        if (m[2] === '>=') return value >= m[3];
+        if (m[2] === '<=') return value <= m[3];
+        if (m[2] === '!=') return value !== m[3];
+        if (m[2] === '>') return value > m[3];
+        return value < m[3];
+      }
+      throw new Error(`Unsupported local filter: ${clause}`);
     });
 }
 

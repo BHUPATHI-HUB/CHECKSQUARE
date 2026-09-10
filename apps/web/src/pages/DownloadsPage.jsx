@@ -15,7 +15,7 @@ import {
 import { Download, Trash2, FileText, FileSpreadsheet, FileType2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { saveFile } from '@/utils/saveFile';
-import { IS_OFFLINE_ADMIN } from '@/lib/appTarget.js';
+import { USE_LOCAL_INSPECTION_STORAGE } from '@/lib/appTarget.js';
 
 const formatIcon = (fmt) => {
 	if (fmt === 'pdf')  return <FileType2 className="w-5 h-5 text-red-500" />;
@@ -58,10 +58,10 @@ const DownloadsPage = () => {
 
 	const handleDownload = async (rec) => {
 		// Offline build: re-open / share the file already saved on the device.
-		if (IS_OFFLINE_ADMIN) {
+		if (USE_LOCAL_INSPECTION_STORAGE) {
 			try {
 				const { Capacitor } = await import('@capacitor/core');
-				if (Capacitor?.isNativePlatform?.()) {
+				if (Capacitor?.isNativePlatform?.() && rec.docPath) {
 					const { Filesystem, Directory } = await import('@capacitor/filesystem');
 					const { Share } = await import('@capacitor/share');
 					const { uri } = await Filesystem.getUri({
@@ -78,7 +78,7 @@ const DownloadsPage = () => {
 			}
 			return;
 		}
-		if (!rec.file) {
+		if (!rec.file && !rec.storage_key) {
 			toast.error('This download has no stored file. It may have been generated before sync.');
 			return;
 		}
@@ -120,7 +120,9 @@ const DownloadsPage = () => {
 					<div>
 						<h1 className="text-2xl sm:text-3xl font-bold tracking-tight">My Downloads</h1>
 						<p className="text-sm text-muted-foreground mt-1">
-							Reports you&rsquo;ve downloaded, synced across all your devices.
+							{USE_LOCAL_INSPECTION_STORAGE
+								? 'Reports saved on this device. Use Share to send a report when needed.'
+								: 'Reports you have downloaded, synced across all your devices.'}
 						</p>
 					</div>
 					<Button variant="outline" size="sm" onClick={load} disabled={loading}>
@@ -136,8 +138,9 @@ const DownloadsPage = () => {
 						<CardHeader>
 							<CardTitle>No downloads yet</CardTitle>
 							<CardDescription>
-								When you download a PDF or DOCX report, it will appear here and
-								sync to all your devices automatically.
+								{USE_LOCAL_INSPECTION_STORAGE
+									? 'Export a PDF, DOCX or XLSX report to save it on this device and list it here.'
+									: 'When you download a PDF or DOCX report, it will appear here and sync to all your devices automatically.'}
 							</CardDescription>
 						</CardHeader>
 					</Card>
@@ -157,8 +160,8 @@ const DownloadsPage = () => {
 											</Badge>
 										</div>
 										<p className="text-xs text-muted-foreground mt-0.5">
-											{prettyBytes(rec.fileSize)} ·{' '}
-											{new Date(rec.created).toLocaleString()}
+											{prettyBytes(rec.fileSize ?? rec.file_size)} ·{' '}
+											{new Date(rec.created || rec.created_at).toLocaleString()}
 											{rec.expand?.inspection?.metadata?.propertyAddress && (
 												<>
 													{' · '}
@@ -177,8 +180,8 @@ const DownloadsPage = () => {
 											size="sm"
 											variant="outline"
 											onClick={() => handleDownload(rec)}
-											disabled={!rec.file}
-											title={rec.file ? 'Re-download' : 'No stored file'}
+											disabled={!USE_LOCAL_INSPECTION_STORAGE && !rec.file && !rec.storage_key}
+											title={USE_LOCAL_INSPECTION_STORAGE ? 'Open or share saved report' : ((rec.file || rec.storage_key) ? 'Re-download' : 'No stored file')}
 										>
 											<Download className="w-4 h-4" />
 											<span className="hidden sm:inline ml-2">Download</span>
@@ -207,9 +210,9 @@ const DownloadsPage = () => {
 					<DialogHeader>
 						<DialogTitle>Permanently delete?</DialogTitle>
 						<DialogDescription>
-							This will permanently remove <strong>{confirm?.filename}</strong> and
-							its stored file from the server. The copy already on your device
-							is not affected. This cannot be undone.
+							{USE_LOCAL_INSPECTION_STORAGE
+								? <>Remove <strong>{confirm?.filename}</strong> from this list? The file remains in your device Documents folder.</>
+								: <>This will permanently remove <strong>{confirm?.filename}</strong> and its stored file from the server. The copy already on your device is not affected. This cannot be undone.</>}
 						</DialogDescription>
 					</DialogHeader>
 					<DialogFooter className="gap-2">

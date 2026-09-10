@@ -22,7 +22,7 @@ import {
   putPhotoBlob, getPhotoBlob, markPhotoSynced, deletePhotoBlob, enqueue,
 } from '@/lib/localStore.js';
 import { requestSync } from '@/services/syncEngine.js';
-import { IS_OFFLINE_ADMIN } from '@/lib/appTarget.js';
+import { IS_OFFLINE_ADMIN, USE_LOCAL_INSPECTION_STORAGE } from '@/lib/appTarget.js';
 import offlinePhoto from '@/lib/localPhotoStorage.js';
 
 const SIGNED_URL_TTL_SECONDS = 60 * 60; // 1 h
@@ -145,10 +145,10 @@ async function resizeImageFile(file, maxEdge, quality) {
  *           — storageKey when Supabase succeeded; url when falling back to base64.
  */
 export async function uploadInspectionPhoto(file, { inspectionId = 'draft', roomKey = 'misc', maxEdge = 0, quality = 0.85 } = {}) {
-  if (IS_OFFLINE_ADMIN) return offlinePhoto.uploadInspectionPhoto(file, { inspectionId, roomKey });
   const id = makePhotoId();
   // Resize/compress up-front so BOTH the upload and the local cache are small.
   file = await resizeImageFile(file, maxEdge, quality);
+  if (USE_LOCAL_INSPECTION_STORAGE) return offlinePhoto.uploadInspectionPhoto(file, { inspectionId, roomKey });
   const capturedAt = new Date().toISOString();
 
   // Fallback path keeps the old behaviour alive when Supabase isn't set up yet.
@@ -201,7 +201,7 @@ export async function uploadInspectionPhoto(file, { inspectionId = 'draft', room
  *   - { storageKey }   — Supabase-managed              → short-lived signed URL
  */
 export async function getInspectionPhotoUrl(photo) {
-  if (IS_OFFLINE_ADMIN) return offlinePhoto.getInspectionPhotoUrl(photo);
+  if (IS_OFFLINE_ADMIN || photo?.filePath) return offlinePhoto.getInspectionPhotoUrl(photo);
   if (!photo) return '';
   if (photo.url) return photo.url;
   if (!photo.storageKey || !isSupabaseConfigured) return '';
@@ -223,7 +223,7 @@ export async function getInspectionPhotoUrl(photo) {
 
 /** Permanently delete a photo (called from RoomPhotoManager onRemove). */
 export async function deleteInspectionPhoto(photo) {
-  if (IS_OFFLINE_ADMIN) return offlinePhoto.deleteInspectionPhoto(photo);
+  if (IS_OFFLINE_ADMIN || photo?.filePath) return offlinePhoto.deleteInspectionPhoto(photo);
   if (!photo?.storageKey || !isSupabaseConfigured) return;
   await supabase.storage.from(SUPABASE_PHOTO_BUCKET).remove([photo.storageKey]);
 }
@@ -234,7 +234,7 @@ export async function deleteInspectionPhoto(photo) {
  * bytes guarantees the report stays self-contained).
  */
 export async function getInspectionPhotoDataUrl(photo) {
-  if (IS_OFFLINE_ADMIN) return offlinePhoto.getInspectionPhotoDataUrl(photo);
+  if (IS_OFFLINE_ADMIN || photo?.filePath) return offlinePhoto.getInspectionPhotoDataUrl(photo);
   if (!photo) return '';
   if (photo.url) return photo.url;            // already a dataURL or external URL
   // Local-first for reports too — embed the on-device Blob if not yet synced.
@@ -284,7 +284,7 @@ export async function materializeInspectionPhotos(inspection) {
   const queue = [];
   const visit = (val) => {
     if (!val || typeof val !== 'object') return;
-    if (val.storageKey && !val.url) queue.push(val);
+    if ((val.storageKey || val.filePath) && !val.url) queue.push(val);
     if (Array.isArray(val)) val.forEach(visit);
     else Object.values(val).forEach(visit);
   };

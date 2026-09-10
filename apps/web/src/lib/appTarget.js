@@ -15,6 +15,8 @@ export const APP_TARGET = import.meta.env?.VITE_APP_TARGET || 'web';
 
 export const IS_OFFLINE_ADMIN = APP_TARGET === 'offline-admin';
 export const IS_HYBRID_APK = APP_TARGET === 'hybrid-apk';
+// Large inspection records, photos and reports never auto-upload in app builds.
+export const USE_LOCAL_INSPECTION_STORAGE = IS_OFFLINE_ADMIN || IS_HYBRID_APK;
 
 // The one and only identity the offline build ever runs as. There is no login
 // screen and no second party to sync with, so this is hardcoded.

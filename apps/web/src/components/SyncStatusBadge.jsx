@@ -1,6 +1,7 @@
 import React from 'react';
 import { RefreshCw, AlertTriangle } from 'lucide-react';
 import { useSyncStatus } from '@/hooks/useSyncStatus.js';
+import { USE_LOCAL_INSPECTION_STORAGE } from '@/lib/appTarget.js';
 
 // Floating indicator shown only when there are offline operations waiting to
 // sync (or storage is getting full). Tapping it forces a sync / retry. Hidden
@@ -8,6 +9,7 @@ import { useSyncStatus } from '@/hooks/useSyncStatus.js';
 // noise when everything is up to date.
 const SyncStatusBadge = () => {
   const { pending, failed, storage, syncNow, retryFailed } = useSyncStatus();
+  if (USE_LOCAL_INSPECTION_STORAGE) return null;
 
   const storageFull = storage?.ratio >= 0.85;
   if (!pending && !storageFull) return null;

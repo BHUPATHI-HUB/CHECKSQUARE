@@ -10,7 +10,7 @@ import { Capacitor } from '@capacitor/core';
 import { toast } from 'sonner';
 import pb from '@/lib/pocketbaseClient';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
-import { IS_OFFLINE_ADMIN, OFFLINE_ADMIN_USER } from '@/lib/appTarget.js';
+import { IS_OFFLINE_ADMIN, USE_LOCAL_INSPECTION_STORAGE, OFFLINE_ADMIN_USER } from '@/lib/appTarget.js';
 import data from '@/services/dataService.js';
 
 const isNative = () => {
@@ -92,18 +92,18 @@ export async function saveFile(blob, filename, opts = {}) {
 	// 2. Sync report download record (best-effort — silent on failure).
 	const USE_SUPABASE_DB = isSupabaseConfigured && (import.meta.env?.VITE_USE_SUPABASE_DB === 'true');
 
-	if (sync && IS_OFFLINE_ADMIN) {
+	if (sync && USE_LOCAL_INSPECTION_STORAGE) {
 		// Offline build: record the download in local SQLite so the Downloads
 		// page lists it. Store the Documents-relative path so it can be
 		// re-opened / shared later from the device.
 		try {
 			await data.createReportDownload({
-				user: OFFLINE_ADMIN_USER.id,
+				user: IS_OFFLINE_ADMIN ? OFFLINE_ADMIN_USER.id : (opts.userId || null),
 				inspection: inspectionId || null,
 				filename,
 				format: extToFormat(filename),
 				fileSize: blob.size || 0,
-				docPath: filename,
+				docPath: nativeUri ? filename : null,
 				url: nativeUri || null,
 				created: new Date().toISOString(),
 			});

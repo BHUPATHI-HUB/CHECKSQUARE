@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { useBlocker } from 'react-router-dom';
 
 /**
  * Warns / confirms before the user leaves a page with unsaved work.
@@ -19,7 +20,16 @@ export default function useUnsavedChangesWarning(
 	when,
 	message = 'You have an inspection in progress. Are you sure you want to leave? Unsaved changes will be lost.'
 ) {
-	// Browser tab close / refresh / web back-button.
+	const allowRef = useRef(false);
+	const blocker = useBlocker(({ currentLocation, nextLocation }) =>
+		when && !allowRef.current && (currentLocation.pathname !== nextLocation.pathname
+			|| currentLocation.search !== nextLocation.search));
+	useEffect(() => {
+		if (blocker.state !== 'blocked') return;
+		if (window.confirm(message)) blocker.proceed();
+		else blocker.reset();
+	}, [blocker, message]);
+	// Browser tab close / refresh.
 	useEffect(() => {
 		if (!when) return;
 		const handler = (e) => {
@@ -41,15 +51,14 @@ export default function useUnsavedChangesWarning(
 				if (!Capacitor?.isNativePlatform?.()) return;
 				const { App } = await import('@capacitor/app');
 				const sub = await App.addListener('backButton', ({ canGoBack } = {}) => {
-					if (!when) {
+					if (canGoBack || window.history.length > 1) {
 						// No unsaved work — preserve normal Android back semantics:
 						// navigate back if possible, otherwise exit the app.
-						if (canGoBack || window.history.length > 1) window.history.back();
-						else App.exitApp?.();
+						window.history.back(); // Router blocker handles the confirmation.
 						return;
 					}
-					if (window.confirm(message)) {
-						window.history.back();
+					if (!when || window.confirm(message)) {
+						App.exitApp?.();
 					}
 				});
 				if (cancelled) sub.remove();
@@ -64,4 +73,5 @@ export default function useUnsavedChangesWarning(
 			subRef.current = null;
 		};
 	}, [when, message]);
+	return () => { allowRef.current = true; };
 }

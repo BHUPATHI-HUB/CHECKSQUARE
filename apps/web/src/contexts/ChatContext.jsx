@@ -133,16 +133,8 @@ export const ChatProvider = ({ children }) => {
     if (!user || !chatId) return;
     if (!content?.trim() && (!attachments || attachments.length === 0)) return;
     try {
-      const form = new FormData();
-      form.append('chatId', chatId);
-      form.append('senderId', user.id);
-      form.append('senderName', user.name || user.email);
       // schema enum: Admin / Inspector / Customer (capitalized)
       const role = (user.role || 'customer').charAt(0).toUpperCase() + (user.role || 'customer').slice(1);
-      form.append('senderRole', ['Admin', 'Inspector', 'Customer'].includes(role) ? role : 'Customer');
-      form.append('content', content?.trim() || '📎 Attachment');
-      form.append('readBy', JSON.stringify([user.id]));
-      (attachments || []).forEach((f) => form.append('attachments', f));
 
       await data.sendMessage({
         chatId, senderId: user.id,
@@ -150,6 +142,7 @@ export const ChatProvider = ({ children }) => {
         senderRole: ['Admin', 'Inspector', 'Customer'].includes(role) ? role : 'Customer',
         content: content?.trim() || '📎 Attachment',
         readBy: [user.id],
+        attachments,
       });
     } catch (error) {
       console.error('Error sending message:', error);
@@ -163,28 +156,13 @@ export const ChatProvider = ({ children }) => {
   // useEffect re-runs (which were causing the chat loader to blink).
   const markAsRead = useCallback(async (chatId) => {
     if (!user || !chatId) return;
-    let unread = [];
-    setMessages((prev) => {
-      const list = prev[chatId] || [];
-      unread = list.filter((m) => m.senderId !== user.id && (!m.readBy || !m.readBy.includes(user.id)));
-      if (unread.length === 0) return prev;
-      // Optimistic local update
-      return {
-        ...prev,
-        [chatId]: list.map((m) =>
-          unread.find((u) => u.id === m.id)
-            ? { ...m, readBy: [...(m.readBy || []), user.id] }
-            : m,
-        ),
-      };
-    });
-    if (unread.length === 0) return;
     try {
-      await Promise.allSettled(
-        unread.map((m) =>
-          data.updateMessage(m.id, { readBy: [...(m.readBy || []), user.id] }),
-        ),
-      );
+      const list = await data.listMessages(chatId);
+      const unread = list.filter((m) => m.senderId !== user.id && !(m.readBy || []).includes(user.id));
+      const updated = await Promise.all(unread.map((m) =>
+        data.updateMessage(m.id, { readBy: [...(m.readBy || []), user.id] })));
+      const byId = new Map(updated.map((m) => [m.id, m]));
+      setMessages((prev) => ({ ...prev, [chatId]: (prev[chatId] || list).map((m) => byId.get(m.id) || m) }));
     } catch (error) {
       console.error('Error marking as read:', error);
     }
@@ -286,10 +264,10 @@ export const ChatProvider = ({ children }) => {
       };
     }
     const handle = (e) => {
-      if (e.record.chatId !== chatId) return;
+      if (e.action !== 'delete' && e.record.chatId !== chatId) return;
       setMessages((prev) => {
         const list = prev[chatId] || [];
-        if (e.action === 'create') return { ...prev, [chatId]: [...list, e.record] };
+        if (e.action === 'create') return { ...prev, [chatId]: [...list.filter((m) => m.id !== e.record.id), e.record] };
         if (e.action === 'update') return { ...prev, [chatId]: list.map((m) => (m.id === e.record.id ? e.record : m)) };
         if (e.action === 'delete') return { ...prev, [chatId]: list.filter((m) => m.id !== e.record.id) };
         return prev;

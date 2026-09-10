@@ -1,6 +1,7 @@
 import React from 'react';
 import { WifiOff } from 'lucide-react';
 import useOnlineStatus from '@/hooks/useOnlineStatus';
+import { USE_LOCAL_INSPECTION_STORAGE } from '@/lib/appTarget.js';
 
 /**
  * Fixed-position banner shown when the device goes offline.
@@ -19,8 +20,9 @@ export default function OfflineBanner() {
 			<div className="max-w-5xl mx-auto px-4 py-2 flex items-center gap-2 text-sm font-medium">
 				<WifiOff className="w-4 h-4 flex-shrink-0" />
 				<span>
-					You&rsquo;re offline. You can browse previously loaded data, but new
-					inspections, edits and uploads won&rsquo;t save until you reconnect.
+					{USE_LOCAL_INSPECTION_STORAGE
+						? 'You are offline. Inspections, photos and reports save on this device. Online services will be available when you reconnect.'
+						: 'You are offline. You can browse previously loaded data, but new inspections, edits and uploads will not save until you reconnect.'}
 				</span>
 			</div>
 		</div>

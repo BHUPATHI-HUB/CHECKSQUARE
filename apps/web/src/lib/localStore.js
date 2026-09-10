@@ -50,7 +50,7 @@ function openDB() {
 
 async function tx(storeName, mode, fn) {
   let db;
-  try { db = await openDB(); } catch { return undefined; }
+  db = await openDB();
   return new Promise((resolve, reject) => {
     const t = db.transaction(storeName, mode);
     const store = t.objectStore(storeName);
@@ -71,13 +71,11 @@ export const isOfflineStoreAvailable = () => typeof indexedDB !== 'undefined';
 
 // ─── photos ───────────────────────────────────────────────────────────────
 export async function putPhotoBlob({ path, blob, contentType, inspectionId }) {
-  try {
     await tx(STORES.photos, 'readwrite', (s) => s.put({
       path, blob, contentType: contentType || 'image/jpeg',
       inspectionId: inspectionId || null,
       syncStatus: 'pending', createdAt: Date.now(),
     }));
-  } catch { /* non-fatal */ }
 }
 
 export async function getPhotoBlob(path) {
@@ -101,11 +99,9 @@ export async function deletePhotoBlob(path) {
 
 // ─── outbox ─────────────────────────────────────────────────────────────
 export async function enqueue(op) {
-  try {
     return await tx(STORES.outbox, 'readwrite', (s) => reqToPromise(s.add({
       ...op, tries: 0, nextAttemptAt: Date.now(), createdAt: Date.now(),
     })));
-  } catch { return null; }
 }
 
 export async function listOutbox() {
@@ -170,11 +166,24 @@ export async function getStorageEstimate() {
 
 // ─── inspections (offline-saved) ─────────────────────────────────────────
 export async function putPendingInspection(inspection) {
-  try {
     await tx(STORES.inspections, 'readwrite', (s) => s.put({
       ...inspection, syncStatus: 'pending', updatedAt: Date.now(),
     }));
-  } catch { /* non-fatal */ }
+}
+
+// A successful offline save must commit BOTH the record and its sync request.
+export async function queueInspection(inspection) {
+  const db = await openDB();
+  const now = Date.now();
+  return new Promise((resolve, reject) => {
+    const t = db.transaction([STORES.inspections, STORES.outbox], 'readwrite');
+    t.objectStore(STORES.inspections).put({ ...inspection, syncStatus: 'pending', updatedAt: now });
+    t.objectStore(STORES.outbox).add({ type: 'upsertInspection', id: undefined,
+      inspectionId: inspection.id, tries: 0, nextAttemptAt: now, createdAt: now });
+    t.oncomplete = () => resolve(inspection);
+    t.onerror = () => reject(t.error);
+    t.onabort = () => reject(t.error);
+  });
 }
 
 export async function getPendingInspection(id) {

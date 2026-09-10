@@ -282,7 +282,7 @@ const InspectionForm = ({ existingInspection = null, isEditing = false }) => {
       !!(formData?.metadata?.preparedFor || '').trim() ||
       (formData?.roomInspections?.length || 0) > 0
     );
-  useUnsavedChangesWarning(isDirty);
+  const allowNavigation = useUnsavedChangesWarning(isDirty);
 
   useEffect(() => {
     if (!existingInspection) {
@@ -681,6 +681,7 @@ const InspectionForm = ({ existingInspection = null, isEditing = false }) => {
     setSubmitting(false);
 
     if (!saved) return; // hook already toasted the error
+    allowNavigation();
 
     localStorage.removeItem('inspection-draft');
     const successTitle =

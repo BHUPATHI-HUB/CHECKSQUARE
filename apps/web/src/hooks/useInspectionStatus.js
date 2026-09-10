@@ -1,9 +1,9 @@
 import { useCallback } from 'react';
 import { toast } from 'sonner';
-import data from '@/services/dataService.js';
-import { putPendingInspection, enqueue, listPendingInspections, getPendingInspection, putCachedList, getCachedList } from '@/lib/localStore.js';
+import data, { dataBackend } from '@/services/dataService.js';
+import { queueInspection, listPendingInspections, getPendingInspection, putCachedList, getCachedList } from '@/lib/localStore.js';
 import { requestSync, isNetworkError } from '@/services/syncEngine.js';
-import { IS_OFFLINE_ADMIN } from '@/lib/appTarget.js';
+import { USE_LOCAL_INSPECTION_STORAGE } from '@/lib/appTarget.js';
 
 // Stale-while-revalidate cache so navigating away from a dashboard and back
 // shows the last known list INSTANTLY instead of a blank screen plus a full
@@ -208,9 +208,9 @@ export const useInspectionStatus = () => {
     // Client-stable id so an offline draft has a permanent identity that the
     // sync engine can upsert later without creating duplicates.
     const clientId = existingId || inspectionData.id
-      || (typeof crypto !== 'undefined' && crypto.randomUUID
+      || (dataBackend === 'pocketbase' ? Array.from(crypto.getRandomValues(new Uint8Array(15)), (n) => 'abcdefghijklmnopqrstuvwxyz0123456789'[n % 36]).join('') : (typeof crypto !== 'undefined' && crypto.randomUUID
         ? crypto.randomUUID()
-        : `local_${Date.now()}_${Math.random().toString(36).slice(2)}`);
+        : `local_${Date.now()}_${Math.random().toString(36).slice(2)}`));
 
     // Persist locally + queue for sync. Used when offline OR when a network
     // write fails, so the inspector never loses a submission with no signal.
@@ -219,8 +219,7 @@ export const useInspectionStatus = () => {
       const localRecord = {
         id: clientId, ...payload, created: now, updated: now, syncStatus: 'pending',
       };
-      await putPendingInspection(localRecord);
-      await enqueue({ type: 'upsertInspection', id: clientId });
+      await queueInspection(localRecord);
       requestSync();
       clearInspectionListCache();
       toast.success("Saved on device — it'll sync automatically when you're back online.");
@@ -230,19 +229,22 @@ export const useInspectionStatus = () => {
     // In the offline-admin build, localDb IS the durable store (there is no
     // cloud to sync to), so always write directly — never divert to the
     // pending-sync queue, which would hide records from delete/restore.
-    const offline = !IS_OFFLINE_ADMIN && typeof navigator !== 'undefined' && navigator.onLine === false;
-    if (offline) return queueLocally();
+    const offline = !USE_LOCAL_INSPECTION_STORAGE && typeof navigator !== 'undefined' && navigator.onLine === false;
+    if (offline) {
+      try { return await queueLocally(); }
+      catch (error) { toast.error('Could not save on this device. Keep this form open and free storage.'); return null; }
+    }
 
     try {
       let record;
       if (existingId) {
         record = await data.updateInspection(existingId, payload);
       } else {
-        record = await data.createInspection(payload);
+        record = await data.createInspection({ ...payload, id: clientId });
 
         // Every new inspection auto-provisions a group chat thread (inspector +
         // customer + admins). Best-effort — a failure must NOT block the save.
-        try {
+        if (!USE_LOCAL_INSPECTION_STORAGE) try {
           const adminIds = await data.listUsersByRole('admin').then((rows) => rows.map((r) => r.id));
           const participants = Array.from(new Set([
             ...adminIds, record.inspector, record.customer,
@@ -258,7 +260,10 @@ export const useInspectionStatus = () => {
       return record;
     } catch (error) {
       // Lost connectivity mid-save → don't fail, queue it instead.
-      if (isNetworkError(error)) return queueLocally();
+      if (!USE_LOCAL_INSPECTION_STORAGE && isNetworkError(error)) {
+        try { return await queueLocally(); }
+        catch { toast.error('Could not save on this device. Keep this form open and free storage.'); return null; }
+      }
       console.error('Failed to save inspection', error);
       toast.error('Failed to save inspection');
       return null;

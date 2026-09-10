@@ -1,6 +1,6 @@
 
 import React, { Suspense, lazy, useEffect } from 'react';
-import { Route, Routes, BrowserRouter as Router, Navigate } from 'react-router-dom';
+import { Route, createBrowserRouter, createRoutesFromElements, RouterProvider, Outlet, Navigate } from 'react-router-dom';
 import { AuthProvider } from '@/contexts/AuthContext.jsx';
 import { SettingsProvider } from '@/contexts/SettingsContext.jsx';
 import { ChatProvider } from '@/contexts/ChatContext.jsx';
@@ -42,25 +42,14 @@ const RouteFallback = () => (
   </div>
 );
 
-function App() {
-  // Kick off the offline sync engine once, app-wide. It drains the outbox on
-  // reconnect / foreground / a periodic timer so queued inspections + photos
-  // upload automatically when connectivity returns. Skipped entirely in the
-  // offline-admin build, which has no cloud to sync to.
-  useEffect(() => { if (!IS_OFFLINE_ADMIN) startSyncEngine(); }, []);
+const RouteShell = () => (<>
+  <ScrollToTop /><OfflineBanner /><SyncStatusBadge />
+  <Suspense fallback={<RouteFallback />}><Outlet /></Suspense>
+  <Toaster position="top-right" richColors closeButton />
+</>);
 
-  return (
-    <SettingsProvider>
-      <AuthProvider>
-        <SupabaseAuthProvider>
-        <FeedbackProvider>
-          <ChatProvider>
-            <Router>
-              <ScrollToTop />
-              <OfflineBanner />
-              <SyncStatusBadge />
-            <Suspense fallback={<RouteFallback />}>
-            <Routes>
+const router = createBrowserRouter(createRoutesFromElements(
+  <Route element={<RouteShell />}>
               {/* Public Routes */}
               <Route path="/" element={IS_OFFLINE_ADMIN ? <Navigate to="/admin/dashboard" replace /> : <HomePage />} />
               <Route path="/login" element={<LoginPage />} />
@@ -217,10 +206,25 @@ function App() {
               />
               <Route path="/thank-you" element={<ThankYouPage />} />
               <Route path="*" element={<NotFoundPage />} />
-            </Routes>
-            </Suspense>
-            <Toaster position="top-right" richColors closeButton />
-          </Router>
+
+  </Route>
+));
+
+function App() {
+  // Kick off the offline sync engine once, app-wide. It drains the outbox on
+  // reconnect / foreground / a periodic timer so queued inspections + photos
+  // upload automatically when connectivity returns. Skipped entirely in the
+  // offline-admin build, which has no cloud to sync to.
+  useEffect(() => { if (!IS_OFFLINE_ADMIN) startSyncEngine(); }, []);
+
+  return (
+    <SettingsProvider>
+      <AuthProvider>
+        <SupabaseAuthProvider>
+        <FeedbackProvider>
+          <ChatProvider>
+            <RouterProvider router={router} />
+
           </ChatProvider>
         </FeedbackProvider>
         </SupabaseAuthProvider>

@@ -10,6 +10,7 @@
 
 import { supabase, isSupabaseConfigured, SUPABASE_PHOTO_BUCKET } from '@/lib/supabaseClient.js';
 import data from '@/services/dataService.js';
+import { USE_LOCAL_INSPECTION_STORAGE } from '@/lib/appTarget.js';
 import {
   listOutbox, updateOutbox, deleteOutbox,
   getPhotoBlob, markPhotoSynced, deletePhotoBlob,
@@ -36,6 +37,7 @@ let running = false;
 
 async function handleOp(op) {
   if (op.type === 'uploadPhoto') {
+    if (!isSupabaseConfigured) throw new Error('Photo storage is not configured.');
     const rec = await getPhotoBlob(op.path);
     if (!rec?.blob) return; // already cleaned up / nothing to send
     const { error } = await supabase.storage
@@ -45,21 +47,22 @@ async function handleOp(op) {
     await markPhotoSynced(op.path);
     await deletePhotoBlob(op.path); // signed URLs serve it from now on
   } else if (op.type === 'upsertInspection') {
-    const insp = await getPendingInspection(op.id);
+    const inspectionId = op.inspectionId || op.id;
+    const insp = await getPendingInspection(inspectionId);
     if (!insp) return;
     await data.upsertInspection(insp);
-    await deletePendingInspection(op.id);
+    await deletePendingInspection(inspectionId);
   }
 }
 
 export async function drainOutbox() {
+  if (USE_LOCAL_INSPECTION_STORAGE) return;
   if (running) return;
-  if (!isSupabaseConfigured) return;
   if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
   running = true;
   try {
     // Make sure the access token is fresh (it can expire while offline).
-    try { await supabase.auth.getSession(); } catch { /* ignore */ }
+    try { if (isSupabaseConfigured) await supabase.auth.getSession(); } catch { /* ignore */ }
 
     const ops = (await listOutbox()).sort((a, b) => a.id - b.id);
     for (const op of ops) {
@@ -87,18 +90,21 @@ export async function drainOutbox() {
 // Debounced public trigger.
 let scheduled = null;
 export function requestSync() {
+  if (USE_LOCAL_INSPECTION_STORAGE) return;
   if (scheduled) return;
   scheduled = setTimeout(() => { scheduled = null; drainOutbox(); }, 300);
 }
 
 // Force every queued op to retry now (clears backoff), e.g. from a "Retry" tap.
 export async function retryFailed() {
+  if (USE_LOCAL_INSPECTION_STORAGE) return;
   await resetOutboxBackoff();
   drainOutbox();
 }
 
 let started = false;
 export function startSyncEngine() {
+  if (USE_LOCAL_INSPECTION_STORAGE) return;
   if (started || typeof window === 'undefined') return;
   started = true;
   // Ask for durable storage so queued photos aren't evicted under pressure.

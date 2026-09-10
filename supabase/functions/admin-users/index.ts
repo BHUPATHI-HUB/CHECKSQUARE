@@ -2,7 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 type AdminUsersBody = {
-  action?: "create" | "delete";
+  action?: "create" | "delete" | "reset-password";
   id?: string;
   email?: string;
   password?: string;
@@ -121,6 +121,15 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
 
     return json(200, { success: true, profile: profile || profilePayload });
+  }
+
+  if (action === "reset-password") {
+    const id = String(body.id || "").trim();
+    const password = String(body.password || "");
+    if (!id || password.length < 8) return json(400, { error: "id and a password of at least 8 characters are required" });
+    const { error } = await serviceClient.auth.admin.updateUserById(id, { password });
+    if (error) return json(400, { error: error.message });
+    return json(200, { success: true, id });
   }
 
   if (action === "delete") {

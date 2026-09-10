@@ -75,7 +75,7 @@ const toSupabaseUserSession = (authUser, profile) => {
     id: authUser.id,
     email: profile?.email || authUser.email,
     name: profile?.name || meta.full_name || meta.name || authUser.email,
-    role: profile?.role || meta.role || 'customer',
+    role: profile?.role || 'customer',
     phone: profile?.phone || meta.phone || '',
     address: profile?.address || meta.address || '',
   };

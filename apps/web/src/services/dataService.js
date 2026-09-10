@@ -48,7 +48,9 @@ const pbAdapter = {
     if (payload.id) {
       try {
         return await pb.collection('inspections').update(payload.id, payload, { $autoCancel: false });
-      } catch (_) { /* not found → create below */ }
+      } catch (error) {
+        if (error?.status !== 404) throw error;
+      }
     }
     return pb.collection('inspections').create(payload, { $autoCancel: false });
   },
@@ -137,7 +139,12 @@ const pbAdapter = {
   },
   async sendMessage(payload) {
     const pb = await getPB();
-    return pb.collection('messages').create(payload, { $autoCancel: false });
+    const form = new FormData();
+    for (const [key, value] of Object.entries(payload)) {
+      if (key === 'attachments') (value || []).forEach((file) => form.append(key, file));
+      else if (value !== undefined) form.append(key, typeof value === 'object' ? JSON.stringify(value) : value);
+    }
+    return pb.collection('messages').create(form, { $autoCancel: false });
   },
   async updateMessage(id, payload) {
     const pb = await getPB();
@@ -253,7 +260,7 @@ const supaAdapter = {
     return rowToInspection(data);
   },
   async createInspection(payload) {
-    const { data, error } = await supabase.from('inspections').insert(inspectionToRow(payload)).select().single();
+    const { data, error } = await supabase.from('inspections').insert({ ...inspectionToRow(payload), ...(payload.id && { id: payload.id }) }).select().single();
     if (error) throw error;
     return rowToInspection(data);
   },
@@ -281,17 +288,17 @@ const supaAdapter = {
     q = applyPbSort(q, sort, 'scheduled_at');
     const { data, error } = await q;
     if (error) throw error;
-    return data || [];
+    return (data || []).map(rowToAppointment);
   },
   async createAppointment(payload) {
     const { data, error } = await supabase.from('appointments').insert(snake(payload)).select().single();
     if (error) throw error;
-    return data;
+    return rowToAppointment(data);
   },
   async updateAppointment(id, payload) {
     const { data, error } = await supabase.from('appointments').update(snake(payload)).eq('id', id).select().single();
     if (error) throw error;
-    return data;
+    return rowToAppointment(data);
   },
 
   // ─── users (mapped to public.profiles) ──────────────────────────────
@@ -326,6 +333,23 @@ const supaAdapter = {
     return res.profile || null;
   },
   async updateUser(id, payload) {
+    if (payload instanceof FormData) {
+      const file = payload.get('avatar');
+      if (!(file instanceof Blob)) throw new Error('Choose an avatar image.');
+      if (file.size > 5 * 1024 * 1024 || !/^image\/(jpeg|png|webp|gif)$/.test(file.type)) {
+        throw new Error('Choose a JPEG, PNG, WebP or GIF avatar up to 5 MB.');
+      }
+      const extension = file.type === 'image/jpeg' ? 'jpg' : file.type.split('/')[1];
+      const path = `${id}/${crypto.randomUUID()}.${extension}`;
+      const { error: uploadError } = await supabase.storage.from('avatars').upload(path, file);
+      if (uploadError) throw uploadError;
+      const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path);
+      payload = { avatar_url: urlData.publicUrl };
+    }
+    if (payload?.password !== undefined) {
+      await invokeAdminUsersFunction({ action: 'reset-password', id, password: payload.password });
+      return this.getUser(id);
+    }
     const { data, error } = await supabase.from('profiles').update(snake(payload)).eq('id', id).select().single();
     if (error) throw error;
     return data;
@@ -357,7 +381,7 @@ const supaAdapter = {
     throw new Error('findChat with arbitrary filter is not yet implemented for Supabase.');
   },
   async createChat(payload) {
-    const { data, error } = await supabase.from('chats').insert(snake(payload)).select().single();
+    const { data, error } = await supabase.from('chats').insert(snake({ ...payload, inspectionId: payload.inspectionId || null })).select().single();
     if (error) throw error;
     return rowToChat(data);
   },
@@ -372,9 +396,22 @@ const supaAdapter = {
     return (data || []).map(rowToMessage);
   },
   async sendMessage(payload) {
-    const { data, error } = await supabase.from('messages').insert(messageToRow(payload)).select().single();
-    if (error) throw error;
-    return rowToMessage(data);
+    const attachments = [];
+    try {
+      for (const file of payload.attachments || []) {
+        const name = String(file.name || 'attachment').replace(/[^a-zA-Z0-9._-]/g, '_');
+        const storageKey = `${payload.chatId}/${crypto.randomUUID()}-${name}`;
+        const { error } = await supabase.storage.from('chat-attachments').upload(storageKey, file);
+        if (error) throw error;
+        attachments.push({ name: file.name || name, storageKey });
+      }
+      const { data, error } = await supabase.from('messages').insert(messageToRow({ ...payload, attachments })).select().single();
+      if (error) throw error;
+      return rowToMessage(data);
+    } catch (error) {
+      if (attachments.length) await supabase.storage.from('chat-attachments').remove(attachments.map((a) => a.storageKey));
+      throw error;
+    }
   },
   async updateMessage(id, payload) {
     const { data, error } = await supabase.from('messages').update(messageToRow(payload)).eq('id', id).select().single();
@@ -426,7 +463,7 @@ const supaAdapter = {
                      : payload.eventType === 'UPDATE' ? 'update'
                      : payload.eventType === 'DELETE' ? 'delete'
                      : 'unknown';
-        const raw = payload.new || payload.old;
+        const raw = payload.eventType === 'DELETE' ? payload.old : payload.new;
         const record = collection === 'messages' ? rowToMessage(raw)
                      : collection === 'chats' ? rowToChat(raw)
                      : collection === 'app_settings' ? rowToAppSettings(raw)
@@ -459,7 +496,9 @@ function applyPbFilter(query, filter) {
     else if ((m = /^(\w+)\s*<\s*"([^"]*)"$/.exec(part)))  query = query.lt(snakeKey(m[1]), m[2]);
     else if ((m = /^(\w+)\s*=\s*"([^"]*)"$/.exec(part)))  query = query.eq(snakeKey(m[1]), m[2]);
     else if ((m = /^(\w+)\s*~\s*"([^"]*)"$/.exec(part)))  query = query.ilike(snakeKey(m[1]), `%${m[2]}%`);
-    // Unsupported tokens: silently skip (caller can fall back to client-side filter).
+    else if ((m = /^(\w+)\s*=\s*null$/.exec(part))) query = query.is(snakeKey(m[1]), null);
+    else if ((m = /^(\w+)\s*!=\s*null$/.exec(part))) query = query.not(snakeKey(m[1]), 'is', null);
+    else throw new Error(`Unsupported filter: ${part}`);
   }
   return query;
 }
@@ -563,6 +602,13 @@ function rowToChat(r) {
     created: r.created_at ?? r.created,
     updated: r.updated_at ?? r.updated,
   };
+}
+
+function rowToAppointment(r) {
+  if (!r) return r;
+  return { ...r, customer: r.customer_id, inspector: r.inspector_id,
+    inspection: r.inspection_id, scheduledAt: r.scheduled_at, timeSlot: r.time_slot,
+    propertyAddress: r.property_address, created: r.created_at, updated: r.updated_at };
 }
 
 function messageToRow(m) {
