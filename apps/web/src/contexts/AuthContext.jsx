@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient.js';
-import { IS_OFFLINE_ADMIN, OFFLINE_ADMIN_USER } from '@/lib/appTarget.js';
+import { IS_OFFLINE_ADMIN, OFFLINE_ADMIN_USER, DEV_TEST_LOGIN } from '@/lib/appTarget.js';
 
 const AuthContext = createContext(null);
 const USE_SUPABASE_AUTH = isSupabaseConfigured && (import.meta.env?.VITE_USE_SUPABASE_AUTH === 'true');
@@ -422,6 +422,15 @@ const CloudAuthProvider = ({ children }) => {
   // `expectedRole` is accepted for backwards compatibility with the existing
   // login form; the authoritative role lives in the `users.role` field.
   const login = async (email, password, expectedRole) => {
+    if (DEV_TEST_LOGIN && email.trim().toLowerCase() === DEV_TEST_LOGIN.email.toLowerCase()
+      && password === DEV_TEST_LOGIN.code && (!expectedRole || expectedRole === DEV_TEST_LOGIN.role)) {
+      const testUser = { id: 'dev-test-admin', email: DEV_TEST_LOGIN.email, name: 'Development Admin', role: 'admin', phone: '', address: '' };
+      await cacheOfflineIdentity(testUser, password);
+      setUser(testUser);
+      setSessionMode('offline-auth');
+      writeJSON(OFFLINE_SESSION_KEY, { mode: 'offline-auth', user: testUser, at: new Date().toISOString() });
+      return { success: true, offline: true };
+    }
     if (USE_SUPABASE_AUTH) {
       try {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });

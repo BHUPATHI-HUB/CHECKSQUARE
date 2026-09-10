@@ -18,6 +18,16 @@ export const IS_HYBRID_APK = APP_TARGET === 'hybrid-apk';
 // Large inspection records, photos and reports never auto-upload in app builds.
 export const USE_LOCAL_INSPECTION_STORAGE = IS_OFFLINE_ADMIN || IS_HYBRID_APK;
 
+// Development-only test identity. These values are ignored in production
+// builds and never create a real backend account.
+export const DEV_TEST_LOGIN = import.meta.env?.DEV && import.meta.env?.VITE_DEV_TEST_LOGIN === 'true'
+  ? Object.freeze({
+      email: import.meta.env?.VITE_DEV_TEST_EMAIL || 'test-admin@checksquare.local',
+      code: import.meta.env?.VITE_DEV_TEST_CODE || 'TestOnly-1234',
+      role: 'admin',
+    })
+  : null;
+
 // The one and only identity the offline build ever runs as. There is no login
 // screen and no second party to sync with, so this is hardcoded.
 export const OFFLINE_ADMIN_USER = Object.freeze({
