@@ -108,8 +108,8 @@ const DisclaimerEditor = () => {
   const [activeTab, setActiveTab] = useState('page1');
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
-  const handleSave = () => {
-    const result = updateSettings({
+  const handleSave = async () => {
+    const result = await updateSettings({
       disclaimerPage1: page1Content,
       disclaimerPage2: page2Content
     });
@@ -121,9 +121,9 @@ const DisclaimerEditor = () => {
     }
   };
 
-  const handleReset = () => {
+  const handleReset = async () => {
     if (window.confirm('Are you sure you want to reset both disclaimer pages to their default text? This cannot be undone.')) {
-      const result = resetDisclaimers();
+      const result = await resetDisclaimers();
       if (result.success) {
         setPage1Content(result.disclaimerPage1);
         setPage2Content(result.disclaimerPage2);
@@ -139,15 +139,15 @@ const DisclaimerEditor = () => {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex justify-between items-center bg-card p-4 rounded-xl border shadow-sm">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between bg-card p-4 rounded-xl border shadow-sm">
         <div>
           <h3 className="text-lg font-semibold">Disclaimer Content</h3>
           <p className="text-sm text-muted-foreground">Manage the legal text that appears on pages 2 and 3 of the PDF report.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto sm:justify-end">
           <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
             <DialogTrigger asChild>
-              <Button variant="outline">
+              <Button variant="outline" className="w-full sm:w-auto">
                 <Eye className="w-4 h-4 mr-2" /> Preview
               </Button>
             </DialogTrigger>
@@ -166,10 +166,10 @@ const DisclaimerEditor = () => {
             </DialogContent>
           </Dialog>
           
-          <Button variant="outline" className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={handleReset}>
+          <Button variant="outline" className="w-full sm:w-auto text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={handleReset}>
             <Undo className="w-4 h-4 mr-2" /> Reset Defaults
           </Button>
-          <Button onClick={handleSave}>
+          <Button onClick={handleSave} className="w-full sm:w-auto">
             <Save className="w-4 h-4 mr-2" /> Save Changes
           </Button>
         </div>

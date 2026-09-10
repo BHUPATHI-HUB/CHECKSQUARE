@@ -12,11 +12,11 @@
 // migration has been run.
 
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient.js';
+import { IS_OFFLINE_ADMIN, IS_HYBRID_APK, OFFLINE_ADMIN_USER } from '@/lib/appTarget.js';
+import localDb from '@/lib/localDb.js';
 
 const USE_SUPABASE = isSupabaseConfigured
   && (import.meta.env?.VITE_USE_SUPABASE_DB === 'true');
-
-export const dataBackend = USE_SUPABASE ? 'supabase' : 'pocketbase';
 
 let pbClientPromise = null;
 const getPB = async () => {
@@ -228,6 +228,15 @@ const INSPECTION_LIST_COLUMNS = [
   'deletion_reason', 'created_at', 'updated_at',
 ].join(',');
 
+async function invokeAdminUsersFunction(payload) {
+  const { data, error } = await supabase.functions.invoke('admin-users', {
+    body: payload,
+  });
+  if (error) throw new Error(error.message || 'Admin user function call failed.');
+  if (!data?.success) throw new Error(data?.error || 'Admin user operation failed.');
+  return data;
+}
+
 const supaAdapter = {
   // ─── inspections ─────────────────────────────────────────────────────
   async listInspections({ filter = '', sort = '-created' } = {}) {
@@ -305,9 +314,16 @@ const supaAdapter = {
     return data;
   },
   async createUser(payload) {
-    // Supabase Auth must mint the auth.users row first; the profiles trigger
-    // fills the rest.  Direct profile inserts will fail FK against auth.users.
-    throw new Error('createUser is admin-only and must go through supabase.auth.admin.createUser; route via a server function.');
+    const res = await invokeAdminUsersFunction({
+      action: 'create',
+      email: payload?.email,
+      password: payload?.password,
+      name: payload?.name,
+      phone: payload?.phone,
+      address: payload?.address,
+      role: payload?.role,
+    });
+    return res.profile || null;
   },
   async updateUser(id, payload) {
     const { data, error } = await supabase.from('profiles').update(snake(payload)).eq('id', id).select().single();
@@ -315,9 +331,7 @@ const supaAdapter = {
     return data;
   },
   async deleteUser(id) {
-    // Cascades from auth.users → profiles.  Must be called via the admin client
-    // on the server.  Frontend cannot delete users directly.
-    throw new Error('deleteUser must be called from a server function with the service-role key.');
+    await invokeAdminUsersFunction({ action: 'delete', id });
   },
   async findUserByEmail(email) {
     const { data, error } = await supabase.from('profiles').select('*').eq('email', email).maybeSingle();
@@ -587,6 +601,113 @@ function rowToAppSettings(r) {
   };
 }
 
-const adapter = USE_SUPABASE ? supaAdapter : pbAdapter;
+// ─── Adapter: Local (offline-admin Android build) ────────────────────────
+// Single-user, zero-network adapter. Inspections / appointments / settings /
+// report_downloads persist to on-device SQLite (localDb). Users resolve to
+// the one hardcoded admin. Chats / messages / realtime are inert — this build
+// has no second party to sync with.
+const localAdapter = {
+  // inspections
+  listInspections: (opts) => localDb.listInspections(opts),
+  getInspection: (id) => localDb.getInspection(id),
+  createInspection: (payload) => localDb.createInspection(payload),
+  upsertInspection: (payload) => (payload.id
+    ? localDb.updateInspection(payload.id, payload)
+    : localDb.createInspection(payload)),
+  updateInspection: (id, payload) => localDb.updateInspection(id, payload),
+  deleteInspection: (id) => localDb.deleteInspection(id),
+
+  // appointments
+  listAppointments: (opts) => localDb.listAppointments(opts),
+  createAppointment: (payload) => localDb.createAppointment(payload),
+  updateAppointment: (id, payload) => localDb.updateAppointment(id, payload),
+
+  // users — only ever the hardcoded admin
+  listUsers: async () => [OFFLINE_ADMIN_USER],
+  listUsersByRole: async (role) => (role === 'admin' ? [OFFLINE_ADMIN_USER] : []),
+  getUser: async () => OFFLINE_ADMIN_USER,
+  createUser: async (payload) => ({ ...OFFLINE_ADMIN_USER, ...payload }),
+  updateUser: async (_id, payload) => ({ ...OFFLINE_ADMIN_USER, ...payload }),
+  deleteUser: async () => {},
+  findUserByEmail: async () => OFFLINE_ADMIN_USER,
+
+  // chats / messages — disabled in the offline build
+  listChats: async () => [],
+  findChat: async () => { throw Object.assign(new Error('chat disabled'), { status: 404 }); },
+  createChat: async () => { throw new Error('Chat is disabled in the offline build'); },
+  deleteChat: async () => {},
+  listMessages: async () => [],
+  sendMessage: async () => { throw new Error('Chat is disabled in the offline build'); },
+  updateMessage: async () => {},
+  deleteMessage: async () => {},
+
+  // report_downloads
+  listReportDownloads: () => localDb.listReportDownloads(),
+  getReportDownloadFileUrl: async (rec) => rec?.url || '',
+  createReportDownload: (payload) => localDb.createReportDownload(payload),
+  deleteReportDownload: (id) => localDb.deleteReportDownload(id),
+
+  // app_settings
+  getAppSettings: () => localDb.getAppSettings(),
+  upsertAppSettings: (payload) => localDb.upsertAppSettings(payload),
+
+  // realtime — no-op (single device, single user)
+  subscribe: () => () => {},
+};
+
+// ─── Adapter: Hybrid APK (local core + cloud collaboration) ───────────────
+// Hybrid mode keeps inspection-domain operations local-first for resilience,
+// while identity/collaboration domains stay cloud-backed.
+const cloudAdapter = USE_SUPABASE ? supaAdapter : pbAdapter;
+const hybridAdapter = {
+  // Local-first core data
+  listInspections: (opts) => localAdapter.listInspections(opts),
+  getInspection: (id) => localAdapter.getInspection(id),
+  createInspection: (payload) => localAdapter.createInspection(payload),
+  upsertInspection: (payload) => localAdapter.upsertInspection(payload),
+  updateInspection: (id, payload) => localAdapter.updateInspection(id, payload),
+  deleteInspection: (id) => localAdapter.deleteInspection(id),
+
+  listAppointments: (opts) => localAdapter.listAppointments(opts),
+  createAppointment: (payload) => localAdapter.createAppointment(payload),
+  updateAppointment: (id, payload) => localAdapter.updateAppointment(id, payload),
+
+  listReportDownloads: (...args) => localAdapter.listReportDownloads(...args),
+  getReportDownloadFileUrl: (...args) => localAdapter.getReportDownloadFileUrl(...args),
+  createReportDownload: (payload) => localAdapter.createReportDownload(payload),
+  deleteReportDownload: (id) => localAdapter.deleteReportDownload(id),
+
+  // Cloud-backed settings record (local write-through is handled in SettingsContext)
+  getAppSettings: (...args) => cloudAdapter.getAppSettings(...args),
+  upsertAppSettings: (...args) => cloudAdapter.upsertAppSettings(...args),
+
+  // Cloud-backed users and collaboration
+  listUsers: (...args) => cloudAdapter.listUsers(...args),
+  listUsersByRole: (...args) => cloudAdapter.listUsersByRole(...args),
+  getUser: (...args) => cloudAdapter.getUser(...args),
+  createUser: (...args) => cloudAdapter.createUser(...args),
+  updateUser: (...args) => cloudAdapter.updateUser(...args),
+  deleteUser: (...args) => cloudAdapter.deleteUser(...args),
+  findUserByEmail: (...args) => cloudAdapter.findUserByEmail(...args),
+
+  listChats: (...args) => cloudAdapter.listChats(...args),
+  findChat: (...args) => cloudAdapter.findChat(...args),
+  createChat: (...args) => cloudAdapter.createChat(...args),
+  deleteChat: (...args) => cloudAdapter.deleteChat(...args),
+  listMessages: (...args) => cloudAdapter.listMessages(...args),
+  sendMessage: (...args) => cloudAdapter.sendMessage(...args),
+  updateMessage: (...args) => cloudAdapter.updateMessage(...args),
+  deleteMessage: (...args) => cloudAdapter.deleteMessage(...args),
+
+  subscribe: (...args) => cloudAdapter.subscribe(...args),
+};
+
+export const dataBackend = IS_OFFLINE_ADMIN
+  ? 'local'
+  : (IS_HYBRID_APK ? 'hybrid' : (USE_SUPABASE ? 'supabase' : 'pocketbase'));
+
+const adapter = IS_OFFLINE_ADMIN
+  ? localAdapter
+  : (IS_HYBRID_APK ? hybridAdapter : (USE_SUPABASE ? supaAdapter : pbAdapter));
 
 export default adapter;

@@ -396,6 +396,38 @@ const InspectionForm = ({ existingInspection = null, isEditing = false }) => {
     }));
   };
 
+  const addSplitArea = (sourceAreaId) => {
+    const source = (formData.areaCalculations || []).find((a) => a.id === sourceAreaId);
+    if (!source) return;
+    if (!source.room?.trim()) {
+      toast.error('Enter room/section name before adding a split row.');
+      return;
+    }
+
+    const id = `area_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    setFormData((prev) => {
+      const nextRow = {
+        id,
+        room: source.room,
+        length: '',
+        width: '',
+        lengthUnit: source.lengthUnit || 'ft',
+        widthUnit: source.widthUnit || 'ft',
+      };
+
+      const idx = prev.areaCalculations.findIndex((a) => a.id === sourceAreaId);
+      if (idx === -1) {
+        return { ...prev, areaCalculations: [...prev.areaCalculations, nextRow] };
+      }
+
+      const areaCalculations = [...prev.areaCalculations];
+      areaCalculations.splice(idx + 1, 0, nextRow);
+      return { ...prev, areaCalculations };
+    });
+
+    toast.success(`Added split row for ${source.room}`);
+  };
+
   // ---- Phase 2: property metrics (door height, ceiling height, wall height, etc.) ----
   const addMetric = () => {
     const id = `metric_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -757,7 +789,7 @@ const InspectionForm = ({ existingInspection = null, isEditing = false }) => {
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-lg font-semibold">Area Calculations</h3>
-                  <p className="text-xs text-muted-foreground">Length × Width per room/section. Mixed units OK — totals normalize to sft.</p>
+                  <p className="text-xs text-muted-foreground">Length × Width per room/section. Use "Split Room" to add multiple rows for the same room (irregular shapes).</p>
                 </div>
                 <Button onClick={addArea} size="sm"><Plus className="w-4 h-4 mr-2" /> Add Area</Button>
               </div>
@@ -821,9 +853,14 @@ const InspectionForm = ({ existingInspection = null, isEditing = false }) => {
                           </div>
                           <div className="col-span-8 md:col-span-12 flex items-center justify-between pt-2 border-t mt-1">
                             <span className="text-sm font-semibold">{sft.toLocaleString()} sft</span>
-                            <Button variant="ghost" size="sm" onClick={() => removeArea(area.id)} className="text-destructive">
-                              <Trash2 className="w-4 h-4 mr-1" /> Remove
-                            </Button>
+                            <div className="flex items-center gap-1.5">
+                              <Button variant="outline" size="sm" onClick={() => addSplitArea(area.id)}>
+                                <Plus className="w-4 h-4 mr-1" /> Split Room
+                              </Button>
+                              <Button variant="ghost" size="sm" onClick={() => removeArea(area.id)} className="text-destructive">
+                                <Trash2 className="w-4 h-4 mr-1" /> Remove
+                              </Button>
+                            </div>
                           </div>
                         </CardContent>
                       </Card>

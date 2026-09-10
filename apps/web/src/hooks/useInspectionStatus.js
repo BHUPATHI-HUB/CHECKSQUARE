@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import data from '@/services/dataService.js';
 import { putPendingInspection, enqueue, listPendingInspections, getPendingInspection, putCachedList, getCachedList } from '@/lib/localStore.js';
 import { requestSync, isNetworkError } from '@/services/syncEngine.js';
+import { IS_OFFLINE_ADMIN } from '@/lib/appTarget.js';
 
 // Stale-while-revalidate cache so navigating away from a dashboard and back
 // shows the last known list INSTANTLY instead of a blank screen plus a full
@@ -226,7 +227,10 @@ export const useInspectionStatus = () => {
       return localRecord;
     };
 
-    const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+    // In the offline-admin build, localDb IS the durable store (there is no
+    // cloud to sync to), so always write directly — never divert to the
+    // pending-sync queue, which would hide records from delete/restore.
+    const offline = !IS_OFFLINE_ADMIN && typeof navigator !== 'undefined' && navigator.onLine === false;
     if (offline) return queueLocally();
 
     try {

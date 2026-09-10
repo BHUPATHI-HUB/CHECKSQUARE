@@ -15,7 +15,7 @@ import GoogleSignInButton from '@/components/GoogleSignInButton.jsx';
 const fadeUp = { initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.6, ease: [0.22, 1, 0.36, 1] } };
 
 const LoginPage = () => {
-  const { login, requestPasswordReset, user, isAuthenticated } = useAuth();
+  const { login, requestPasswordReset, getCachedUsersByRole, user, isAuthenticated } = useAuth();
   const { settings } = useSettings();
   const navigate = useNavigate();
   const location = useLocation();
@@ -24,11 +24,17 @@ const LoginPage = () => {
   const justRegistered = location.state?.justRegistered === true;
   const prefillEmail = location.state?.email || '';
   const [formData, setFormData] = useState({ email: prefillEmail, password: '', role: 'customer' });
+  const [cachedUsers, setCachedUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
 
   const from = location.state?.from?.pathname || null;
   const brand = settings?.appName || 'CheckSquare';
+
+  useEffect(() => {
+    if (typeof getCachedUsersByRole !== 'function') return;
+    setCachedUsers(getCachedUsersByRole(formData.role));
+  }, [formData.role, getCachedUsersByRole]);
 
   // OAuth-based sign-in happens outside handleSubmit; once auth state flips to
   // valid, route users away from /login using the same role-based destinations.
@@ -68,7 +74,8 @@ const LoginPage = () => {
     setLoading(false);
 
     if (result.success) {
-      toast.success('Signed in successfully');
+      if (result.offline) toast.success('Signed in with offline PIN');
+      else toast.success('Signed in successfully');
       if (from) return navigate(from, { replace: true });
       const path = formData.role === 'admin' ? '/admin/dashboard'
                  : formData.role === 'inspector' ? '/inspector/dashboard' : '/customer';
@@ -135,14 +142,25 @@ const LoginPage = () => {
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                     className="h-12 pl-8 pr-0 border-0 border-b rounded-none focus-visible:ring-0 text-base bg-transparent"
+                    list="offline-cached-users"
                   />
                 </div>
+                <datalist id="offline-cached-users">
+                  {cachedUsers.map((u) => (
+                    <option key={`${u.role}:${u.email}`} value={u.email}>{u.name || u.email}</option>
+                  ))}
+                </datalist>
+                {cachedUsers.length > 0 && (
+                  <p className="text-[11px] text-muted-foreground mt-2">
+                    Cached offline accounts for this role: {cachedUsers.length}. Use your offline PIN when network is unavailable.
+                  </p>
+                )}
                 {errors.email && <p className="text-xs text-destructive mt-2 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors.email}</p>}
               </div>
 
               <div>
                 <div className="flex justify-between items-baseline">
-                  <Label htmlFor="password" className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Password</Label>
+                  <Label htmlFor="password" className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Password / Offline PIN</Label>
                   <button onClick={handleForgotPassword} className="text-xs text-muted-foreground hover:text-foreground link-underline">Forgot?</button>
                 </div>
                 <div className="relative mt-2">
@@ -181,7 +199,7 @@ const LoginPage = () => {
 
             <p className="mt-10 text-sm text-muted-foreground">
               First time?{' '}
-              <Link to="/customer-signup" className="text-foreground font-semibold link-underline">Become a client</Link>
+              <Link to="/signup" className="text-foreground font-semibold link-underline">Become a client</Link>
               {' · '}
               <Link to="/signup" className="text-muted-foreground link-underline">Inspector / Admin signup</Link>
             </p>

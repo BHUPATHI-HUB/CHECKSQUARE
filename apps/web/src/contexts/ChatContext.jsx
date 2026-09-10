@@ -29,8 +29,24 @@ export const ChatProvider = ({ children }) => {
   const [chats, setChats] = useState([]);
   const [messages, setMessages] = useState({}); // { chatId: Message[] }
   const [inspectionsMap, setInspectionsMap] = useState({}); // { inspectionId: { propertyAddress, ... } }
+  const [directoryUsers, setDirectoryUsers] = useState([]);
   const [onlineUsers, setOnlineUsers] = useState(new Set());
   const subscriptions = useRef({}); // { chatId: unsub }
+
+  const getInspectionChatTitle = useCallback((inspection) => {
+    if (!inspection) return '';
+    return inspection?.metadata?.propertyAddress
+      || inspection?.propertyAddress
+      || inspection?.propertyMetrics?.propertyAddress
+      || inspection?.metadata?.propertyName
+      || inspection?.propertyName
+      || '';
+  }, []);
+
+  const directoryMap = useMemo(
+    () => Object.fromEntries((directoryUsers || []).map((entry) => [entry.id, entry])),
+    [directoryUsers],
+  );
 
   // ─── Fetch & cache the chat list ───────────────────────────────────────
   const getChats = useCallback(async () => {
@@ -61,6 +77,24 @@ export const ChatProvider = ({ children }) => {
       if (!String(error?.message || '').includes('autocancel')) {
         console.error('Error fetching chats:', error);
       }
+    }
+  }, [user]);
+
+  const getDirectoryUsers = useCallback(async () => {
+    if (!user) return [];
+    try {
+      const records = await data.listUsers({ sort: 'name' });
+      const normalized = (records || []).filter(Boolean).map((entry) => ({
+        id: entry.id,
+        name: entry.name || entry.full_name || '',
+        email: entry.email || '',
+        role: entry.role || '',
+      }));
+      setDirectoryUsers(normalized);
+      return normalized;
+    } catch (error) {
+      console.error('Error fetching chat directory users:', error);
+      return [];
     }
   }, [user]);
 
@@ -275,18 +309,22 @@ export const ChatProvider = ({ children }) => {
     if (!chat || !user) return 'Conversation';
     if (chat.type === 'group') {
       const ins = inspectionsMap[chat.inspectionId];
-      const addr = ins?.metadata?.propertyAddress;
-      if (addr) return addr;
+      const propertyTitle = getInspectionChatTitle(ins);
+      if (propertyTitle) return propertyTitle;
       if (chat.inspectionId) return `Inspection #${String(chat.inspectionId).substring(0, 6)}`;
       return 'Group Chat';
     }
     const other = chat.expand?.participants?.find((p) => p.id !== user.id);
-    return other?.name || other?.email || 'Direct Message';
-  }, [inspectionsMap, user]);
+    if (other?.name || other?.email) return other?.name || other?.email;
+    const otherId = (chat.participants || []).find((participantId) => participantId !== user.id);
+    const otherUser = otherId ? directoryMap[otherId] : null;
+    return otherUser?.name || otherUser?.email || 'Direct Message';
+  }, [directoryMap, getInspectionChatTitle, inspectionsMap, user]);
 
   useEffect(() => {
     if (user) {
       getChats();
+      getDirectoryUsers();
       setOnlineUsers(new Set([])); // placeholder for presence
 
       // Global chat realtime: react to chat row delete (so the list updates
@@ -318,6 +356,7 @@ export const ChatProvider = ({ children }) => {
       setChats([]);
       setMessages({});
       setInspectionsMap({});
+      setDirectoryUsers([]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
@@ -328,7 +367,9 @@ export const ChatProvider = ({ children }) => {
     unreadCount,
     onlineUsers,
     inspectionsMap,
+    directoryUsers,
     getChats,
+    getDirectoryUsers,
     getMessages,
     sendMessage,
     markAsRead,

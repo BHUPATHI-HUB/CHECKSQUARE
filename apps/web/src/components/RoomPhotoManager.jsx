@@ -37,7 +37,18 @@ const fileToDataUrl = (file) => new Promise((resolve, reject) => {
  * actions. iOS/Android show the camera UI only when `capture` is set; some
  * desktop browsers ignore `capture` entirely and fall back to file picker.
  */
-const PhotoSlot = ({ label, photo, onChange, onRemove, compact = false, ariaLabel, inspectionId, roomKey }) => {
+const PhotoSlot = ({
+  label,
+  photo,
+  onChange,
+  onRemove,
+  onAddMany,
+  multiple = false,
+  compact = false,
+  ariaLabel,
+  inspectionId,
+  roomKey,
+}) => {
   const camRef = useRef(null);
   const fileRef = useRef(null);
   const [camOpen, setCamOpen] = useState(false);
@@ -70,9 +81,14 @@ const PhotoSlot = ({ label, photo, onChange, onRemove, compact = false, ariaLabe
   };
 
   const handleFile = async (e) => {
-    const file = e.target.files?.[0];
+    const files = Array.from(e.target.files || []);
     e.target.value = '';
-    consumeFile(file);
+    if (files.length === 0) return;
+    if (files.length > 1 && multiple && onAddMany) {
+      await onAddMany(files);
+      return;
+    }
+    await consumeFile(files[0]);
   };
 
   return (
@@ -129,6 +145,7 @@ const PhotoSlot = ({ label, photo, onChange, onRemove, compact = false, ariaLabe
             ref={fileRef}
             type="file"
             accept="image/*"
+            multiple={multiple}
             className="hidden"
             onChange={handleFile}
           />
@@ -156,10 +173,13 @@ const DefectPhotoGallery = ({ defect, onAdd, onUpdate, onRemove }) => {
         defect.afterPhoto  && { id: 'legacy_a', url: defect.afterPhoto.url,  caption: '' },
       ].filter(Boolean);
 
-  const handleFile = (e) => {
-    const file = e.target.files?.[0];
-    if (file) onAdd(file);
+  const handleFile = async (e) => {
+    const files = Array.from(e.target.files || []);
     e.target.value = '';
+    for (const file of files) {
+      // eslint-disable-next-line no-await-in-loop
+      await onAdd(file);
+    }
   };
 
   return (
@@ -176,7 +196,7 @@ const DefectPhotoGallery = ({ defect, onAdd, onUpdate, onRemove }) => {
             <Upload className="w-4 h-4 mr-1.5" /> Upload
           </Button>
           <input ref={camRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFile} />
-          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
+          <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFile} />
           <WebcamCaptureModal open={camOpen} onOpenChange={setCamOpen} onCapture={onAdd} />
         </div>
       </div>
@@ -277,6 +297,67 @@ const RoomPhotoManager = ({ open, onOpenChange, room, onSave }) => {
       if (!newPhoto) return filtered;
       return [...filtered, { ...newPhoto, corner: cornerLabel }];
     });
+  };
+
+  const parseCornerIndex = (label) => {
+    const m = /Corner\s+(\d+)/i.exec(label || '');
+    return m ? Number(m[1]) : null;
+  };
+
+  // Multi-upload helper: selecting many files fills Corner N, N+1, ...
+  // so inspectors can drop 3, 10, or 20 photos in one action.
+  const addCornerPhotosFrom = async (startCornerLabel, files) => {
+    const picked = Array.from(files || []).filter(Boolean);
+    if (picked.length === 0) return;
+
+    const startIndex = parseCornerIndex(startCornerLabel) || 1;
+    const map = new Map((cornerPhotos || []).map((p) => [p.corner, p]));
+
+    let added = 0;
+    let failed = 0;
+    let cursor = startIndex;
+
+    for (let i = 0; i < picked.length; i += 1) {
+      const file = picked[i];
+      let cornerNumber;
+
+      if (i === 0) {
+        // First file targets the clicked slot and replaces any existing photo.
+        cornerNumber = startIndex;
+      } else {
+        cursor = Math.max(cursor + 1, startIndex + 1);
+        while (map.has(`Corner ${cursor}`)) cursor += 1;
+        cornerNumber = cursor;
+      }
+
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        const record = await uploadInspectionPhoto(file, {
+          inspectionId: room?.id || 'draft',
+          roomKey,
+          maxEdge: settings?.reportImages?.uploadMaxEdge ?? 1600,
+          quality: settings?.reportImages?.uploadQuality ?? 0.85,
+        });
+        map.set(`Corner ${cornerNumber}`, { ...record, corner: `Corner ${cornerNumber}` });
+        added += 1;
+      } catch {
+        failed += 1;
+      }
+    }
+
+    const sorted = [...map.values()].sort((a, b) => {
+      const ai = parseCornerIndex(a.corner) || 0;
+      const bi = parseCornerIndex(b.corner) || 0;
+      return ai - bi;
+    });
+    setCornerPhotos(sorted);
+
+    if (added > 0) {
+      toast.success(`${added} corner photo${added === 1 ? '' : 's'} added`);
+    }
+    if (failed > 0) {
+      toast.error(`${failed} photo${failed === 1 ? '' : 's'} failed to upload`);
+    }
   };
 
   const phaseBLocked = cornerPhotos.length === 0;
@@ -391,8 +472,12 @@ const RoomPhotoManager = ({ open, onOpenChange, room, onSave }) => {
                       label={null}
                       photo={existing}
                       onChange={(photo) => setCornerPhoto(cornerLabel, photo)}
+                      onAddMany={(files) => addCornerPhotosFrom(cornerLabel, files)}
+                      multiple
                       onRemove={() => setCornerPhoto(cornerLabel, null)}
                       ariaLabel={cornerLabel}
+                      inspectionId={room?.id}
+                      roomKey={roomKey}
                     />
                   </div>
                 );

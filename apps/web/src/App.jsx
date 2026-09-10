@@ -11,6 +11,7 @@ import ProtectedRoute from '@/components/ProtectedRoute.jsx';
 import OfflineBanner from '@/components/OfflineBanner.jsx';
 import SyncStatusBadge from '@/components/SyncStatusBadge.jsx';
 import { startSyncEngine } from '@/services/syncEngine.js';
+import { IS_OFFLINE_ADMIN } from '@/lib/appTarget.js';
 import { Toaster } from 'sonner';
 
 // Public pages stay eager-loaded — they're tiny and needed on first paint.
@@ -44,8 +45,9 @@ const RouteFallback = () => (
 function App() {
   // Kick off the offline sync engine once, app-wide. It drains the outbox on
   // reconnect / foreground / a periodic timer so queued inspections + photos
-  // upload automatically when connectivity returns.
-  useEffect(() => { startSyncEngine(); }, []);
+  // upload automatically when connectivity returns. Skipped entirely in the
+  // offline-admin build, which has no cloud to sync to.
+  useEffect(() => { if (!IS_OFFLINE_ADMIN) startSyncEngine(); }, []);
 
   return (
     <SettingsProvider>
@@ -60,7 +62,7 @@ function App() {
             <Suspense fallback={<RouteFallback />}>
             <Routes>
               {/* Public Routes */}
-              <Route path="/" element={<HomePage />} />
+              <Route path="/" element={IS_OFFLINE_ADMIN ? <Navigate to="/admin/dashboard" replace /> : <HomePage />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/signup" element={<CustomerSignupPage />} />
               <Route path="/privacy" element={<InfoPage title="Privacy Policy" settingsKey="privacyPolicy" />} />

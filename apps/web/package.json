@@ -5,14 +5,20 @@
   "private": true,
   "scripts": {
     "dev": "vite --host :: --port 3000",
+    "dev:offline": "vite --mode offline --host :: --port 3000",
+    "dev:hybrid": "vite --mode hybrid --host :: --port 3000",
     "build": "node tools/generate-llms.js || true && vite build --outDir ../../dist/apps/web",
+    "build:offline": "vite build --mode offline --outDir ../../dist/apps/web",
+    "build:hybrid": "vite build --mode hybrid --outDir ../../dist/apps/web",
     "start": "vite preview --outDir ../../dist/apps/web --host :: --port 3000",
     "lint": "eslint . --quiet",
     "lint:warn": "eslint ."
   },
   "dependencies": {
+    "@capacitor-community/sqlite": "^8.1.0",
     "@capacitor/android": "^8.3.4",
     "@capacitor/app": "^8.1.0",
+    "@capacitor/browser": "^8.0.4",
     "@capacitor/cli": "^8.3.4",
     "@capacitor/core": "^8.3.4",
     "@capacitor/filesystem": "^8.1.2",

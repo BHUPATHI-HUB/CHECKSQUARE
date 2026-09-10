@@ -94,6 +94,7 @@ const ChatPage = () => {
   const {
     chats, messages, getMessages, sendMessage, markAsRead, onlineUsers,
     subscribeToMessages, getChatTitle, deleteChat, deleteMessage,
+    createChat, directoryUsers,
     canDeleteChat, canDeleteMessage,
   } = useChatContext();
   const { showDeleted } = useFeedback();
@@ -141,6 +142,25 @@ const ChatPage = () => {
   const activeChat = chats.find((c) => c.id === chatId);
   const activeMessages = chatId ? (messages[chatId] || []) : [];
 
+  const contactsWithoutDirectChat = useMemo(() => {
+    if (!user) return [];
+    const directPartnerIds = new Set(
+      chats
+        .filter((chat) => chat.type === 'direct')
+        .map((chat) => (chat.participants || []).find((participantId) => participantId !== user.id))
+        .filter(Boolean),
+    );
+
+    return (directoryUsers || [])
+      .filter((entry) => entry.id && entry.id !== user.id)
+      .filter((entry) => !directPartnerIds.has(entry.id))
+      .filter((entry) => {
+        if (!searchQuery) return true;
+        const haystack = `${entry.name || ''} ${entry.email || ''} ${entry.role || ''}`.toLowerCase();
+        return haystack.includes(searchQuery.toLowerCase());
+      });
+  }, [chats, directoryUsers, searchQuery, user]);
+
   // Load messages + subscribe when active chat changes.
   // Only show the loader on the *first* fetch for a given chat — after that
   // the cached list is rendered immediately so the UI doesn't flash a
@@ -175,6 +195,18 @@ const ChatPage = () => {
       toast.error('Failed to send message');
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleOpenDirectChat = async (otherUser) => {
+    if (!otherUser?.id || !user?.id) return;
+    try {
+      const created = await createChat([user.id, otherUser.id], 'direct', '');
+      if (created?.id) {
+        navigate(`/chat/${created.id}`);
+      }
+    } catch (error) {
+      toast.error('Could not open conversation');
     }
   };
 
@@ -340,39 +372,66 @@ const ChatPage = () => {
 
             <ScrollArea className="flex-1">
               {filteredChats.length > 0 ? (
-                filteredChats.map((chat) => {
-                  const unread = getUnreadForChat(chat);
-                  return (
-                    <button
-                      key={chat.id}
-                      onClick={() => navigate(`/chat/${chat.id}`)}
-                      className={`w-full text-left px-4 sm:px-6 py-4 sm:py-5 border-b flex items-start gap-3 sm:gap-4 transition-all ${chatId === chat.id ? 'bg-muted/40 border-l-2 border-l-secondary' : 'hover:bg-muted/20 border-l-2 border-l-transparent'}`}
-                    >
-                      <div className="relative flex-shrink-0">
-                        <div className="w-11 h-11 bg-primary text-primary-foreground flex items-center justify-center font-display text-lg">
-                          {getChatAvatar(chat)}
+                <div>
+                  {filteredChats.map((chat) => {
+                    const unread = getUnreadForChat(chat);
+                    return (
+                      <button
+                        key={chat.id}
+                        onClick={() => navigate(`/chat/${chat.id}`)}
+                        className={`w-full text-left px-4 sm:px-6 py-4 sm:py-5 border-b flex items-start gap-3 sm:gap-4 transition-all ${chatId === chat.id ? 'bg-muted/40 border-l-2 border-l-secondary' : 'hover:bg-muted/20 border-l-2 border-l-transparent'}`}
+                      >
+                        <div className="relative flex-shrink-0">
+                          <div className="w-11 h-11 bg-primary text-primary-foreground flex items-center justify-center font-display text-lg">
+                            {getChatAvatar(chat)}
+                          </div>
+                          {isOnline(chat) && <div className="status-dot online"></div>}
                         </div>
-                        {isOnline(chat) && <div className="status-dot online"></div>}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex justify-between items-baseline mb-0.5 gap-2">
-                          <h4 className="font-display text-base truncate">{getChatTitle(chat)}</h4>
-                          <span className="text-[10px] uppercase tracking-wider text-muted-foreground flex-shrink-0">
-                            {chat.updated ? new Date(chat.updated).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex justify-between items-baseline mb-0.5 gap-2">
+                            <h4 className="font-display text-base truncate">{getChatTitle(chat)}</h4>
+                            <span className="text-[10px] uppercase tracking-wider text-muted-foreground flex-shrink-0">
+                              {chat.updated ? new Date(chat.updated).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                            </span>
+                          </div>
+                          <p className={`text-xs truncate ${unread > 0 ? 'font-medium text-foreground' : 'text-muted-foreground'}`}>
+                            {chat.type === 'group' ? `${(chat.expand?.participants || []).length || (chat.participants || []).length} participants` : 'Direct message'}
+                          </p>
+                        </div>
+                        {unread > 0 && (
+                          <span className="inline-flex items-center justify-center min-w-5 h-5 px-1.5 text-[10px] font-semibold rounded-full bg-secondary text-primary ml-1">
+                            {unread}
                           </span>
-                        </div>
-                        <p className={`text-xs truncate ${unread > 0 ? 'font-medium text-foreground' : 'text-muted-foreground'}`}>
-                          {chat.type === 'group' ? `${(chat.expand?.participants || []).length} participants` : 'Direct message'}
-                        </p>
+                        )}
+                      </button>
+                    );
+                  })}
+
+                  {contactsWithoutDirectChat.length > 0 && (
+                    <div className="px-4 sm:px-6 py-4 border-b bg-muted/10">
+                      <p className="editorial-eyebrow text-[10px] mb-3">All users</p>
+                      <div className="space-y-2">
+                        {contactsWithoutDirectChat.map((contact) => (
+                          <button
+                            key={contact.id}
+                            onClick={() => handleOpenDirectChat(contact)}
+                            className="w-full text-left rounded-xl border bg-background px-3 py-3 hover:bg-muted/20 transition"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 bg-muted text-foreground flex items-center justify-center font-display text-sm flex-shrink-0">
+                                {(contact.name?.charAt(0) || contact.email?.charAt(0) || '?').toUpperCase()}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-medium truncate">{contact.name || contact.email}</p>
+                                <p className="text-[11px] text-muted-foreground truncate">{contact.role || 'user'} · {contact.email}</p>
+                              </div>
+                            </div>
+                          </button>
+                        ))}
                       </div>
-                      {unread > 0 && (
-                        <span className="inline-flex items-center justify-center min-w-5 h-5 px-1.5 text-[10px] font-semibold rounded-full bg-secondary text-primary ml-1">
-                          {unread}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })
+                    </div>
+                  )}
+                </div>
               ) : (
                 <div className="p-8 text-center text-muted-foreground">
                   <MessageSquare className="w-8 h-8 mx-auto mb-3 opacity-20" />

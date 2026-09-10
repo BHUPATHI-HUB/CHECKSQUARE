@@ -34,14 +34,20 @@ const PhotoImg = ({
     let cancelled = false;
     setRetried(false);
     if (photo?.url) { setSrc(photo.url); return undefined; }
+    // Offline-admin build: photos live on the device filesystem and are
+    // stored as { filePath }. Resolve to a WebView-safe URI.
+    if (photo?.filePath) {
+      getInspectionPhotoUrl(photo).then((u) => { if (!cancelled) setSrc(u); });
+      return () => { cancelled = true; };
+    }
     if (photo?.storageKey) {
       getInspectionPhotoUrl(photo).then((u) => { if (!cancelled) setSrc(u); });
     }
     return () => { cancelled = true; };
-  }, [photo?.url, photo?.storageKey]);
+  }, [photo?.url, photo?.storageKey, photo?.filePath]);
 
   const handleError = async () => {
-    if (retried || !photo?.storageKey) return;
+    if (retried || !(photo?.storageKey || photo?.filePath)) return;
     setRetried(true);
     const fresh = await getInspectionPhotoUrl(photo);
     if (fresh) setSrc(`${fresh}#r=${Date.now()}`); // cache-bust the <img>

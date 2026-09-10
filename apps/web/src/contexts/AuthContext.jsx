@@ -1,9 +1,50 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient.js';
+import { IS_OFFLINE_ADMIN, OFFLINE_ADMIN_USER } from '@/lib/appTarget.js';
 
 const AuthContext = createContext(null);
 const USE_SUPABASE_AUTH = isSupabaseConfigured && (import.meta.env?.VITE_USE_SUPABASE_AUTH === 'true');
+const OFFLINE_CACHE_KEY = 'auth-offline-cache-v1';
+const OFFLINE_SESSION_KEY = 'auth-offline-session-v1';
+const PIN_MAX_ATTEMPTS = 5;
+const PIN_LOCK_MS = 5 * 60 * 1000;
+
+const readJSON = (key, fallback) => {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch {
+    return fallback;
+  }
+};
+
+const writeJSON = (key, value) => {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Ignore localStorage quota/private mode errors.
+  }
+};
+
+const makeCacheKey = (email, role) => `${String(role || '').toLowerCase()}::${String(email || '').toLowerCase()}`;
+
+const isNetworkIssue = (err) => {
+  const msg = String(err?.message || err || '').toLowerCase();
+  return msg.includes('failed to fetch') || msg.includes('network') || msg.includes('fetch');
+};
+
+const randomSalt = () => {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+};
+
+const sha256Hex = async (text) => {
+  const enc = new TextEncoder().encode(text);
+  const hash = await crypto.subtle.digest('SHA-256', enc);
+  return Array.from(new Uint8Array(hash), (b) => b.toString(16).padStart(2, '0')).join('');
+};
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
@@ -52,10 +93,11 @@ const decodeJwtExp = (token) => {
   }
 };
 
-export const AuthProvider = ({ children }) => {
+const CloudAuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [supabaseSession, setSupabaseSession] = useState(null);
   const [pbToken, setPbToken] = useState(null);
+  const [sessionMode, setSessionMode] = useState('none');
   const [loading, setLoading] = useState(true);
   const [sessionWarning, setSessionWarning] = useState(false);
   const warnedRef = useRef(false);
@@ -85,6 +127,87 @@ export const AuthProvider = ({ children }) => {
     return toSupabaseUserSession(authUser, profile);
   }, []);
 
+  const getCachedUsersByRole = useCallback((role) => {
+    const cache = readJSON(OFFLINE_CACHE_KEY, { users: {} });
+    const roleNorm = String(role || '').toLowerCase();
+    return Object.values(cache.users || {})
+      .filter((u) => !roleNorm || String(u.role || '').toLowerCase() === roleNorm)
+      .map((u) => ({ id: u.id, email: u.email, name: u.name, role: u.role, lastLoginAt: u.lastLoginAt }));
+  }, []);
+
+  const cacheOfflineIdentity = useCallback(async (sessionUser, pinSeed) => {
+    if (!sessionUser?.email || !sessionUser?.role || !pinSeed) return;
+    const cache = readJSON(OFFLINE_CACHE_KEY, { users: {} });
+    const key = makeCacheKey(sessionUser.email, sessionUser.role);
+    const salt = randomSalt();
+    const pinHash = await sha256Hex(`${salt}:${pinSeed}`);
+    cache.users[key] = {
+      id: sessionUser.id,
+      email: sessionUser.email,
+      name: sessionUser.name || sessionUser.email,
+      role: sessionUser.role,
+      phone: sessionUser.phone || '',
+      address: sessionUser.address || '',
+      pinSalt: salt,
+      pinHash,
+      failedAttempts: 0,
+      lockUntil: null,
+      lastLoginAt: new Date().toISOString(),
+    };
+    writeJSON(OFFLINE_CACHE_KEY, cache);
+  }, []);
+
+  const loginOfflineWithPin = useCallback(async (email, pin, expectedRole) => {
+    const role = expectedRole || 'customer';
+    const key = makeCacheKey(email, role);
+    const cache = readJSON(OFFLINE_CACHE_KEY, { users: {} });
+    const entry = cache.users?.[key];
+    if (!entry) {
+      return { success: false, error: `No cached ${role} account found for offline login.` };
+    }
+
+    const now = Date.now();
+    if (entry.lockUntil && now < entry.lockUntil) {
+      const mins = Math.max(1, Math.ceil((entry.lockUntil - now) / 60000));
+      return { success: false, error: `Offline PIN locked. Try again in ${mins} minute(s).` };
+    }
+
+    const hash = await sha256Hex(`${entry.pinSalt}:${pin}`);
+    if (hash !== entry.pinHash) {
+      const nextFails = (entry.failedAttempts || 0) + 1;
+      entry.failedAttempts = nextFails;
+      if (nextFails >= PIN_MAX_ATTEMPTS) {
+        entry.lockUntil = Date.now() + PIN_LOCK_MS;
+        entry.failedAttempts = 0;
+      }
+      cache.users[key] = entry;
+      writeJSON(OFFLINE_CACHE_KEY, cache);
+      return { success: false, error: 'Invalid offline PIN.' };
+    }
+
+    entry.failedAttempts = 0;
+    entry.lockUntil = null;
+    entry.lastLoginAt = new Date().toISOString();
+    cache.users[key] = entry;
+    writeJSON(OFFLINE_CACHE_KEY, cache);
+
+    const offlineUser = {
+      id: entry.id,
+      email: entry.email,
+      name: entry.name,
+      role: entry.role,
+      phone: entry.phone || '',
+      address: entry.address || '',
+    };
+
+    setSupabaseSession(null);
+    setPbToken(null);
+    setUser(offlineUser);
+    setSessionMode('offline-auth');
+    writeJSON(OFFLINE_SESSION_KEY, { mode: 'offline-auth', user: offlineUser, at: new Date().toISOString() });
+    return { success: true, offline: true };
+  }, []);
+
   const logout = useCallback(() => {
     if (USE_SUPABASE_AUTH) {
       supabase.auth.signOut().catch(() => {});
@@ -96,8 +219,10 @@ export const AuthProvider = ({ children }) => {
     }
     setPbToken(null);
     setUser(null);
+    setSessionMode('none');
     setSessionWarning(false);
     warnedRef.current = false;
+    localStorage.removeItem(OFFLINE_SESSION_KEY);
   }, [getPB]);
 
   // Subscribe to PocketBase auth changes so multiple tabs stay in sync and a
@@ -112,9 +237,19 @@ export const AuthProvider = ({ children }) => {
         setSupabaseSession(data.session || null);
         if (data.session?.user) {
           const nextUser = await loadSupabaseUser(data.session.user);
-          if (mounted) setUser(nextUser);
+          if (mounted) {
+            setUser(nextUser);
+            setSessionMode('online-auth');
+          }
         } else {
-          setUser(null);
+          const offlineSession = readJSON(OFFLINE_SESSION_KEY, null);
+          if (offlineSession?.mode === 'offline-auth' && offlineSession?.user) {
+            setUser(offlineSession.user);
+            setSessionMode('offline-auth');
+          } else {
+            setUser(null);
+            setSessionMode('none');
+          }
         }
         setLoading(false);
       };
@@ -123,11 +258,21 @@ export const AuthProvider = ({ children }) => {
       const { data: sub } = supabase.auth.onAuthStateChange(async (_event, session) => {
         setSupabaseSession(session || null);
         if (!session?.user) {
-          setUser(null);
+          const offlineSession = readJSON(OFFLINE_SESSION_KEY, null);
+          if (offlineSession?.mode === 'offline-auth' && offlineSession?.user) {
+            setUser(offlineSession.user);
+            setSessionMode('offline-auth');
+          } else {
+            setUser(null);
+            setSessionMode('none');
+          }
           return;
         }
         const nextUser = await loadSupabaseUser(session.user);
-        if (mounted) setUser(nextUser);
+        if (mounted) {
+          setUser(nextUser);
+          setSessionMode('online-auth');
+        }
       });
 
       return () => {
@@ -160,8 +305,10 @@ export const AuthProvider = ({ children }) => {
         }
 
         if (cancelled) return;
-        setUser(toUserSession(pb.authStore.record));
+        const nextUser = toUserSession(pb.authStore.record);
+        setUser(nextUser);
         setPbToken(pb.authStore.token || null);
+        setSessionMode(nextUser ? 'online-auth' : 'none');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -283,18 +430,25 @@ export const AuthProvider = ({ children }) => {
         setSupabaseSession(data.session || null);
         const nextUser = await loadSupabaseUser(data.user);
         setUser(nextUser);
+        setSessionMode('online-auth');
 
         if (expectedRole && nextUser?.role !== expectedRole) {
           await supabase.auth.signOut();
           setSupabaseSession(null);
           setUser(null);
+          setSessionMode('none');
           return {
             success: false,
             error: `This account is not registered as a ${expectedRole}.`,
           };
         }
+        await cacheOfflineIdentity(nextUser, password);
+        localStorage.removeItem(OFFLINE_SESSION_KEY);
         return { success: true };
       } catch (e) {
+        if ((typeof navigator !== 'undefined' && !navigator.onLine) || isNetworkIssue(e)) {
+          return loginOfflineWithPin(email, password, expectedRole);
+        }
         return {
           success: false,
           error: e?.message || 'Invalid email or password.',
@@ -320,6 +474,7 @@ export const AuthProvider = ({ children }) => {
 
       setUser(toUserSession(pb.authStore.record));
       setPbToken(pb.authStore.token || null);
+      setSessionMode('online-auth');
 
       return { success: true };
     } catch (e) {
@@ -445,16 +600,47 @@ export const AuthProvider = ({ children }) => {
   const value = {
     user,
     role: user?.role,
+    sessionMode,
     loading,
     sessionWarning,
     login,
+    loginOfflineWithPin,
+    getCachedUsersByRole,
     signup,
     logout,
     extendSession,
     requestPasswordReset,
     hasRole,
-    isAuthenticated: USE_SUPABASE_AUTH ? (!!user && !!supabaseSession) : (!!user && !!pbToken),
+    isAuthenticated: USE_SUPABASE_AUTH
+      ? (!!user && (!!supabaseSession || sessionMode === 'offline-auth'))
+      : (!!user && !!pbToken),
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+};
+
+// Public provider — swaps in a static, network-free identity for the
+// offline-admin Android build, otherwise runs the full cloud auth stack.
+// Split into two components so React Hooks are never called conditionally.
+export const AuthProvider = ({ children }) => {
+  if (IS_OFFLINE_ADMIN) {
+    const offlineValue = {
+      user: OFFLINE_ADMIN_USER,
+      role: OFFLINE_ADMIN_USER.role,
+      sessionMode: 'offline-auth',
+      loading: false,
+      sessionWarning: false,
+      login: async () => ({ success: true }),
+      loginOfflineWithPin: async () => ({ success: true, offline: true }),
+      getCachedUsersByRole: () => [OFFLINE_ADMIN_USER],
+      signup: async () => ({ success: true }),
+      logout: () => {},
+      extendSession: async () => {},
+      requestPasswordReset: async () => ({ success: true }),
+      hasRole: () => true,
+      isAuthenticated: true,
+    };
+    return <AuthContext.Provider value={offlineValue}>{children}</AuthContext.Provider>;
+  }
+  return <CloudAuthProvider>{children}</CloudAuthProvider>;
 };

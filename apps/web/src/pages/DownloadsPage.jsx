@@ -15,6 +15,7 @@ import {
 import { Download, Trash2, FileText, FileSpreadsheet, FileType2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { saveFile } from '@/utils/saveFile';
+import { IS_OFFLINE_ADMIN } from '@/lib/appTarget.js';
 
 const formatIcon = (fmt) => {
 	if (fmt === 'pdf')  return <FileType2 className="w-5 h-5 text-red-500" />;
@@ -56,6 +57,27 @@ const DownloadsPage = () => {
 	useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [user?.id]);
 
 	const handleDownload = async (rec) => {
+		// Offline build: re-open / share the file already saved on the device.
+		if (IS_OFFLINE_ADMIN) {
+			try {
+				const { Capacitor } = await import('@capacitor/core');
+				if (Capacitor?.isNativePlatform?.()) {
+					const { Filesystem, Directory } = await import('@capacitor/filesystem');
+					const { Share } = await import('@capacitor/share');
+					const { uri } = await Filesystem.getUri({
+						path: rec.docPath || rec.filename,
+						directory: Directory.Documents,
+					});
+					await Share.share({ title: rec.filename, url: uri, dialogTitle: 'Open or share report' });
+				} else {
+					toast.info('The report was saved to your device when you first downloaded it.');
+				}
+			} catch (err) {
+				console.warn('Offline re-open failed:', err);
+				toast.error('Could not open the saved file. It may have been moved or deleted.');
+			}
+			return;
+		}
 		if (!rec.file) {
 			toast.error('This download has no stored file. It may have been generated before sync.');
 			return;

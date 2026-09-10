@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { DEFAULT_WEIGHTS, DEFAULT_SCORE_EXPLANATION_HTML, PROPCHK_WEIGHTS, PROPCHK_ITEMS_PER_ROOM, DEFAULT_ROOM_SCORE_EXPR, DEFAULT_PRIORITY_EXPR } from '@/utils/scoring';
 import { STARTER_COMMENT_LIBRARY } from '@/utils/commentLibrary';
 import data from '@/services/dataService.js';
@@ -143,10 +143,17 @@ export const SettingsProvider = ({ children }) => {
   // saving a change — no F5 needed.
 
   const APP_SETTINGS_ID = 'single';
+  const SYNC_META_KEY = 'app-settings-sync-meta';
+
+  const [isSyncingSettings, setIsSyncingSettings] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState(null);
+  const [syncError, setSyncError] = useState(null);
+  const [hasPendingSync, setHasPendingSync] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     let unsub = null;
+    let hadPendingLocalChanges = false;
 
     const hydrateFromCache = () => {
       try {
@@ -154,6 +161,14 @@ export const SettingsProvider = ({ children }) => {
         if (cached) {
           const parsed = JSON.parse(cached);
           setSettings((prev) => ({ ...prev, ...parsed }));
+        }
+        const syncMeta = localStorage.getItem(SYNC_META_KEY);
+        if (syncMeta) {
+          const parsedMeta = JSON.parse(syncMeta);
+          setLastSyncedAt(parsedMeta.lastSyncedAt || null);
+          setSyncError(parsedMeta.syncError || null);
+          setHasPendingSync(!!parsedMeta.hasPendingSync);
+          hadPendingLocalChanges = !!parsedMeta.hasPendingSync;
         }
       } catch (err) {
         console.error('Failed to parse cached settings', err);
@@ -164,9 +179,11 @@ export const SettingsProvider = ({ children }) => {
       try {
         const payload = await data.getAppSettings();
         if (cancelled) return;
-        if (Object.keys(payload).length > 0) {
+        if (Object.keys(payload).length > 0 && !hadPendingLocalChanges) {
           setSettings((prev) => ({ ...prev, ...payload }));
           localStorage.setItem('app-settings', JSON.stringify(payload));
+          setSyncError(null);
+          setHasPendingSync(false);
         }
       } catch (_) {
         // First boot or unauthed visitor — silently fall back to cache + defaults.
@@ -185,6 +202,9 @@ export const SettingsProvider = ({ children }) => {
           const payload = e.record?.payload || {};
           setSettings((prev) => ({ ...prev, ...payload }));
           localStorage.setItem('app-settings', JSON.stringify(payload));
+          setLastSyncedAt(new Date().toISOString());
+          setSyncError(null);
+          setHasPendingSync(false);
         }
       }, APP_SETTINGS_ID);
     } catch (_) { /* offline / unauthed — skip */ }
@@ -194,6 +214,18 @@ export const SettingsProvider = ({ children }) => {
       if (unsub) unsub();
     };
   }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SYNC_META_KEY, JSON.stringify({
+        lastSyncedAt,
+        syncError,
+        hasPendingSync,
+      }));
+    } catch (_) {
+      // Ignore localStorage write failures (private mode / quota exceeded).
+    }
+  }, [SYNC_META_KEY, lastSyncedAt, syncError, hasPendingSync]);
 
   useEffect(() => {
     // Apply dynamic branding variables globally
@@ -223,8 +255,38 @@ export const SettingsProvider = ({ children }) => {
     }
   }, [settings.primaryBrandColor, settings.primaryColor, settings.secondaryBrandColor, settings.secondaryColor, settings.accentColor, settings.favicon, settings.appName]);
 
-  const updateSettings = async (newSettings) => {
+  const syncAllSettings = useCallback(async (overrideSettings) => {
+    const source = overrideSettings || settings;
+    const { lastUpdated, __brandVersion, ...payload } = source; // eslint-disable-line no-unused-vars
+
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      const msg = 'Offline - settings saved locally. Sync when online.';
+      setSyncError(msg);
+      setHasPendingSync(true);
+      return { success: false, error: msg };
+    }
+
+    setIsSyncingSettings(true);
+    setSyncError(null);
     try {
+      await data.upsertAppSettings(payload);
+      const syncedAt = new Date().toISOString();
+      setLastSyncedAt(syncedAt);
+      setHasPendingSync(false);
+      return { success: true, syncedAt };
+    } catch (err) {
+      const msg = err?.message || 'Failed to sync settings';
+      setSyncError(msg);
+      setHasPendingSync(true);
+      return { success: false, error: msg };
+    } finally {
+      setIsSyncingSettings(false);
+    }
+  }, [settings]);
+
+  const updateSettings = async (newSettings, options = {}) => {
+    try {
+      const { syncCloud = false } = options;
       const updated = { ...settings, ...newSettings };
       setSettings(updated);
       // Optimistic local write-through.
@@ -232,15 +294,25 @@ export const SettingsProvider = ({ children }) => {
         ...updated,
         lastUpdated: new Date().toISOString(),
       }));
-      // Persist to server (admins only — the API rule rejects non-admins
-      // and the UI never invokes this for them).
-      const { lastUpdated, __brandVersion, ...payload } = updated; // eslint-disable-line no-unused-vars
-      try {
-        await data.upsertAppSettings(payload);
-      } catch (innerErr) {
-        throw innerErr;
+
+      setHasPendingSync(true);
+
+      if (!syncCloud) {
+        return { success: true, localSaved: true, synced: false };
       }
-      return { success: true };
+
+      const syncResult = await syncAllSettings(updated);
+      if (syncResult.success) {
+        return { success: true, localSaved: true, synced: true, syncedAt: syncResult.syncedAt };
+      }
+
+      // Local write already succeeded; report as success with a sync warning.
+      return {
+        success: true,
+        localSaved: true,
+        synced: false,
+        warning: syncResult.error || 'Saved locally. Cloud sync pending.',
+      };
     } catch (err) {
       console.error('Failed to persist settings:', err);
       return { success: false, error: err?.message || 'Failed to update settings' };
@@ -257,7 +329,19 @@ export const SettingsProvider = ({ children }) => {
   };
 
   return (
-    <SettingsContext.Provider value={{ settings, updateSettings, resetDisclaimers, loading }}>
+    <SettingsContext.Provider
+      value={{
+        settings,
+        updateSettings,
+        resetDisclaimers,
+        syncAllSettings,
+        isSyncingSettings,
+        lastSyncedAt,
+        syncError,
+        hasPendingSync,
+        loading,
+      }}
+    >
       {children}
     </SettingsContext.Provider>
   );

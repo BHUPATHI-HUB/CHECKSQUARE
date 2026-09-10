@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import Header from '@/components/Header.jsx';
 import Footer from '@/components/Footer.jsx';
 import { useSettings } from '@/contexts/SettingsContext.jsx';
+import useOnlineStatus from '@/hooks/useOnlineStatus.js';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -14,7 +15,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { Save, Plus, Trash2, AlertCircle, Upload, Image as ImageIcon, FileSpreadsheet, Download } from 'lucide-react';
+import { Save, Plus, Trash2, AlertCircle, Upload, Image as ImageIcon, FileSpreadsheet, Download, RefreshCw } from 'lucide-react';
 import DisclaimerEditor from '@/components/DisclaimerEditor.jsx';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -150,7 +151,17 @@ const BrandCatalogEditor = ({ catalog, onChange }) => {
 };
 
 const AdminSettingsPage = () => {
-  const { settings, updateSettings, loading } = useSettings();
+  const {
+    settings,
+    updateSettings,
+    syncAllSettings,
+    isSyncingSettings,
+    lastSyncedAt,
+    syncError,
+    hasPendingSync,
+    loading,
+  } = useSettings();
+  const online = useOnlineStatus();
   const [localSettings, setLocalSettings] = useState(null);
   const [selectedRoom, setSelectedRoom] = useState('General');
   const [newComment, setNewComment] = useState('');
@@ -218,12 +229,32 @@ const AdminSettingsPage = () => {
     return <div className="min-h-screen flex items-center justify-center"><p>Error loading settings. Please refresh.</p></div>;
   }
 
-  const handleSave = () => {
-    const result = updateSettings(localSettings);
-    if (result.success) {
+  const handleSave = async (override) => {
+    // `updateSettings` is async — it returns a Promise, so we must await it
+    // to know whether the server write actually succeeded. Callers may pass
+    // an explicit `override` object to avoid React's stale-closure problem
+    // when they mutate state and save in the same click handler.
+    const isEventLike = !!override && typeof override === 'object' && (
+      typeof override.preventDefault === 'function' ||
+      'nativeEvent' in override ||
+      'currentTarget' in override
+    );
+    const payload = isEventLike ? localSettings : (override || localSettings);
+    const result = await updateSettings(payload);
+    if (result?.success) {
       toast.success('Settings updated successfully');
+      if (result?.warning) toast(result.warning);
     } else {
-      toast.error(result.error || 'Failed to update settings');
+      toast.error(result?.error || 'Failed to update settings');
+    }
+  };
+
+  const handleSyncAllSettings = async () => {
+    const result = await syncAllSettings(localSettings);
+    if (result?.success) {
+      toast.success('All settings synced successfully');
+    } else {
+      toast.error(result?.error || 'Failed to sync settings');
     }
   };
 
@@ -379,14 +410,38 @@ const AdminSettingsPage = () => {
                 <p className="editorial-deck mt-5 max-w-2xl">
                   Brand voice, report typography, comment library, severity scale. Adjustments here propagate everywhere.
                 </p>
+                <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <span>
+                      {isSyncingSettings
+                        ? 'Sync in progress...'
+                        : syncError
+                          ? `Sync failed: ${syncError}`
+                          : lastSyncedAt
+                            ? `Last synced: ${new Date(lastSyncedAt).toLocaleString()}`
+                            : 'Not synced yet'}
+                    </span>
+                    {hasPendingSync && <span className="text-amber-600">Pending local changes</span>}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleSyncAllSettings}
+                    disabled={!online || isSyncingSettings}
+                    className="w-full sm:w-auto"
+                  >
+                    <RefreshCw className={`w-4 h-4 mr-2 ${isSyncingSettings ? 'animate-spin' : ''}`} />
+                    {isSyncingSettings ? 'Syncing...' : 'Sync All Settings'}
+                  </Button>
+                </div>
               </motion.div>
             </div>
           </section>
 
           <section className="container mx-auto px-4 sm:px-6 lg:px-12 py-12 lg:py-16">
           <Tabs defaultValue="branding" className="space-y-8">
-            <div className="overflow-x-auto -mx-6 px-6 lg:mx-0 lg:px-0 border-b">
-              <TabsList className="inline-flex bg-transparent rounded-none p-0 h-auto gap-1">
+            <div className="-mx-6 px-6 lg:mx-0 lg:px-0 border-b">
+              <TabsList className="flex flex-wrap w-full justify-start bg-transparent rounded-none p-0 h-auto gap-x-1 gap-y-0">
                 {[
                   ['branding','Global branding'],
                   ['pdf','PDF export'],
@@ -545,14 +600,14 @@ const AdminSettingsPage = () => {
 
                   {/* ── Section ordering, toggles & custom sections ─────────── */}
                   <div className="pt-6 border-t">
-                    <div className="flex items-center justify-between mb-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-3">
                       <div>
                         <Label className="text-base font-semibold">Report sections (drag-free reorder)</Label>
                         <p className="text-xs text-muted-foreground mt-1">
                           Use the up / down arrows to reorder pages in the customer PDF. Toggle the switch to hide a page without losing its position. Add custom sections to inject extra pages anywhere in the document.
                         </p>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <Button variant="outline" size="sm" onClick={addCustomSection}>
                           <Plus className="w-4 h-4 mr-2" /> Add section
                         </Button>
@@ -650,14 +705,21 @@ const AdminSettingsPage = () => {
                     <input
                       ref={fileInputRef}
                       type="file"
-                      accept=".csv,text/csv"
+                      accept=".csv,text/csv,text/comma-separated-values,application/csv,application/vnd.ms-excel,text/plain"
                       className="hidden"
                       onChange={async (e) => {
                         const file = e.target.files?.[0];
                         if (!file) return;
                         setImportBusy(true);
                         try {
-                          const text = await file.text();
+                          const text = typeof file.text === 'function'
+                            ? await file.text()
+                            : await new Promise((resolve, reject) => {
+                                const r = new FileReader();
+                                r.onload = () => resolve(String(r.result || ''));
+                                r.onerror = reject;
+                                r.readAsText(file);
+                              });
                           const rows = parseCSV(text);
                           const imported = csvRowsToLibrary(rows);
                           if (imported.length === 0) {
@@ -980,8 +1042,12 @@ const AdminSettingsPage = () => {
                   </Button>
                   <Button
                     onClick={() => {
-                      handleAppChange('commentLibrary', libDraft);
-                      handleSave();
+                      // Build the next settings synchronously and pass it to
+                      // handleSave so we don't persist a stale localSettings
+                      // (setLocalSettings is async and wouldn't be applied yet).
+                      const next = { ...localSettings, commentLibrary: libDraft };
+                      setLocalSettings(next);
+                      handleSave(next);
                     }}
                   >
                     <Save className="w-4 h-4 mr-2" /> Save Library

@@ -22,6 +22,8 @@ import {
   putPhotoBlob, getPhotoBlob, markPhotoSynced, deletePhotoBlob, enqueue,
 } from '@/lib/localStore.js';
 import { requestSync } from '@/services/syncEngine.js';
+import { IS_OFFLINE_ADMIN } from '@/lib/appTarget.js';
+import offlinePhoto from '@/lib/localPhotoStorage.js';
 
 const SIGNED_URL_TTL_SECONDS = 60 * 60; // 1 h
 const PB_BASE_URL = (import.meta.env?.VITE_PB_URL || 'http://127.0.0.1:8090').replace(/\/$/, '');
@@ -143,6 +145,7 @@ async function resizeImageFile(file, maxEdge, quality) {
  *           — storageKey when Supabase succeeded; url when falling back to base64.
  */
 export async function uploadInspectionPhoto(file, { inspectionId = 'draft', roomKey = 'misc', maxEdge = 0, quality = 0.85 } = {}) {
+  if (IS_OFFLINE_ADMIN) return offlinePhoto.uploadInspectionPhoto(file, { inspectionId, roomKey });
   const id = makePhotoId();
   // Resize/compress up-front so BOTH the upload and the local cache are small.
   file = await resizeImageFile(file, maxEdge, quality);
@@ -198,6 +201,7 @@ export async function uploadInspectionPhoto(file, { inspectionId = 'draft', room
  *   - { storageKey }   — Supabase-managed              → short-lived signed URL
  */
 export async function getInspectionPhotoUrl(photo) {
+  if (IS_OFFLINE_ADMIN) return offlinePhoto.getInspectionPhotoUrl(photo);
   if (!photo) return '';
   if (photo.url) return photo.url;
   if (!photo.storageKey || !isSupabaseConfigured) return '';
@@ -219,6 +223,7 @@ export async function getInspectionPhotoUrl(photo) {
 
 /** Permanently delete a photo (called from RoomPhotoManager onRemove). */
 export async function deleteInspectionPhoto(photo) {
+  if (IS_OFFLINE_ADMIN) return offlinePhoto.deleteInspectionPhoto(photo);
   if (!photo?.storageKey || !isSupabaseConfigured) return;
   await supabase.storage.from(SUPABASE_PHOTO_BUCKET).remove([photo.storageKey]);
 }
@@ -229,6 +234,7 @@ export async function deleteInspectionPhoto(photo) {
  * bytes guarantees the report stays self-contained).
  */
 export async function getInspectionPhotoDataUrl(photo) {
+  if (IS_OFFLINE_ADMIN) return offlinePhoto.getInspectionPhotoDataUrl(photo);
   if (!photo) return '';
   if (photo.url) return photo.url;            // already a dataURL or external URL
   // Local-first for reports too — embed the on-device Blob if not yet synced.
@@ -269,6 +275,7 @@ export async function getInspectionPhotoDataUrl(photo) {
  * should treat the returned object as a snapshot.
  */
 export async function materializeInspectionPhotos(inspection) {
+  if (IS_OFFLINE_ADMIN) return offlinePhoto.materializeInspectionPhotos(inspection);
   if (!inspection) return inspection;
 
   // Defensive deep-clone — caller's React state stays pristine.

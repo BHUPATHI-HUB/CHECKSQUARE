@@ -135,7 +135,32 @@ export const libraryToCSV = (entries) => {
   return `${head}\n${body}\n`;
 };
 
-export const downloadCSV = (filename, content) => {
+export const downloadCSV = async (filename, content) => {
+  // Native (Capacitor/Android): the WebView ignores <a download> + blob URLs,
+  // so write the CSV to Documents and open the share sheet instead.
+  try {
+    const { Capacitor } = await import('@capacitor/core');
+    if (Capacitor?.isNativePlatform?.()) {
+      const { Filesystem, Directory, Encoding } = await import('@capacitor/filesystem');
+      const { Share } = await import('@capacitor/share');
+      await Filesystem.writeFile({
+        path: filename,
+        data: content,
+        directory: Directory.Documents,
+        encoding: Encoding.UTF8,
+        recursive: true,
+      });
+      const { uri } = await Filesystem.getUri({ path: filename, directory: Directory.Documents });
+      try {
+        await Share.share({ title: filename, url: uri, dialogTitle: 'Save or share CSV' });
+      } catch { /* user cancelled — file is still saved to Documents */ }
+      return;
+    }
+  } catch {
+    // Not native or plugin unavailable → fall through to the browser path.
+  }
+
+  // Web: standard anchor download.
   const blob = new Blob([content], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

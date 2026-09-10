@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Menu, Home, LogOut, User, Shield, Settings, MessageCircle, CheckSquare, Users as UsersIcon, Download } from 'lucide-react';
+import { IS_OFFLINE_ADMIN } from '@/lib/appTarget.js';
 
 const Header = () => {
   const { user, logout, isAuthenticated, role } = useAuth();
@@ -65,15 +66,17 @@ const Header = () => {
       )}
       {isAuthenticated && role === 'admin' && (
         <>
-          <Link
-            to="/admin/users"
-            className={`${
-              isActive('/admin/users') ? 'text-primary font-medium' : 'text-foreground hover:text-primary'
-            } transition-colors duration-200 ${mobile ? 'block py-2' : ''}`}
-            onClick={() => mobile && setMobileOpen(false)}
-          >
-            Users
-          </Link>
+          {!IS_OFFLINE_ADMIN && (
+            <Link
+              to="/admin/users"
+              className={`${
+                isActive('/admin/users') ? 'text-primary font-medium' : 'text-foreground hover:text-primary'
+              } transition-colors duration-200 ${mobile ? 'block py-2' : ''}`}
+              onClick={() => mobile && setMobileOpen(false)}
+            >
+              Users
+            </Link>
+          )}
           <Link
             to="/admin/settings"
             className={`${
@@ -122,16 +125,18 @@ const Header = () => {
           <div className="flex items-center gap-4 flex-shrink-0">
             {isAuthenticated ? (
               <>
-                <Button variant="ghost" size="icon" asChild className="relative hidden md:flex">
-                  <Link to="/chat">
-                    <MessageCircle className="w-5 h-5" />
-                    {unreadCount > 0 && (
-                      <span className="absolute top-1 right-1 badge-unread">
-                        {unreadCount > 99 ? '99+' : unreadCount}
-                      </span>
-                    )}
-                  </Link>
-                </Button>
+                {!IS_OFFLINE_ADMIN && (
+                  <Button variant="ghost" size="icon" asChild className="relative hidden md:flex">
+                    <Link to="/chat">
+                      <MessageCircle className="w-5 h-5" />
+                      {unreadCount > 0 && (
+                        <span className="absolute top-1 right-1 badge-unread">
+                          {unreadCount > 99 ? '99+' : unreadCount}
+                        </span>
+                      )}
+                    </Link>
+                  </Button>
+                )}
 
                 <div className="hidden md:flex items-center gap-2 px-3 py-1 rounded-full bg-accent text-accent-foreground text-sm font-medium">
                   {role === 'admin' ? (
@@ -169,12 +174,14 @@ const Header = () => {
                     </DropdownMenuItem>
                     {role === 'admin' && (
                       <>
-                        <DropdownMenuItem asChild className="cursor-pointer">
-                          <Link to="/admin/users">
-                            <UsersIcon className="w-4 h-4 mr-2" />
-                            Users
-                          </Link>
-                        </DropdownMenuItem>
+                        {!IS_OFFLINE_ADMIN && (
+                          <DropdownMenuItem asChild className="cursor-pointer">
+                            <Link to="/admin/users">
+                              <UsersIcon className="w-4 h-4 mr-2" />
+                              Users
+                            </Link>
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuItem asChild className="cursor-pointer">
                           <Link to="/admin/settings">
                             <Settings className="w-4 h-4 mr-2" />
@@ -225,14 +232,16 @@ const Header = () => {
                   <NavLinks mobile />
                   {isAuthenticated ? (
                     <>
-                      <Link 
-                        to="/chat" 
-                        className="flex items-center justify-between py-2 text-foreground hover:text-primary transition-colors"
-                        onClick={() => setMobileOpen(false)}
-                      >
-                        <span className="flex items-center gap-2"><MessageCircle className="w-5 h-5" /> Messages</span>
-                        {unreadCount > 0 && <span className="badge-unread">{unreadCount}</span>}
-                      </Link>
+                      {!IS_OFFLINE_ADMIN && (
+                        <Link
+                          to="/chat"
+                          className="flex items-center justify-between py-2 text-foreground hover:text-primary transition-colors"
+                          onClick={() => setMobileOpen(false)}
+                        >
+                          <span className="flex items-center gap-2"><MessageCircle className="w-5 h-5" /> Messages</span>
+                          {unreadCount > 0 && <span className="badge-unread">{unreadCount}</span>}
+                        </Link>
+                      )}
                       <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-accent text-accent-foreground mt-4">
                         {role === 'admin' ? (
                           <Shield className="w-4 h-4" />

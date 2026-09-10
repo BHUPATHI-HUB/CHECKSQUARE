@@ -2,6 +2,7 @@
 import React, { useEffect } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext.jsx';
+import { IS_OFFLINE_ADMIN } from '@/lib/appTarget.js';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { AlertCircle } from 'lucide-react';
@@ -14,8 +15,13 @@ const ProtectedRoute = ({ children, requiredRole }) => {
   // back-button press inside an authenticated dashboard so the user can never
   // navigate "back" into a stale form or pre-login screen by mistake. Sign-out
   // remains the only way to leave the protected area.
+  //
+  // Disabled in the offline-admin build: there is no login to protect against,
+  // and this trap breaks the Android hardware Back button (every back press was
+  // being re-pushed, so navigation appeared frozen).
   useEffect(() => {
-    if (!user) return;
+    if (IS_OFFLINE_ADMIN) return undefined;
+    if (!user) return undefined;
     window.history.pushState(null, '', window.location.href);
     const handler = () => {
       window.history.pushState(null, '', window.location.href);

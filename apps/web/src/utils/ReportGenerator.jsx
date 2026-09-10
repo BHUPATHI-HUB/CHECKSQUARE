@@ -2,7 +2,7 @@ import html2pdf from 'html2pdf.js';
 import {
   Document, Packer, Paragraph, HeadingLevel, TextRun, AlignmentType,
   Table, TableRow, TableCell, WidthType, BorderStyle, PageBreak, ShadingType,
-  ImageRun,
+  ImageRun, VerticalMergeType,
 } from 'docx';
 import { saveFile } from './saveFile';
 import { computeInspectionScore, DEFAULT_SCORE_EXPLANATION_HTML, explainScore } from './scoring';
@@ -56,6 +56,24 @@ const WATER_SVG = (gold = '#c19a4b', ink = '#1f2937', blue = '#0ea5e9') => `
     </g>
   </svg>
 `;
+
+const buildAreaGroups = (areas = []) => {
+  const groups = [];
+  let i = 0;
+  while (i < areas.length) {
+    const first = areas[i] || {};
+    const room = String(first.room || first.name || '').trim();
+    let j = i + 1;
+    while (j < areas.length) {
+      const nextRoom = String(areas[j]?.room || areas[j]?.name || '').trim();
+      if (nextRoom !== room) break;
+      j += 1;
+    }
+    groups.push({ room, start: i, end: j, rows: areas.slice(i, j) });
+    i = j;
+  }
+  return groups;
+};
 
 const BRAND_SVG = (gold = '#c19a4b', ink = '#1f2937') => `
   <svg viewBox="0 0 480 100" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100px;">
@@ -941,6 +959,7 @@ export const buildReportHTML = (inspection, settings) => {
   const totalSft = areas.reduce(
     (sum, a) => sum + computeAreaSft(a.length, a.width, a.lengthUnit, a.widthUnit), 0,
   );
+  const areaGroups = buildAreaGroups(areas);
   const areaTable = areas.length > 0 ? `
     <table class="editorial">
       <thead>
@@ -952,14 +971,14 @@ export const buildReportHTML = (inspection, settings) => {
         </tr>
       </thead>
       <tbody>
-        ${areas.map((a) => `
+        ${areaGroups.map((group) => group.rows.map((a, rowIdx) => `
           <tr>
-            <td>${esc(a.room || a.name) || '—'}</td>
+            ${rowIdx === 0 ? `<td${group.rows.length > 1 ? ` rowspan="${group.rows.length}" style="vertical-align: middle;"` : ''}>${esc(group.room) || '—'}</td>` : ''}
             <td>${esc(a.length)} ${esc(a.lengthUnit || 'ft')}</td>
             <td>${esc(a.width)} ${esc(a.widthUnit || 'ft')}</td>
             <td style="text-align: right;">${computeAreaSft(a.length, a.width, a.lengthUnit, a.widthUnit).toLocaleString()}</td>
           </tr>
-        `).join('')}
+        `).join('')).join('')}
         <tr class="total">
           <td colspan="3">TOTAL AREA (sft)</td>
           <td style="text-align: right;">${totalSft.toLocaleString()}</td>
@@ -3492,15 +3511,26 @@ export const generateDOCX = async (inspection, settings, opts) => {
     const totalSft = areas.reduce(
       (sum, a) => sum + computeAreaSft(a.length, a.width, a.lengthUnit, a.widthUnit), 0,
     );
+    const areaGroups = buildAreaGroups(areas);
 
     if (areas.length > 0) {
-      const dataRows = areas.map((a, idx) => new TableRow({
-        children: [
-          bodyCell(a.room || a.name || '—',                                                                 { zebra: idx % 2 === 1 }),
-          bodyCell(`${a.length || ''} ${a.lengthUnit || 'ft'}`,                                              { zebra: idx % 2 === 1 }),
-          bodyCell(`${a.width || ''} ${a.widthUnit || 'ft'}`,                                                { zebra: idx % 2 === 1 }),
-          bodyCell(computeAreaSft(a.length, a.width, a.lengthUnit, a.widthUnit).toLocaleString(),            { zebra: idx % 2 === 1, align: AlignmentType.RIGHT }),
-        ],
+      let visualIdx = 0;
+      const dataRows = areaGroups.flatMap((group) => group.rows.map((a, rowIdx) => {
+        const zebra = visualIdx % 2 === 1;
+        visualIdx += 1;
+        return new TableRow({
+          children: [
+            bodyCell(group.room || '—', {
+              zebra,
+              ...(group.rows.length > 1
+                ? { verticalMerge: rowIdx === 0 ? VerticalMergeType.RESTART : VerticalMergeType.CONTINUE }
+                : {}),
+            }),
+            bodyCell(`${a.length || ''} ${a.lengthUnit || 'ft'}`,                                   { zebra }),
+            bodyCell(`${a.width || ''} ${a.widthUnit || 'ft'}`,                                     { zebra }),
+            bodyCell(computeAreaSft(a.length, a.width, a.lengthUnit, a.widthUnit).toLocaleString(), { zebra, align: AlignmentType.RIGHT }),
+          ],
+        });
       }));
       const totalRow = new TableRow({
         children: [
