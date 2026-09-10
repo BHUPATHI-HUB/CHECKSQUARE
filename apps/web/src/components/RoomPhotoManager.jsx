@@ -48,9 +48,11 @@ const PhotoSlot = ({
   ariaLabel,
   inspectionId,
   roomKey,
+  disabled = false,
 }) => {
   const camRef = useRef(null);
   const fileRef = useRef(null);
+  const multiFileRef = useRef(null);
   const [camOpen, setCamOpen] = useState(false);
   const { settings } = useSettings();
   const ri = settings?.reportImages || {};
@@ -118,6 +120,7 @@ const PhotoSlot = ({
               type="button"
               variant="secondary"
               size="sm"
+              disabled={disabled}
               onClick={() => (isMobile ? camRef.current?.click() : setCamOpen(true))}
             >
               <Camera className="w-4 h-4 mr-1.5" /> Capture
@@ -126,11 +129,24 @@ const PhotoSlot = ({
               type="button"
               variant="outline"
               size="sm"
+              disabled={disabled}
               onClick={() => fileRef.current?.click()}
             >
-              <Upload className="w-4 h-4 mr-1.5" /> Upload
+              <Upload className="w-4 h-4 mr-1.5" /> Upload photo
             </Button>
           </div>
+          {multiple && onAddMany && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-full"
+              disabled={disabled}
+              onClick={() => multiFileRef.current?.click()}
+            >
+              <Upload className="w-4 h-4 mr-1.5" /> Upload multiple photos (Corner 1, 2, 3…)
+            </Button>
+          )}
           {/* Camera capture: presence of capture attribute opens rear camera on mobile */}
           <input
             ref={camRef}
@@ -149,6 +165,16 @@ const PhotoSlot = ({
             className="hidden"
             onChange={handleFile}
           />
+          {multiple && onAddMany && (
+            <input
+              ref={multiFileRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={handleFile}
+            />
+          )}
           <WebcamCaptureModal open={camOpen} onOpenChange={setCamOpen} onCapture={consumeFile} />
         </div>
       )}
@@ -245,6 +271,7 @@ const RoomPhotoManager = ({ open, onOpenChange, room, onSave }) => {
   const { settings } = useSettings();
   const [cornerPhotos, setCornerPhotos] = useState(room?.cornerPhotos || []);
   const [defects, setDefects] = useState(room?.defects || []);
+  const [cornerUpload, setCornerUpload] = useState({ active: false, done: 0, total: 0 });
 
   useEffect(() => {
     setCornerPhotos(room?.cornerPhotos || []);
@@ -311,6 +338,7 @@ const RoomPhotoManager = ({ open, onOpenChange, room, onSave }) => {
     if (picked.length === 0) return;
 
     const startIndex = parseCornerIndex(startCornerLabel) || 1;
+    setCornerUpload({ active: true, done: 0, total: picked.length });
     const map = new Map((cornerPhotos || []).map((p) => [p.corner, p]));
 
     let added = 0;
@@ -343,6 +371,7 @@ const RoomPhotoManager = ({ open, onOpenChange, room, onSave }) => {
       } catch {
         failed += 1;
       }
+      setCornerUpload((prev) => ({ ...prev, done: i + 1 }));
     }
 
     const sorted = [...map.values()].sort((a, b) => {
@@ -358,6 +387,7 @@ const RoomPhotoManager = ({ open, onOpenChange, room, onSave }) => {
     if (failed > 0) {
       toast.error(`${failed} photo${failed === 1 ? '' : 's'} failed to upload`);
     }
+    setCornerUpload({ active: false, done: 0, total: 0 });
   };
 
   const phaseBLocked = cornerPhotos.length === 0;
@@ -478,6 +508,7 @@ const RoomPhotoManager = ({ open, onOpenChange, room, onSave }) => {
                       ariaLabel={cornerLabel}
                       inspectionId={room?.id}
                       roomKey={roomKey}
+                      disabled={cornerUpload.active}
                     />
                   </div>
                 );
@@ -494,6 +525,11 @@ const RoomPhotoManager = ({ open, onOpenChange, room, onSave }) => {
                 <Plus className="w-4 h-4 mr-1.5" /> Add another corner slot
               </Button>
             </div>
+            {cornerUpload.active && (
+              <p className="mt-3 text-center text-xs text-muted-foreground" role="status">
+                Adding corner photos {cornerUpload.done}/{cornerUpload.total}… please keep this window open.
+              </p>
+            )}
           </section>
 
           {/* ───────── Phase B / Room Defects ───────── */}
