@@ -15,6 +15,7 @@
 // Sizing: Excel renders images at 96 DPI, so 1 cm = 96/2.54 ≈ 37.795 px.
 
 import { materializeInspectionPhotos } from '@/lib/supabasePhotoStorage.js';
+import { groupDefects } from '@/utils/defectTaxonomy.js';
 import saveFile from '@/utils/saveFile.js';
 import {
   computeInspectionScore,
@@ -571,7 +572,7 @@ export async function buildXLSXBlob(inspection, settings) {
     for (const room of rooms) {
       const roomName = room?.name || 'Room';
       const corners = Array.isArray(room?.cornerPhotos) ? room.cornerPhotos : [];
-      const defects = Array.isArray(room?.defects) ? room.defects : [];
+      const defects = groupDefects(Array.isArray(room?.defects) ? room.defects : [], severityLevels, settings?.inspectionOrganization || {});
 
       const hr = ws.getRow(r);
       ws.mergeCells(r, 1, r, 6);

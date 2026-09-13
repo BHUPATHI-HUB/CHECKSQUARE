@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '@/components/ui/sheet';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -8,16 +9,17 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useSettings } from '@/contexts/SettingsContext.jsx';
-import { Trash2, Plus, X, Camera, Upload, Lock, ShieldAlert } from 'lucide-react';
-import WebcamCaptureModal from '@/components/WebcamCaptureModal.jsx';
+import { Plus, X, Camera, Upload, Lock, ShieldAlert, Check } from 'lucide-react';
+import ContinuousCamera from '@/components/ContinuousCamera.jsx';
 import { toast } from 'sonner';
 import { normalizeCommentLibrary, getClassifications } from '@/utils/commentLibrary';
 import {
   uploadInspectionPhoto,
-  getInspectionPhotoUrl,
   deleteInspectionPhoto,
 } from '@/lib/supabasePhotoStorage.js';
 import PhotoImg from '@/components/PhotoImg.jsx';
+import CornerPhotoAlbum from '@/components/CornerPhotoAlbum.jsx';
+import { normalizePhoto, photoCompletion } from '@/utils/defectTaxonomy.js';
 
 const DEFAULT_SEVERITIES = [
   { id: 'major',    name: 'Major',    color: '#dc2626', definition: 'Compromises safety, structure or habitability.' },
@@ -33,171 +35,31 @@ const fileToDataUrl = (file) => new Promise((resolve, reject) => {
 });
 
 /**
- * PhotoSlot — single capture-or-upload widget with two clearly separated
- * actions. iOS/Android show the camera UI only when `capture` is set; some
- * desktop browsers ignore `capture` entirely and fall back to file picker.
- */
-const PhotoSlot = ({
-  label,
-  photo,
-  onChange,
-  onRemove,
-  onAddMany,
-  multiple = false,
-  compact = false,
-  ariaLabel,
-  inspectionId,
-  roomKey,
-  disabled = false,
-}) => {
-  const camRef = useRef(null);
-  const fileRef = useRef(null);
-  const multiFileRef = useRef(null);
-  const [camOpen, setCamOpen] = useState(false);
-  const { settings } = useSettings();
-  const ri = settings?.reportImages || {};
-
-  // Mobile UA detection — on phones the native file-input `capture` attribute
-  // is the best UX. On desktop we open our own webcam modal because browsers
-  // ignore `capture` and just show a file picker.
-  const isMobile = typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
-
-  const consumeFile = async (file) => {
-    if (!file) return;
-    try {
-      // Supabase-first: uploads to inspection-photos bucket and returns
-      // { id, storageKey, capturedAt }.  Falls back to legacy base64 when
-      // Supabase isn't configured (see lib/supabasePhotoStorage.js).
-      const record = await uploadInspectionPhoto(file, {
-        inspectionId: inspectionId || 'draft',
-        roomKey: roomKey || 'misc',
-        maxEdge: ri.uploadMaxEdge ?? 1600,
-        quality: ri.uploadQuality ?? 0.85,
-      });
-      onChange(record);
-      toast.success('Photo added');
-    } catch (e) {
-      console.error(e);
-      toast.error('Failed to read photo');
-    }
-  };
-
-  const handleFile = async (e) => {
-    const files = Array.from(e.target.files || []);
-    e.target.value = '';
-    if (files.length === 0) return;
-    if (files.length > 1 && multiple && onAddMany) {
-      await onAddMany(files);
-      return;
-    }
-    await consumeFile(files[0]);
-  };
-
-  return (
-    <div className={`border rounded-xl p-3 bg-background ${compact ? '' : ''}`}>
-      {label && <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">{label}</p>}
-      {photo ? (
-        <div className="relative aspect-video rounded-lg overflow-hidden group">
-          <PhotoImg photo={photo} alt={label || ariaLabel || 'photo'} className="w-full h-full" />
-          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-            <Button
-              type="button"
-              variant="destructive"
-              size="icon"
-              onClick={() => { deleteInspectionPhoto(photo); onRemove(); toast.success('Photo removed'); }}
-            >
-              <Trash2 className="w-4 h-4" />
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          <div className="flex flex-col items-center justify-center w-full aspect-video border-2 border-dashed rounded-lg bg-muted/30">
-            <Camera className="w-6 h-6 text-muted-foreground/60" />
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              disabled={disabled}
-              onClick={() => (isMobile ? camRef.current?.click() : setCamOpen(true))}
-            >
-              <Camera className="w-4 h-4 mr-1.5" /> Capture
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={disabled}
-              onClick={() => fileRef.current?.click()}
-            >
-              <Upload className="w-4 h-4 mr-1.5" /> Upload photo
-            </Button>
-          </div>
-          {multiple && onAddMany && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="w-full"
-              disabled={disabled}
-              onClick={() => multiFileRef.current?.click()}
-            >
-              <Upload className="w-4 h-4 mr-1.5" /> Upload multiple photos (Corner 1, 2, 3…)
-            </Button>
-          )}
-          {/* Camera capture: presence of capture attribute opens rear camera on mobile */}
-          <input
-            ref={camRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="hidden"
-            onChange={handleFile}
-          />
-          {/* File upload: no capture attribute -> opens file picker on every device */}
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            multiple={multiple}
-            className="hidden"
-            onChange={handleFile}
-          />
-          {multiple && onAddMany && (
-            <input
-              ref={multiFileRef}
-              type="file"
-              accept="image/*"
-              multiple
-              className="hidden"
-              onChange={handleFile}
-            />
-          )}
-          <WebcamCaptureModal open={camOpen} onOpenChange={setCamOpen} onCapture={consumeFile} />
-        </div>
-      )}
-    </div>
-  );
-};
-
-/**
  * DefectPhotoGallery — multi-image grid for a defect. Each image has its own
  * caption field; the defect's `description` acts as the shared note.
  */
-const DefectPhotoGallery = ({ defect, onAdd, onUpdate, onRemove }) => {
+const DefectPhotoGallery = ({ defect, onAdd, onUpdate, onRemove, classifications = [], severities = [], libraryEntries = [], organization = {} }) => {
   const camRef = useRef(null);
   const fileRef = useRef(null);
   const [camOpen, setCamOpen] = useState(false);
-  const isMobile = typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+  const [selectedId, setSelectedId] = useState(null);
   // Backwards compat: derive photos from legacy beforePhoto/afterPhoto if needed
   const photos = (defect.photos && defect.photos.length > 0)
-    ? defect.photos
+    ? defect.photos.map((photo) => normalizePhoto(photo, defect))
     : [
         defect.beforePhoto && { id: 'legacy_b', url: defect.beforePhoto.url, caption: '' },
         defect.afterPhoto  && { id: 'legacy_a', url: defect.afterPhoto.url,  caption: '' },
       ].filter(Boolean);
+  const classificationOrder = new Map((organization.mode === 'custom' ? [...new Set([...(organization.classificationOrder || []), ...classifications])] : classifications).map((value, index) => [value, index]));
+  const configuredSeverityOrder = Array.isArray(organization.severityOrder) && organization.severityOrder.length ? organization.severityOrder : severities.map((value) => value.name || value);
+  const severityOrder = new Map(configuredSeverityOrder.map((value, index) => [value, index]));
+  const originalNumbers = new Map(photos.map((photo, index) => [photo.id, index + 1]));
+  const sortedPhotos = [...photos].sort((a, b) => {
+    const severity = (severityOrder.get(a.severity) ?? 999) - (severityOrder.get(b.severity) ?? 999);
+    const classification = (classificationOrder.get(a.classify) ?? 999) - (classificationOrder.get(b.classify) ?? 999);
+    const primary = (organization.mode === 'classification-first' || (organization.mode === 'custom' && organization.primary === 'classification')) ? classification || severity : severity || classification;
+    return primary || (a.photoNumber || 0) - (b.photoNumber || 0);
+  });
 
   const handleFile = async (e) => {
     const files = Array.from(e.target.files || []);
@@ -208,59 +70,61 @@ const DefectPhotoGallery = ({ defect, onAdd, onUpdate, onRemove }) => {
     }
   };
 
+  useEffect(() => {
+    if (!selectedId || !sortedPhotos.some((p) => p.id === selectedId)) setSelectedId(sortedPhotos[0]?.id || null);
+  }, [selectedId, sortedPhotos]);
+  const selected = sortedPhotos.find((p) => p.id === selectedId) || sortedPhotos[0];
+
   return (
-    <div className="border rounded-xl p-4 bg-background">
+    <div className="rounded-2xl border bg-muted/20 p-3 sm:p-4">
       <div className="flex items-center justify-between mb-3">
-        <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-          Photographs ({photos.length})
-        </Label>
+        <div>
+          <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Issue photos
+          </Label>
+          <p className="mt-1 text-xs text-muted-foreground">Select a photo to review or caption it.</p>
+        </div>
+        <span className="text-xs text-muted-foreground">
+          {photos.length} {photos.length === 1 ? 'photo' : 'photos'}
+        </span>
         <div className="flex items-center gap-2">
-          <Button type="button" size="sm" variant="outline" onClick={() => (isMobile ? camRef.current?.click() : setCamOpen(true))}>
-            <Camera className="w-4 h-4 mr-1.5" /> Capture
-          </Button>
-          <Button type="button" size="sm" variant="outline" onClick={() => fileRef.current?.click()}>
-            <Upload className="w-4 h-4 mr-1.5" /> Upload
+          <Button type="button" size="sm" variant="outline" onClick={() => setCamOpen(true)}>
+            <Camera className="w-4 h-4 mr-1.5" /> Take photos
           </Button>
           <input ref={camRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFile} />
           <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFile} />
-          <WebcamCaptureModal open={camOpen} onOpenChange={setCamOpen} onCapture={onAdd} />
+          {camOpen && <ContinuousCamera onClose={() => setCamOpen(false)} onDone={async (files) => { for (const file of files) { await onAdd(file); } }} onChooseFiles={() => fileRef.current?.click()} />}
         </div>
       </div>
 
       {photos.length === 0 ? (
-        <div className="text-center py-6 border-2 border-dashed border-muted-foreground/20 rounded-lg">
-          <p className="text-xs text-muted-foreground">No photographs yet. Capture or upload one above.</p>
+        <div className="flex min-h-32 items-center justify-center rounded-xl border border-dashed bg-background text-center">
+          <p className="text-xs text-muted-foreground">Add the first photo for this issue.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {photos.map((p, i) => (
-            <div key={p.id} className="border rounded-lg overflow-hidden bg-muted/30">
-              <div className="relative">
-                <PhotoImg photo={p} alt={`Defect photo ${i + 1}`} className="w-full h-44" />
-                <Button
-                  type="button"
-                  size="icon"
-                  variant="destructive"
-                  className="absolute top-1.5 right-1.5 h-7 w-7"
-                  onClick={() => { deleteInspectionPhoto(p); onRemove(p.id); }}
-                  title="Remove photo"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </Button>
-                <span className="absolute top-1.5 left-1.5 px-2 py-0.5 bg-black/60 text-white text-[10px] uppercase tracking-wider rounded">
-                  #{String(i + 1).padStart(2, '0')}
-                </span>
-              </div>
-              <div className="p-2">
-                <Input
-                  value={p.caption || ''}
-                  onChange={(e) => onUpdate(p.id, { caption: e.target.value })}
-                  placeholder="Caption for this photo…"
-                  className="h-8 text-xs bg-background"
-                />
-              </div>
+        <div className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-3 sm:grid-cols-[6.5rem_minmax(0,1fr)]">
+          <div className="flex max-h-[24rem] flex-col gap-2 overflow-y-auto pr-1" aria-label="Issue photo list">
+          {sortedPhotos.map((p, i) => (
+              <button type="button" key={p.id} onClick={() => setSelectedId(p.id)} aria-label={`Select issue photo ${i + 1}`} aria-pressed={selected?.id === p.id}
+                className={`group relative aspect-square shrink-0 overflow-hidden rounded-xl border-2 bg-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${selected?.id === p.id ? 'border-foreground shadow-md' : photoCompletion(p) === 'complete' ? 'border-emerald-500 opacity-100' : photoCompletion(p) === 'partial' ? 'border-amber-400 opacity-90' : 'border-transparent opacity-70 hover:opacity-100'}`}>
+                <PhotoImg photo={p} alt={`Issue photo ${i + 1}`} fit="cover" className="h-full w-full" />
+                <span className="absolute bottom-1 left-1 rounded-full bg-black/65 px-1.5 py-0.5 text-[10px] text-white">{String(p.photoNumber || originalNumbers.get(p.id) || i + 1).padStart(2, '0')}</span>
+              </button>
+            ))}
+            <button type="button" onClick={() => fileRef.current?.click()} className="flex aspect-square shrink-0 flex-col items-center justify-center gap-1 rounded-xl border border-dashed bg-background text-muted-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><Plus className="h-5 w-5" /><span className="text-[10px]">Add</span></button>
+          </div>
+          <div className="min-w-0 space-y-2">
+            <div className="relative aspect-[4/3] overflow-hidden rounded-xl bg-background">
+              {selected ? <PhotoImg photo={selected} alt="Selected issue photo" className="h-full w-full" /> : <div className="flex h-full items-center justify-center text-xs text-muted-foreground">Select a photo</div>}
+              {selected && <Button type="button" size="icon" variant="destructive" className="absolute right-2 top-2 h-8 w-8 shadow" onClick={() => { deleteInspectionPhoto(selected); onRemove(selected.id); }} title="Remove selected photo"><X className="h-4 w-4" /></Button>}
             </div>
-          ))}
+            {selected && <div className="space-y-3 rounded-xl border bg-background p-3">
+              <div><Label className="text-xs text-muted-foreground">Photo title</Label><Input value={selected.title || ''} onChange={(e) => onUpdate(selected.id, { title: e.target.value })} placeholder="What does this photo show?" className="mt-1 h-9 text-xs" /></div>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2"><div><Label className="text-xs text-muted-foreground">Classify</Label><Select value={selected.classify || ''} onValueChange={(value) => onUpdate(selected.id, { classify: value })}><SelectTrigger className="mt-1 h-9 text-xs"><SelectValue placeholder="Select class…" /></SelectTrigger><SelectContent>{classifications.map((value) => <SelectItem key={value} value={value}>{value}</SelectItem>)}</SelectContent></Select></div><div><Label className="text-xs text-muted-foreground">Severity</Label><Select value={selected.severity || ''} onValueChange={(value) => onUpdate(selected.id, { severity: value })}><SelectTrigger className="mt-1 h-9 text-xs"><SelectValue placeholder="Select severity…" /></SelectTrigger><SelectContent>{severities.map((value) => <SelectItem key={value.name || value} value={value.name || value}>{value.name || value}</SelectItem>)}</SelectContent></Select></div></div>
+              <div><Label className="text-xs text-muted-foreground">Comment preset</Label><Select value={selected.description || ''} onValueChange={(value) => { const match = libraryEntries.find((entry) => entry.text === value); onUpdate(selected.id, { description: value, caption: value, classify: match?.classify || selected.classify || '', severity: match?.severity || selected.severity || '' }); }}><SelectTrigger className="mt-1 h-9 text-xs"><SelectValue placeholder={libraryEntries.length ? 'Pick a comment…' : 'No presets configured'} /></SelectTrigger><SelectContent>{libraryEntries.filter((entry) => !selected.classify || entry.classify === selected.classify).map((entry) => <SelectItem key={entry.id} value={entry.text}>{entry.text}</SelectItem>)}</SelectContent></Select></div>
+              <div><Label className="text-xs text-muted-foreground">Comment / notes</Label><Textarea value={selected.description || selected.caption || ''} onChange={(e) => onUpdate(selected.id, { description: e.target.value, caption: e.target.value })} placeholder="Describe what this photo shows…" className="mt-1 text-xs" rows={2} /></div>
+            </div>}
+          </div>
         </div>
       )}
     </div>
@@ -271,11 +135,16 @@ const RoomPhotoManager = ({ open, onOpenChange, room, onSave }) => {
   const { settings } = useSettings();
   const [cornerPhotos, setCornerPhotos] = useState(room?.cornerPhotos || []);
   const [defects, setDefects] = useState(room?.defects || []);
+  const [activeTab, setActiveTab] = useState('photos');
+  const uploadBusy = useRef(false);
   const [cornerUpload, setCornerUpload] = useState({ active: false, done: 0, total: 0 });
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setCornerPhotos(room?.cornerPhotos || []);
     setDefects(room?.defects || []);
+    setActiveTab('photos');
+    setSaving(false);
   }, [room?.id, open]);
 
   const severities = useMemo(() => {
@@ -309,80 +178,48 @@ const RoomPhotoManager = ({ open, onOpenChange, room, onSave }) => {
     return lib[roomKey] || lib['General'] || [];
   }, [settings?.commentLibrary, roomKey, libraryEntries.length]);
 
-  const setCornerPhoto = (cornerLabel, newPhoto) => {
-    setCornerPhotos(prev => {
-      const filtered = prev.filter(p => p.corner !== cornerLabel);
-      if (!newPhoto) return filtered;
-      return [...filtered, { ...newPhoto, corner: cornerLabel }];
-    });
-  };
-
-  const parseCornerIndex = (label) => {
-    const m = /Corner\s+(\d+)/i.exec(label || '');
-    return m ? Number(m[1]) : null;
-  };
-
-  // Multi-upload helper: selecting many files fills Corner N, N+1, ...
-  // so inspectors can drop 3, 10, or 20 photos in one action.
-  const addCornerPhotosFrom = async (startCornerLabel, files) => {
+  const addCornerPhotos = async (files) => {
     const picked = Array.from(files || []).filter(Boolean);
-    if (picked.length === 0) return;
-
-    const startIndex = parseCornerIndex(startCornerLabel) || 1;
+    if (!picked.length || uploadBusy.current) return;
+    uploadBusy.current = true;
     setCornerUpload({ active: true, done: 0, total: picked.length });
-    const map = new Map((cornerPhotos || []).map((p) => [p.corner, p]));
-
     let added = 0;
-    let failed = 0;
-    let cursor = startIndex;
-
-    for (let i = 0; i < picked.length; i += 1) {
-      const file = picked[i];
-      let cornerNumber;
-
-      if (i === 0) {
-        // First file targets the clicked slot and replaces any existing photo.
-        cornerNumber = startIndex;
-      } else {
-        cursor = Math.max(cursor + 1, startIndex + 1);
-        while (map.has(`Corner ${cursor}`)) cursor += 1;
-        cornerNumber = cursor;
+    try {
+      for (let i = 0; i < picked.length; i += 1) {
+        try {
+          const record = await uploadInspectionPhoto(picked[i], {
+            inspectionId: room?.id || 'draft', roomKey,
+            maxEdge: settings?.reportImages?.uploadMaxEdge ?? 1600,
+            quality: settings?.reportImages?.uploadQuality ?? 0.85,
+          });
+          setCornerPhotos(prev => [...prev, { ...record, corner: `Corner ${prev.length + 1}` }]);
+          added += 1;
+        } catch {
+          // Keep successful photos when one file cannot be processed.
+        }
+        setCornerUpload({ active: true, done: i + 1, total: picked.length });
       }
-
-      try {
-        // eslint-disable-next-line no-await-in-loop
-        const record = await uploadInspectionPhoto(file, {
-          inspectionId: room?.id || 'draft',
-          roomKey,
-          maxEdge: settings?.reportImages?.uploadMaxEdge ?? 1600,
-          quality: settings?.reportImages?.uploadQuality ?? 0.85,
-        });
-        map.set(`Corner ${cornerNumber}`, { ...record, corner: `Corner ${cornerNumber}` });
-        added += 1;
-      } catch {
-        failed += 1;
-      }
-      setCornerUpload((prev) => ({ ...prev, done: i + 1 }));
+      if (added) toast.success(`${added} corner photo${added === 1 ? '' : 's'} added`);
+      if (added < picked.length) toast.error(`${picked.length - added} photos could not be added. Choose those files again to retry.`);
+    } finally {
+      uploadBusy.current = false;
+      setCornerUpload({ active: false, done: 0, total: 0 });
     }
-
-    const sorted = [...map.values()].sort((a, b) => {
-      const ai = parseCornerIndex(a.corner) || 0;
-      const bi = parseCornerIndex(b.corner) || 0;
-      return ai - bi;
-    });
-    setCornerPhotos(sorted);
-
-    if (added > 0) {
-      toast.success(`${added} corner photo${added === 1 ? '' : 's'} added`);
-    }
-    if (failed > 0) {
-      toast.error(`${failed} photo${failed === 1 ? '' : 's'} failed to upload`);
-    }
-    setCornerUpload({ active: false, done: 0, total: 0 });
   };
 
+  const removeCornerPhoto = (index) => {
+    if (uploadBusy.current) return;
+    // Removing from the draft must not destroy a saved photo if Cancel is used.
+    setCornerPhotos(prev => prev.filter((_, i) => i !== index).map((photo, i) => ({ ...photo, corner: `Corner ${i + 1}` })));
+  };
+  const changeOpen = (next) => {
+    if (!next && uploadBusy.current) {
+      toast.info('Please wait until the photos finish adding.');
+      return;
+    }
+    onOpenChange(next);
+  };
   const phaseBLocked = cornerPhotos.length === 0;
-  const nextCornerLabel = `Corner ${(cornerPhotos.length || 0) + 1}`;
 
   const addDefect = () => {
     if (phaseBLocked) {
@@ -411,7 +248,7 @@ const RoomPhotoManager = ({ open, onOpenChange, room, onSave }) => {
     try {
       const url = await fileToDataUrl(file);
       setDefects(prev => prev.map(d => d.id === defectId
-        ? { ...d, photos: [...(d.photos || []), { id: `p_${Date.now()}`, url, caption: '' }] }
+        ? { ...d, photos: [...(d.photos || []), { id: `p_${Date.now()}`, photoNumber: (d.photos || []).reduce((max, p, i) => Math.max(max, Number(p.photoNumber) || i + 1), 0) + 1, url, caption: '' }] }
         : d));
       toast.success('Photo added to defect');
     } catch {
@@ -437,7 +274,9 @@ const RoomPhotoManager = ({ open, onOpenChange, room, onSave }) => {
     toast.success('Defect removed');
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (uploadBusy.current || saving) return;
+    setSaving(true);
     try {
       // Normalize legacy beforePhoto/afterPhoto into the new photos[] schema
       const normalized = defects.map(d => {
@@ -447,109 +286,51 @@ const RoomPhotoManager = ({ open, onOpenChange, room, onSave }) => {
         if (d.afterPhoto)  migrated.push({ id: `m_${Date.now()}_a`, url: d.afterPhoto.url, caption: '' });
         return migrated.length ? { ...d, photos: migrated, beforePhoto: undefined, afterPhoto: undefined } : { ...d, photos: [] };
       });
-      onSave({ ...room, cornerPhotos, defects: normalized });
+      // Keep the dialog open until the parent has accepted the update. This
+      // also handles future async persistence without reporting false success.
+      await Promise.resolve(onSave({ ...room, cornerPhotos, defects: normalized }));
       toast.success('Room saved successfully');
       onOpenChange(false);
     } catch (err) {
       toast.error('Could not save room: ' + (err?.message || 'unknown error'));
+    } finally {
+      setSaving(false);
     }
   };
 
   const severityFor = (name) => severities.find(s => s.name === name) || severities[0];
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-4xl overflow-y-auto border-l">
-        <SheetHeader className="mb-6">
-          <SheetTitle className="text-2xl">{room?.name} — Photo Manager</SheetTitle>
-          <SheetDescription>
-            Phase A captures ambient context of the room. Phase B unlocks automatically once at least one corner photo exists.
-          </SheetDescription>
+    <Sheet open={open} onOpenChange={changeOpen}>
+      <SheetContent side="right" className="w-full sm:max-w-2xl flex flex-col gap-0 overflow-hidden border-l bg-stone-50 p-0 [&>button]:top-5 [&>button]:right-5 [&>button]:border-0 [&>button]:shadow-none">
+        <SheetHeader className="shrink-0 space-y-1 border-b bg-background px-6 py-5 pr-20 text-left">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Room inspection</p>
+          <SheetTitle className="text-2xl font-semibold tracking-tight">{room?.name}</SheetTitle>
+          <SheetDescription className="text-xs">Capture the room. Record what needs attention.</SheetDescription>
         </SheetHeader>
 
-        <div className="space-y-8">
-          {/* ───────── Phase A ───────── */}
-          <section>
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-xl font-semibold flex items-center gap-2">
-                  <Camera className="w-5 h-5 text-primary" /> Phase A — Corner Photos
-                </h3>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Wide-angle baseline shots. Add as many as needed.
-                </p>
-              </div>
-              <Badge variant={cornerPhotos.length > 0 ? 'secondary' : 'destructive'} className="text-xs">
-                {cornerPhotos.length} captured
-              </Badge>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex min-h-0 flex-1 flex-col">
+          <div className="shrink-0 bg-background px-6 py-3">
+            <TabsList aria-label="Room sections" className="grid h-11 w-full grid-cols-2 rounded-xl bg-stone-100">
+              <TabsTrigger value="photos" className="h-9 gap-2 rounded-lg"><Camera className="h-4 w-4" />Photos<span className="text-xs opacity-60">{cornerPhotos.length}</span></TabsTrigger>
+              <TabsTrigger value="defects" className="h-9 gap-2 rounded-lg"><ShieldAlert className="h-4 w-4" />Defects<span className="text-xs opacity-60">{defects.length}</span></TabsTrigger>
+            </TabsList>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-5">
+          <TabsContent value="photos" forceMount hidden={activeTab !== 'photos'} className="mt-0 space-y-5">
+            <div className="flex items-start justify-between gap-3">
+              <div><h3 className="text-lg font-semibold tracking-tight">Your room album</h3><p className="mt-1 text-xs text-muted-foreground">Wide-angle photos from each corner.</p></div>
             </div>
-
-            {cornerPhotos.length === 0 ? (
-              <div className="rounded-2xl border-2 border-dashed border-primary/25 bg-primary/[0.03] p-4">
-                <p className="mb-3 text-sm font-medium">Start your room album</p>
-                <PhotoSlot
-                  photo={null}
-                  onChange={(photo) => setCornerPhoto('Corner 1', photo)}
-                  onAddMany={(files) => addCornerPhotosFrom('Corner 1', files)}
-                  multiple
-                  onRemove={() => {}}
-                  ariaLabel="Add corner photos"
-                  inspectionId={room?.id}
-                  roomKey={roomKey}
-                  disabled={cornerUpload.active}
-                />
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                {cornerPhotos.map((photo, index) => {
-                  const cornerLabel = photo.corner || `Corner ${index + 1}`;
-                  return (
-                    <div key={photo.id || cornerLabel} className="relative rounded-2xl border bg-background p-2 shadow-sm">
-                      <p className="px-1 pb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{cornerLabel}</p>
-                      <PhotoSlot
-                        photo={photo}
-                        onChange={(next) => setCornerPhoto(cornerLabel, next)}
-                        onRemove={() => setCornerPhoto(cornerLabel, null)}
-                        ariaLabel={cornerLabel}
-                        inspectionId={room?.id}
-                        roomKey={roomKey}
-                        disabled={cornerUpload.active}
-                      />
-                    </div>
-                  );
-                })}
-                <div className="rounded-2xl border-2 border-dashed border-muted-foreground/25 bg-muted/20 p-2">
-                  <p className="px-1 pb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Add photos</p>
-                  <PhotoSlot
-                    photo={null}
-                    onChange={(photo) => setCornerPhoto(nextCornerLabel, photo)}
-                    onAddMany={(files) => addCornerPhotosFrom(nextCornerLabel, files)}
-                    multiple
-                    onRemove={() => {}}
-                    ariaLabel="Add more corner photos"
-                    inspectionId={room?.id}
-                    roomKey={roomKey}
-                    disabled={cornerUpload.active}
-                  />
-                </div>
-              </div>
-            )}
-            {cornerUpload.active && (
-              <p className="mt-3 text-center text-xs text-muted-foreground" role="status">
-                Adding corner photos {cornerUpload.done}/{cornerUpload.total}… please keep this window open.
-              </p>
-            )}
-          </section>
-
-          {/* ───────── Phase B / Room Defects ───────── */}
-          <section>
+            <CornerPhotoAlbum photos={cornerPhotos} onAdd={addCornerPhotos} onRemove={removeCornerPhoto} progress={cornerUpload} />
+          </TabsContent>
+          <TabsContent value="defects" forceMount hidden={activeTab !== 'defects'} className="mt-0">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-xl font-semibold flex items-center gap-2">
-                  <ShieldAlert className="w-5 h-5 text-primary" /> Room Defects
+                <h3 className="text-lg font-semibold tracking-tight flex items-center gap-2">
+                  Room defects
                 </h3>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Document each issue with a photo and notes. All fields are optional except the photo.
+                  Photograph each issue, then add the details.
                 </p>
               </div>
               <Button onClick={addDefect} size="sm" disabled={phaseBLocked}>
@@ -558,11 +339,10 @@ const RoomPhotoManager = ({ open, onOpenChange, room, onSave }) => {
             </div>
 
             {phaseBLocked && (
-              <div className="mb-4 p-4 rounded-xl border-2 border-dashed border-amber-400 bg-amber-50/60 text-amber-900 flex items-center gap-3 text-sm">
+              <div className="mb-4 p-4 rounded-xl border bg-background text-muted-foreground flex items-center gap-3 text-sm">
                 <Lock className="w-5 h-5 flex-shrink-0" />
                 <p>
-                  Please upload at least one Phase A corner photo to establish environmental context
-                  before logging defects.
+                  Add a corner photo in the Photos tab to start recording defects.
                 </p>
               </div>
             )}
@@ -573,28 +353,24 @@ const RoomPhotoManager = ({ open, onOpenChange, room, onSave }) => {
                 return (
                   <Card
                     key={defect.id}
-                    className="overflow-hidden border-l-4 shadow-sm bg-background"
-                    style={{ borderLeftColor: sev?.color || '#9ca3af' }}
+                    className="overflow-hidden rounded-2xl border border-stone-200 shadow-sm bg-background"
                   >
                     {/* Header strip — defect number, severity badge, delete */}
                     <div
-                      className="flex items-center justify-between gap-3 px-4 py-2.5 border-b"
-                      style={{ background: `${sev?.color || '#9ca3af'}10` }}
+                      className="flex items-center justify-between gap-3 border-b bg-background px-4 py-3"
                     >
                       <div className="flex items-center gap-2 min-w-0">
                         <span
-                          className="inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-bold text-white flex-shrink-0"
-                          style={{ background: sev?.color || '#9ca3af' }}
+                          className="inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-stone-900 text-[11px] font-semibold text-white"
                           title={sev?.definition}
                         >
                           {String(idx + 1).padStart(2, '0')}
                         </span>
                         <Badge
                           variant="outline"
-                          className="text-[10px] uppercase tracking-wider border-0 text-white"
-                          style={{ background: sev?.color || '#9ca3af' }}
+                          className="gap-1.5 rounded-full border-stone-200 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
                         >
-                          {sev?.name || 'Defect'}
+                          <span className="h-1.5 w-1.5 rounded-full" style={{ background: sev?.color || '#9ca3af' }} /> {sev?.name || 'Defect'}
                         </Badge>
                         <span className="text-xs text-muted-foreground truncate hidden sm:inline">
                           {defect.title || defect.classify || 'Untitled defect'}
@@ -613,7 +389,7 @@ const RoomPhotoManager = ({ open, onOpenChange, room, onSave }) => {
 
                     <CardContent className="pt-5 space-y-5">
                       {/* Optional title */}
-                      <div>
+                      <div className="hidden">
                         <Label className="text-xs text-muted-foreground">Title (optional)</Label>
                         <Input
                           value={defect.title}
@@ -624,7 +400,7 @@ const RoomPhotoManager = ({ open, onOpenChange, room, onSave }) => {
                       </div>
 
                       {/* Classify / Comment / Severity */}
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="hidden grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div>
                           <Label className="text-xs text-muted-foreground">Classify</Label>
                           <Select
@@ -709,7 +485,7 @@ const RoomPhotoManager = ({ open, onOpenChange, room, onSave }) => {
                       </div>
 
                       {/* Description / notes */}
-                      <div>
+                      <div className="hidden">
                         <Label className="text-xs text-muted-foreground">
                           Description / notes <span className="text-[10px] italic">(shown under each photo)</span>
                         </Label>
@@ -726,8 +502,12 @@ const RoomPhotoManager = ({ open, onOpenChange, room, onSave }) => {
                       <DefectPhotoGallery
                         defect={defect}
                         onAdd={(file) => addDefectPhoto(defect.id, file)}
-                        onUpdate={(pid, patch) => updateDefectPhoto(defect.id, pid, patch)}
+                        onUpdate={(pid, patch) => { updateDefectPhoto(defect.id, pid, patch); updateDefect(defect.id, { title: patch.title ?? defect.title, classify: patch.classify ?? defect.classify, description: patch.description ?? defect.description, severity: patch.severity ?? defect.severity }); }}
                         onRemove={(pid) => removeDefectPhoto(defect.id, pid)}
+                        classifications={classifications}
+                        severities={severities}
+                        libraryEntries={libraryEntries}
+                        organization={settings?.inspectionOrganization || {}}
                       />
                     </CardContent>
                   </Card>
@@ -735,17 +515,20 @@ const RoomPhotoManager = ({ open, onOpenChange, room, onSave }) => {
               })}
 
               {!phaseBLocked && defects.length === 0 && (
-                <div className="text-center py-8 bg-muted/30 rounded-xl border border-dashed">
-                  <p className="text-muted-foreground text-sm">No defects recorded yet.</p>
+                <div className="text-center py-12 bg-background rounded-2xl border">
+                  <ShieldAlert className="mx-auto mb-3 h-7 w-7 text-muted-foreground" /><p className="font-medium text-sm">No defects recorded</p><p className="mt-1 text-xs text-muted-foreground">Found something? Use Add Defect to document it.</p>
                 </div>
               )}
             </fieldset>
-          </section>
-        </div>
+          </TabsContent>
+          </div>
+        </Tabs>
 
-        <SheetFooter className="mt-8 border-t pt-4 sticky bottom-0 bg-background">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={handleSave}>Save Changes</Button>
+        <SheetFooter className="shrink-0 flex-row items-center justify-between gap-3 border-t bg-background px-6 py-4 sm:justify-between sm:space-x-0">
+          <Button variant="ghost" className="h-11 px-3 text-muted-foreground" disabled={cornerUpload.active || saving} onClick={() => changeOpen(false)}>Cancel</Button>
+          <Button className="h-11 min-w-36 rounded-xl bg-stone-900 text-white hover:bg-stone-800" disabled={cornerUpload.active || saving} onClick={handleSave}>
+            <Check className="mr-2 h-4 w-4" />{saving ? 'Saving…' : 'Save room'}
+          </Button>
         </SheetFooter>
       </SheetContent>
     </Sheet>

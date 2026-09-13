@@ -17,7 +17,7 @@ const SyncStatusBadge = () => {
   const hasFailed = failed > 0;
 
   return (
-    <div className="fixed bottom-4 right-4 z-[60] flex flex-col items-end gap-2">
+    <div className="fixed bottom-4 right-4 z-40 flex flex-col items-end gap-2">
       {storageFull && (
         <div className="inline-flex items-center gap-2 rounded-full bg-[hsl(var(--warning))] text-black shadow-lg px-3 py-1.5 text-[11px] font-medium">
           <AlertTriangle className="w-3.5 h-3.5" />

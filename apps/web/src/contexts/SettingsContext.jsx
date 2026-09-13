@@ -73,6 +73,11 @@ export const SettingsProvider = ({ children }) => {
       { id: 'minor',    name: 'Minor',    definition: 'No immediate risk; preventive maintenance needed.', color: '#f97316' },
       { id: 'cosmetic', name: 'Cosmetic', definition: 'Surface / aesthetic only.', color: '#eab308' },
     ],
+    inspectionOrganization: {
+      mode: 'severity-first',
+      hideEmptyGroups: true,
+      showSummaryCounts: true,
+    },
     // Admin-editable hardware brand catalog. Categories are top-level keys.
     // Inspector toggles brands on-site and may also attach a photo per brand.
     brandCatalog: {

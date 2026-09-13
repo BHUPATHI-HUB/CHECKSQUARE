@@ -326,6 +326,23 @@ const InspectionForm = ({ existingInspection = null, isEditing = false }) => {
     return () => clearTimeout(handle);
   }, [formData, existingInspection]);
 
+  // Flush the latest snapshot synchronously when the page is backgrounded or
+  // the app is closed. The debounced writer above is faster during typing,
+  // while this guard covers the small window before its timer fires.
+  useEffect(() => {
+    if (existingInspection) return;
+    const flushDraft = () => {
+      try { localStorage.setItem('inspection-draft', JSON.stringify(formData)); }
+      catch (error) { console.warn('Could not flush inspection draft:', error?.message || error); }
+    };
+    window.addEventListener('pagehide', flushDraft);
+    document.addEventListener('visibilitychange', flushDraft);
+    return () => {
+      window.removeEventListener('pagehide', flushDraft);
+      document.removeEventListener('visibilitychange', flushDraft);
+    };
+  }, [formData, existingInspection]);
+
   // ---- Silent auto-save as draft (server-side) -----------------------------
   // Once the user has typed enough to make the row meaningful (an address or
   // prepared-for name), debounce-save the form to PocketBase as a draft. This
@@ -677,8 +694,16 @@ const InspectionForm = ({ existingInspection = null, isEditing = false }) => {
       }),
     };
 
-    const saved = await saveInspection(inspectionPayload, existingInspection?.id || draftId || null);
-    setSubmitting(false);
+    let saved;
+    try {
+      saved = await saveInspection(inspectionPayload, existingInspection?.id || draftId || null);
+    } catch (error) {
+      console.error('Unexpected inspection save failure', error);
+      toast.error('Failed to save inspection. Your form is still open so you can retry.');
+      return;
+    } finally {
+      setSubmitting(false);
+    }
 
     if (!saved) return; // hook already toasted the error
     allowNavigation();

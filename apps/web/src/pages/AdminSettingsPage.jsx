@@ -4,6 +4,8 @@ import { Helmet } from 'react-helmet';
 import { motion } from 'framer-motion';
 import Header from '@/components/Header.jsx';
 import Footer from '@/components/Footer.jsx';
+import OrganizationOrderEditor from '@/components/OrganizationOrderEditor.jsx';
+import { Alert as OrganizationAlert } from '@/components/ui/alert';
 import { useSettings } from '@/contexts/SettingsContext.jsx';
 import useOnlineStatus from '@/hooks/useOnlineStatus.js';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -163,6 +165,8 @@ const AdminSettingsPage = () => {
   } = useSettings();
   const online = useOnlineStatus();
   const [localSettings, setLocalSettings] = useState(null);
+  const [organizationSaving, setOrganizationSaving] = useState(false);
+  const [organizationResult, setOrganizationResult] = useState(null);
   const [selectedRoom, setSelectedRoom] = useState('General');
   const [newComment, setNewComment] = useState('');
   const [hasError, setHasError] = useState(false);
@@ -220,6 +224,8 @@ const AdminSettingsPage = () => {
       return { error: err?.message || String(err) };
     }
   }, [localSettings?.scoring]);
+
+  const organizationClassifications = useMemo(() => Array.from(new Set(normalizeCommentLibrary(localSettings?.commentLibrary).map(e => e.classify).filter(Boolean))), [localSettings?.commentLibrary]);
 
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center"><div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin"></div></div>;
@@ -449,6 +455,7 @@ const AdminSettingsPage = () => {
                   ['disclaimers','Disclaimer pages'],
                   ['comments','Comment library'],
                   ['severity','Severity levels'],
+                  ['organization','Inspection organization'],
                   ['brands','Brand catalogue'],
                   ['scoring','Property scoring'],
                   ['legal','Legal & info'],
@@ -530,6 +537,58 @@ const AdminSettingsPage = () => {
                 <CardFooter className="border-t bg-muted/30 py-4 justify-end">
                   <Button onClick={handleSave}><Save className="w-4 h-4 mr-2" /> Save Global Branding</Button>
                 </CardFooter>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="organization">
+              <Card className="card-elevated">
+                <CardHeader>
+                  <CardTitle>Inspection organization</CardTitle>
+                  <CardDescription>Choose how issues are ordered in the inspector and grouped in reports.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="grid gap-3 md:grid-cols-3">
+                    {[
+                      ['severity-first', 'Severity first', 'Major → Minor → Cosmetic'],
+                      ['classification-first', 'Classification first', 'Electrical → Flooring → Plumbing'],
+                      ['custom', 'Custom', 'Use your saved taxonomy order'],
+                    ].map(([value, label, hint]) => (
+                      <button type="button" key={value} onClick={() => handleAppChange('inspectionOrganization', { ...(localSettings.inspectionOrganization || {}), mode: value })} className={`rounded-xl border p-4 text-left transition-colors ${localSettings.inspectionOrganization?.mode === value ? 'border-primary bg-primary/5' : 'hover:bg-muted/50'}`}>
+                        <span className="block font-medium">{label}</span><span className="mt-1 block text-xs text-muted-foreground">{hint}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <label className="flex items-center justify-between rounded-xl border p-4 text-sm">Show summary counts<input type="checkbox" checked={localSettings.inspectionOrganization?.showSummaryCounts !== false} onChange={e => handleAppChange('inspectionOrganization', { ...(localSettings.inspectionOrganization || {}), showSummaryCounts: e.target.checked })} /></label>
+                    <label className="flex items-center justify-between rounded-xl border p-4 text-sm">Hide empty groups<input type="checkbox" checked={localSettings.inspectionOrganization?.hideEmptyGroups !== false} onChange={e => handleAppChange('inspectionOrganization', { ...(localSettings.inspectionOrganization || {}), hideEmptyGroups: e.target.checked })} /></label>
+                  </div>
+                  {localSettings.inspectionOrganization?.mode === 'custom' && (
+                    <div className="space-y-6">
+                      <div>
+                        <Label>Group first by</Label>
+                        <Select value={localSettings.inspectionOrganization?.primary || 'severity'} onValueChange={primary => handleAppChange('inspectionOrganization', { ...localSettings.inspectionOrganization, primary })}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent><SelectItem value="severity">Severity, then classification</SelectItem><SelectItem value="classification">Classification, then severity</SelectItem></SelectContent>
+                        </Select>
+                      </div>
+                      <OrganizationOrderEditor label="Severity order" options={(localSettings.severityLevels || []).map(level => level.name)} value={localSettings.inspectionOrganization?.severityOrder || []} onChange={severityOrder => handleAppChange('inspectionOrganization', { ...localSettings.inspectionOrganization, severityOrder })} />
+                      <OrganizationOrderEditor label="Classification order" options={organizationClassifications} value={localSettings.inspectionOrganization?.classificationOrder || []} onChange={classificationOrder => handleAppChange('inspectionOrganization', { ...localSettings.inspectionOrganization, classificationOrder })} />
+                    </div>
+                  )}
+                  {organizationResult && <OrganizationAlert variant={organizationResult.success ? 'default' : 'destructive'} role="status">{organizationResult.message}</OrganizationAlert>}
+                  <div className="flex justify-end border-t pt-4">
+                    <Button disabled={organizationSaving} onClick={async () => {
+                      setOrganizationSaving(true);
+                      setOrganizationResult(null);
+                      try {
+                        const result = await updateSettings({ inspectionOrganization: localSettings.inspectionOrganization }, { syncCloud: true });
+                        setOrganizationResult({ success: result.success, message: result.success ? (result.synced ? 'Organization settings saved and synced.' : 'Saved on this device. Sync pending: ' + (result.warning || 'connect to sync.')) : result.error || 'Could not save. Please retry.' });
+                      } catch (error) {
+                        setOrganizationResult({ success: false, message: error.message || 'Could not save. Please retry.' });
+                      } finally { setOrganizationSaving(false); }
+                    }}>{organizationSaving ? 'Saving…' : 'Save organization settings'}</Button>
+                  </div>
+                </CardContent>
               </Card>
             </TabsContent>
 

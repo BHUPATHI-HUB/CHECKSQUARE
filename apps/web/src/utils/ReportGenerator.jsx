@@ -7,6 +7,7 @@ import {
 import { saveFile } from './saveFile';
 import { computeInspectionScore, DEFAULT_SCORE_EXPLANATION_HTML, explainScore } from './scoring';
 import { materializeInspectionPhotos } from '@/lib/supabasePhotoStorage.js';
+import { groupDefects } from '@/utils/defectTaxonomy.js';
 
 // ─── Inline editorial SVG art (no network deps; render-safe in html2pdf) ──
 const HOUSE_SVG = (gold = '#c19a4b', ink = '#1f2937') => `
@@ -1109,7 +1110,7 @@ export const buildReportHTML = (inspection, settings) => {
 
   const roomsHtml = rooms.map((room, ri) => {
     const corners = room.cornerPhotos || [];
-    const defects = room.defects || [];
+    const defects = groupDefects(room.defects || [], settings?.severityLevels || [], settings?.inspectionOrganization || {});
     const roomNo = String(ri + 1).padStart(2, '0');
     const totalRoomsNo = String(rooms.length).padStart(2, '0');
 
@@ -3732,7 +3733,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
       const roomNo = String(ri + 1).padStart(2, '0');
       const totalNo = String(rooms.length).padStart(2, '0');
       const corners = room.cornerPhotos || [];
-      const defects = room.defects || [];
+      const defects = groupDefects(room.defects || [], settings?.severityLevels || [], settings?.inspectionOrganization || {});
 
       // Phase A
       out.push(eyebrowPara(`Room ${roomNo} of ${totalNo} · Phase A`));

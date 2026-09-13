@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { toast } from 'sonner';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient.js';
 import { IS_OFFLINE_ADMIN, OFFLINE_ADMIN_USER, DEV_TEST_LOGIN } from '@/lib/appTarget.js';
+import { logActivity } from '@/services/activityLogger.js';
 
 const AuthContext = createContext(null);
 const USE_SUPABASE_AUTH = isSupabaseConfigured && (import.meta.env?.VITE_USE_SUPABASE_AUTH === 'true');
@@ -209,6 +210,8 @@ const CloudAuthProvider = ({ children }) => {
   }, []);
 
   const logout = useCallback(() => {
+    const departingUser = user;
+    if (departingUser) void logActivity(departingUser, 'logout');
     if (USE_SUPABASE_AUTH) {
       supabase.auth.signOut().catch(() => {});
       setSupabaseSession(null);
@@ -223,7 +226,7 @@ const CloudAuthProvider = ({ children }) => {
     setSessionWarning(false);
     warnedRef.current = false;
     localStorage.removeItem(OFFLINE_SESSION_KEY);
-  }, [getPB]);
+  }, [getPB, user]);
 
   // Subscribe to PocketBase auth changes so multiple tabs stay in sync and a
   // refresh of the auth record automatically propagates.
@@ -429,6 +432,7 @@ const CloudAuthProvider = ({ children }) => {
       setUser(testUser);
       setSessionMode('offline-auth');
       writeJSON(OFFLINE_SESSION_KEY, { mode: 'offline-auth', user: testUser, at: new Date().toISOString() });
+      void logActivity(testUser, 'login_success');
       return { success: true, offline: true };
     }
     if (USE_SUPABASE_AUTH) {
@@ -453,6 +457,7 @@ const CloudAuthProvider = ({ children }) => {
         }
         await cacheOfflineIdentity(nextUser, password);
         localStorage.removeItem(OFFLINE_SESSION_KEY);
+        void logActivity(nextUser, 'login_success');
         return { success: true };
       } catch (e) {
         if ((typeof navigator !== 'undefined' && !navigator.onLine) || isNetworkIssue(e)) {
@@ -484,6 +489,8 @@ const CloudAuthProvider = ({ children }) => {
       setUser(toUserSession(pb.authStore.record));
       setPbToken(pb.authStore.token || null);
       setSessionMode('online-auth');
+
+      void logActivity(toUserSession(pb.authStore.record), 'login_success');
 
       return { success: true };
     } catch (e) {
