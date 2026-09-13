@@ -23,13 +23,8 @@ const NewInspectionPage = () => {
   const { settings } = useSettings();
   const brand = settings?.appName || 'CheckSquare';
 
-  // Each visit to "New Inspection" should start clean. Clear any stale
-  // in-browser draft cache so prior data doesn't pre-populate the form.
-  // (Drafts saved via the "Save as Draft" button are persisted server-side
-  // and remain editable from the dashboard.)
-  React.useEffect(() => {
-    try { localStorage.removeItem('inspection-draft'); } catch (_) {}
-  }, []);
+  // Keep the local draft cache intact when the route is reopened. The form
+  // owns draft recovery and clears it only after a successful save/submit.
 
   // Auto-create chat after inspection submission (form dispatches a custom event).
   const handleInspectionCreated = async (inspectionId, customerId) => {
