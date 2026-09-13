@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { ArrowRight, User, Phone, Mail, Lock, AlertCircle, CheckSquare } from 'lucide-react';
+import InspectionSignal from '@/components/InspectionSignal.jsx';
 
 const fadeUp = { initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.6, ease: [0.22, 1, 0.36, 1] } };
 
@@ -148,8 +149,8 @@ const SignupPage = () => {
 
         <aside className="auth-aside">
           <div className="absolute inset-0">
-            <img src="https://images.unsplash.com/photo-1505691938895-1758d7feb511?auto=format&fit=crop&w=1400&q=80" alt="" className="w-full h-full object-cover opacity-30" />
             <div className="absolute inset-0 bg-gradient-to-tr from-primary via-primary/95 to-primary/70" />
+            <div className="absolute inset-0 opacity-25" aria-hidden="true"><InspectionSignal tone="dark" label="" className="h-full w-full object-cover" /></div>
           </div>
           <div className="relative h-full flex flex-col justify-between p-16 z-10">
             <p className="editorial-eyebrow text-secondary">For practitioners</p>

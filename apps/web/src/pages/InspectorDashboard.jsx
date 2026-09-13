@@ -17,6 +17,7 @@ import {
   MessageCircle, ArrowUpRight, Undo2,
 } from 'lucide-react';
 import AdminDownloadReport from '@/components/AdminDownloadReport.jsx';
+import InspectionSignal from '@/components/InspectionSignal.jsx';
 import { useFeedback } from '@/contexts/FeedbackContext.jsx';
 import { toast } from 'sonner';
 
@@ -169,6 +170,9 @@ const InspectorDashboard = () => {
                       )}
                     </Link>
                   </Button>
+                </div>
+                <div className="workspace-signal hidden xl:block w-[260px] shrink-0 p-3" aria-hidden="true">
+                  <InspectionSignal />
                 </div>
               </motion.div>
             </div>

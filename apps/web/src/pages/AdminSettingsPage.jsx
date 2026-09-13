@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import Header from '@/components/Header.jsx';
 import Footer from '@/components/Footer.jsx';
 import OrganizationOrderEditor from '@/components/OrganizationOrderEditor.jsx';
+import InspectionSignal from '@/components/InspectionSignal.jsx';
 import { Alert as OrganizationAlert } from '@/components/ui/alert';
 import { useSettings } from '@/contexts/SettingsContext.jsx';
 import useOnlineStatus from '@/hooks/useOnlineStatus.js';
@@ -408,38 +409,42 @@ const AdminSettingsPage = () => {
                 initial={{ opacity: 0, y: 18 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+                className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-8"
               >
-                <p className="editorial-eyebrow">Studio configuration</p>
-                <h1 className="editorial-headline mt-6 text-3xl sm:text-4xl md:text-5xl lg:text-6xl">
-                  Platform <em>settings.</em>
-                </h1>
-                <p className="editorial-deck mt-5 max-w-2xl">
-                  Brand voice, report typography, comment library, severity scale. Adjustments here propagate everywhere.
-                </p>
-                <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1">
-                    <span>
-                      {isSyncingSettings
-                        ? 'Sync in progress...'
-                        : syncError
-                          ? `Sync failed: ${syncError}`
-                          : lastSyncedAt
-                            ? `Last synced: ${new Date(lastSyncedAt).toLocaleString()}`
-                            : 'Not synced yet'}
-                    </span>
-                    {hasPendingSync && <span className="text-amber-600">Pending local changes</span>}
+                <div>
+                  <p className="editorial-eyebrow">Studio configuration</p>
+                  <h1 className="editorial-headline mt-6 text-3xl sm:text-4xl md:text-5xl lg:text-6xl">
+                    Platform <em>settings.</em>
+                  </h1>
+                  <p className="editorial-deck mt-5 max-w-2xl">
+                    Brand voice, report typography, comment library, severity scale. Adjustments here propagate everywhere.
+                  </p>
+                  <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <span>
+                        {isSyncingSettings
+                          ? 'Sync in progress...'
+                          : syncError
+                            ? `Sync failed: ${syncError}`
+                            : lastSyncedAt
+                              ? `Last synced: ${new Date(lastSyncedAt).toLocaleString()}`
+                              : 'Not synced yet'}
+                      </span>
+                      {hasPendingSync && <span className="text-amber-600">Pending local changes</span>}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleSyncAllSettings}
+                      disabled={!online || isSyncingSettings}
+                      className="w-full sm:w-auto"
+                    >
+                      <RefreshCw className={`w-4 h-4 mr-2 ${isSyncingSettings ? 'animate-spin' : ''}`} />
+                      {isSyncingSettings ? 'Syncing...' : 'Sync All Settings'}
+                    </Button>
                   </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleSyncAllSettings}
-                    disabled={!online || isSyncingSettings}
-                    className="w-full sm:w-auto"
-                  >
-                    <RefreshCw className={`w-4 h-4 mr-2 ${isSyncingSettings ? 'animate-spin' : ''}`} />
-                    {isSyncingSettings ? 'Syncing...' : 'Sync All Settings'}
-                  </Button>
                 </div>
+                <div className="workspace-signal hidden lg:block w-[280px] shrink-0 p-3" aria-hidden="true"><InspectionSignal /></div>
               </motion.div>
             </div>
           </section>

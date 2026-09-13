@@ -13,6 +13,7 @@ import {
   ArrowRight, User, Phone, Mail, Lock, AlertCircle, CheckCircle2, CheckSquare,
   Shield, Clock, MessageSquare,
 } from 'lucide-react';
+import InspectionSignal from '@/components/InspectionSignal.jsx';
 
 const fadeUp = { initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.6, ease: [0.22, 1, 0.36, 1] } };
 
@@ -178,8 +179,8 @@ const CustomerSignupPage = () => {
 
         <aside className="auth-aside">
           <div className="absolute inset-0">
-            <img src="https://images.unsplash.com/photo-1494526585095-c41746248156?auto=format&fit=crop&w=1400&q=80" alt="" className="w-full h-full object-cover opacity-30" />
             <div className="absolute inset-0 bg-gradient-to-tr from-primary via-primary/95 to-primary/70" />
+            <div className="absolute inset-0 opacity-25" aria-hidden="true"><InspectionSignal tone="dark" label="" className="h-full w-full object-cover" /></div>
           </div>
           <div className="relative h-full flex flex-col justify-between p-12 xl:p-16 z-10">
             <p className="editorial-eyebrow text-secondary">Welcome, homeowner</p>

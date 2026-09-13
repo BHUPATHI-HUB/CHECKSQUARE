@@ -24,6 +24,7 @@ import AdminInspectionDetailModal from '@/components/AdminInspectionDetailModal.
 import AdminApprovalActions from '@/components/AdminApprovalActions.jsx';
 import AdminDownloadReport from '@/components/AdminDownloadReport.jsx';
 import DeletedReportsArchive from '@/components/DeletedReportsArchive.jsx';
+import InspectionSignal from '@/components/InspectionSignal.jsx';
 import data from '@/services/dataService.js';
 import { toast } from 'sonner';
 
@@ -209,6 +210,9 @@ const AdminDashboard = () => {
                       <SettingsIcon className="w-4 h-4 mr-2" /> Settings
                     </Link>
                   </Button>
+                </div>
+                <div className="workspace-signal hidden xl:block w-[260px] shrink-0 p-3" aria-hidden="true">
+                  <InspectionSignal />
                 </div>
               </motion.div>
             </div>

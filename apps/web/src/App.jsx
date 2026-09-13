@@ -14,6 +14,7 @@ import { startSyncEngine } from '@/services/syncEngine.js';
 import { IS_OFFLINE_ADMIN } from '@/lib/appTarget.js';
 import { Toaster } from 'sonner';
 import { CheckSquare, Home, ScanLine } from 'lucide-react';
+import InspectionSignal from '@/components/InspectionSignal.jsx';
 
 // Public pages stay eager-loaded — they're tiny and needed on first paint.
 import HomePage from '@/pages/HomePage.jsx';
@@ -46,6 +47,9 @@ const RouteFallback = () => (
 
 const BrandSplash = ({ visible }) => (
   <div className={`fixed inset-0 z-[100] flex items-center justify-center bg-stone-950 transition-opacity duration-500 ${visible ? 'opacity-100' : 'pointer-events-none opacity-0'}`} aria-hidden={!visible}>
+    <div className="absolute inset-0 flex items-center justify-center px-6 opacity-30" aria-hidden="true">
+      <InspectionSignal tone="dark" label="" className="max-w-2xl" />
+    </div>
     <div className="relative flex flex-col items-center gap-5 text-white">
       <div className="relative flex h-24 w-24 items-center justify-center rounded-[2rem] bg-cyan-500 shadow-[0_20px_60px_rgba(34,211,238,0.28)] motion-safe:animate-[splash-pop_700ms_cubic-bezier(.2,.8,.2,1)_both]">
         <Home className="h-12 w-12" strokeWidth={1.5} />
@@ -64,7 +68,7 @@ const RouteShell = () => {
   const { loading } = useAuth();
   const [showSplash, setShowSplash] = React.useState(true);
   useEffect(() => {
-    const timer = window.setTimeout(() => setShowSplash(false), 1800);
+    const timer = window.setTimeout(() => setShowSplash(false), 2200);
     return () => window.clearTimeout(timer);
   }, []);
   return <>

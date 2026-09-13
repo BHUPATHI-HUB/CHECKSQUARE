@@ -10,6 +10,7 @@ import { useAuth } from '@/contexts/AuthContext.jsx';
 import { useSettings } from '@/contexts/SettingsContext.jsx';
 import { toast } from 'sonner';
 import { Shield, Users, ArrowLeft } from 'lucide-react';
+import InspectionSignal from '@/components/InspectionSignal.jsx';
 
 const fadeUp = {
   initial: { opacity: 0, y: 18 },
@@ -62,17 +63,20 @@ const NewInspectionPage = () => {
           {/* Editorial header */}
           <section className="border-b">
             <div className="container mx-auto px-4 sm:px-6 lg:px-12 py-14 lg:py-20">
-              <motion.div {...fadeUp}>
-                <Link to={dashboardPath} className="inline-flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-muted-foreground hover:text-foreground mb-8 link-underline">
-                  <ArrowLeft className="w-3.5 h-3.5" /> Back to dashboard
-                </Link>
-                <p className="editorial-eyebrow">New report</p>
-                <h1 className="editorial-headline mt-6 text-3xl sm:text-4xl md:text-5xl lg:text-6xl">
-                  Begin a <em>new inspection.</em>
-                </h1>
-                <p className="editorial-deck mt-5 max-w-2xl">
-                  The form below mirrors the field notebook. Save as draft, return anytime, submit when the document is honest.
-                </p>
+              <motion.div {...fadeUp} className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-8">
+                <div>
+                  <Link to={dashboardPath} className="inline-flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-muted-foreground hover:text-foreground mb-8 link-underline">
+                    <ArrowLeft className="w-3.5 h-3.5" /> Back to dashboard
+                  </Link>
+                  <p className="editorial-eyebrow">New report</p>
+                  <h1 className="editorial-headline mt-6 text-3xl sm:text-4xl md:text-5xl lg:text-6xl">
+                    Begin a <em>new inspection.</em>
+                  </h1>
+                  <p className="editorial-deck mt-5 max-w-2xl">
+                    The form below mirrors the field notebook. Save as draft, return anytime, submit when the document is honest.
+                  </p>
+                </div>
+                <div className="workspace-signal hidden lg:block w-[280px] shrink-0 p-3" aria-hidden="true"><InspectionSignal /></div>
               </motion.div>
             </div>
           </section>
