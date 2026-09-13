@@ -22,7 +22,7 @@ import {
   putPhotoBlob, getPhotoBlob, markPhotoSynced, deletePhotoBlob, enqueue,
 } from '@/lib/localStore.js';
 import { requestSync } from '@/services/syncEngine.js';
-import { IS_OFFLINE_ADMIN, USE_LOCAL_INSPECTION_STORAGE } from '@/lib/appTarget.js';
+import { IS_OFFLINE_ADMIN } from '@/lib/appTarget.js';
 import offlinePhoto from '@/lib/localPhotoStorage.js';
 
 const SIGNED_URL_TTL_SECONDS = 60 * 60; // 1 h
@@ -148,7 +148,10 @@ export async function uploadInspectionPhoto(file, { inspectionId = 'draft', room
   const id = makePhotoId();
   // Resize/compress up-front so BOTH the upload and the local cache are small.
   file = await resizeImageFile(file, maxEdge, quality);
-  if (USE_LOCAL_INSPECTION_STORAGE) return offlinePhoto.uploadInspectionPhoto(file, { inspectionId, roomKey });
+  // The offline-admin build has no cloud counterpart. Hybrid APKs still use
+  // the local-first blob cache, but continue through this path so Supabase
+  // Storage uploads can be queued and drained when connectivity returns.
+  if (IS_OFFLINE_ADMIN) return offlinePhoto.uploadInspectionPhoto(file, { inspectionId, roomKey });
   const capturedAt = new Date().toISOString();
 
   // Fallback path keeps the old behaviour alive when Supabase isn't set up yet.

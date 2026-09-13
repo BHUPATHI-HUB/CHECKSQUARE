@@ -9,8 +9,8 @@
 // caller — failures stay queued and are retried later, so data is never lost.
 
 import { supabase, isSupabaseConfigured, SUPABASE_PHOTO_BUCKET } from '@/lib/supabaseClient.js';
-import data from '@/services/dataService.js';
-import { USE_LOCAL_INSPECTION_STORAGE } from '@/lib/appTarget.js';
+import { cloudData } from '@/services/dataService.js';
+import { IS_OFFLINE_ADMIN } from '@/lib/appTarget.js';
 import {
   listOutbox, updateOutbox, deleteOutbox,
   getPhotoBlob, markPhotoSynced, deletePhotoBlob,
@@ -35,6 +35,27 @@ const notify = async () => {
 
 let running = false;
 
+const getSyncPolicy = () => {
+  try {
+    const settings = JSON.parse(localStorage.getItem('app-settings') || '{}');
+    return { mode: 'on-submit', photoBatchSize: 4, ...(settings.syncPolicy || {}) };
+  } catch {
+    return { mode: 'on-submit', photoBatchSize: 4 };
+  }
+};
+
+const automaticSyncAllowed = () => {
+  const policy = getSyncPolicy();
+  if (policy.mode === 'manual') return false;
+  if (policy.mode === 'wifi-only') {
+    const connection = typeof navigator !== 'undefined' ? navigator.connection : null;
+    // Desktop browsers and Android WebViews may not expose Network
+    // Information. In that case, do not block a connected user.
+    if (connection?.saveData || ['slow-2g', '2g', '3g'].includes(connection?.effectiveType)) return false;
+  }
+  return true;
+};
+
 async function handleOp(op) {
   if (op.type === 'uploadPhoto') {
     if (!isSupabaseConfigured) throw new Error('Photo storage is not configured.');
@@ -50,13 +71,17 @@ async function handleOp(op) {
     const inspectionId = op.inspectionId || op.id;
     const insp = await getPendingInspection(inspectionId);
     if (!insp) return;
-    await data.upsertInspection(insp);
+    await cloudData.upsertInspection(insp);
     await deletePendingInspection(inspectionId);
+  } else if (op.type === 'inspectionStatus') {
+    await cloudData.transitionInspectionStatus(op.inspectionId, op.payload || {});
   }
 }
 
 export async function drainOutbox() {
-  if (USE_LOCAL_INSPECTION_STORAGE) return;
+  // The single-user offline build has no cloud counterpart. Hybrid APKs do:
+  // their local SQLite capture is drained through cloudData when online.
+  if (IS_OFFLINE_ADMIN) return;
   if (running) return;
   if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
   running = true;
@@ -65,13 +90,17 @@ export async function drainOutbox() {
     try { if (isSupabaseConfigured) await supabase.auth.getSession(); } catch { /* ignore */ }
 
     const ops = (await listOutbox()).sort((a, b) => a.id - b.id);
+    const photoBatchSize = Math.max(1, Number(getSyncPolicy().photoBatchSize) || 4);
+    let photosHandled = 0;
     for (const op of ops) {
       if (op.nextAttemptAt && op.nextAttemptAt > Date.now()) continue;
+      if (op.type === 'uploadPhoto' && photosHandled >= photoBatchSize) continue;
       try {
         // eslint-disable-next-line no-await-in-loop
         await handleOp(op);
         // eslint-disable-next-line no-await-in-loop
         await deleteOutbox(op.id);
+        if (op.type === 'uploadPhoto') photosHandled += 1;
       } catch (e) {
         op.tries = (op.tries || 0) + 1;
         op.nextAttemptAt = Date.now() + Math.min(5 * 60 * 1000, 1000 * 2 ** op.tries);
@@ -89,22 +118,23 @@ export async function drainOutbox() {
 
 // Debounced public trigger.
 let scheduled = null;
-export function requestSync() {
-  if (USE_LOCAL_INSPECTION_STORAGE) return;
+export function requestSync({ force = false } = {}) {
+  if (IS_OFFLINE_ADMIN) return;
+  if (!force && !automaticSyncAllowed()) return;
   if (scheduled) return;
   scheduled = setTimeout(() => { scheduled = null; drainOutbox(); }, 300);
 }
 
 // Force every queued op to retry now (clears backoff), e.g. from a "Retry" tap.
 export async function retryFailed() {
-  if (USE_LOCAL_INSPECTION_STORAGE) return;
+  if (IS_OFFLINE_ADMIN) return;
   await resetOutboxBackoff();
-  drainOutbox();
+  requestSync({ force: true });
 }
 
 let started = false;
 export function startSyncEngine() {
-  if (USE_LOCAL_INSPECTION_STORAGE) return;
+  if (IS_OFFLINE_ADMIN) return;
   if (started || typeof window === 'undefined') return;
   started = true;
   // Ask for durable storage so queued photos aren't evicted under pressure.
@@ -118,7 +148,7 @@ export function startSyncEngine() {
     });
   }
   // Periodic safety-net flush.
-  setInterval(() => { if (navigator.onLine !== false) drainOutbox(); }, 30000);
+  setInterval(() => { if (navigator.onLine !== false) requestSync(); }, 30000);
   // Kick once on start.
   requestSync();
 }

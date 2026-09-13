@@ -58,6 +58,16 @@ const pbAdapter = {
     const pb = await getPB();
     return pb.collection('inspections').update(id, payload, { $autoCancel: false });
   },
+  async transitionInspectionStatus(id, payload) {
+    const pb = await getPB();
+    const patch = { status: payload.status };
+    if (payload.approvedBy !== undefined) patch.approvedBy = payload.approvedBy;
+    if (payload.approvedAt !== undefined) patch.approvedAt = payload.approvedAt;
+    if (payload.rejectedBy !== undefined) patch.rejectedBy = payload.rejectedBy;
+    if (payload.rejectedAt !== undefined) patch.rejectedAt = payload.rejectedAt;
+    if (payload.rejectionReason !== undefined) patch.rejectionReason = payload.rejectionReason;
+    return pb.collection('inspections').update(id, patch, { $autoCancel: false });
+  },
   async deleteInspection(id) {
     const pb = await getPB();
     return pb.collection('inspections').delete(id, { $autoCancel: false });
@@ -273,6 +283,16 @@ const supaAdapter = {
   },
   async updateInspection(id, payload) {
     const { data, error } = await supabase.from('inspections').update(inspectionToRow(payload)).eq('id', id).select().single();
+    if (error) throw error;
+    return rowToInspection(data);
+  },
+  async transitionInspectionStatus(id, payload) {
+    const { data, error } = await supabase
+      .from('inspections')
+      .update(inspectionStatusToRow(payload))
+      .eq('id', id)
+      .select('id,status,approved_by,approved_at,rejected_by,rejected_at,rejection_reason,updated_at')
+      .single();
     if (error) throw error;
     return rowToInspection(data);
   },
@@ -563,6 +583,21 @@ function inspectionToRow(p) {
     deletion_reason:   p.deletionReason,
   };
 }
+function inspectionStatusToRow(p) {
+  const row = { status: p.status };
+  // Supabase stores approver/rejector references as profile UUIDs. The
+  // database workflow trigger remains authoritative for admin decisions.
+  if (p.approvedById !== undefined) row.approved_by = p.approvedById;
+  else if (p.approvedBy === null) row.approved_by = null;
+  else if (p.approvedBy !== undefined && /^[0-9a-f-]{36}$/i.test(String(p.approvedBy))) row.approved_by = p.approvedBy;
+  if (p.approvedAt !== undefined) row.approved_at = p.approvedAt;
+  if (p.rejectedById !== undefined) row.rejected_by = p.rejectedById;
+  else if (p.rejectedBy === null) row.rejected_by = null;
+  else if (p.rejectedBy !== undefined && /^[0-9a-f-]{36}$/i.test(String(p.rejectedBy))) row.rejected_by = p.rejectedBy;
+  if (p.rejectedAt !== undefined) row.rejected_at = p.rejectedAt;
+  if (p.rejectionReason !== undefined) row.rejection_reason = p.rejectionReason;
+  return row;
+}
 function rowToInspection(r) {
   if (!r) return r;
   return {
@@ -661,6 +696,14 @@ const localAdapter = {
     ? localDb.updateInspection(payload.id, payload)
     : localDb.createInspection(payload)),
   updateInspection: (id, payload) => localDb.updateInspection(id, payload),
+  transitionInspectionStatus: (id, payload) => localDb.updateInspection(id, {
+    status: payload.status,
+    ...(payload.approvedBy !== undefined && { approvedBy: payload.approvedBy }),
+    ...(payload.approvedAt !== undefined && { approvedAt: payload.approvedAt }),
+    ...(payload.rejectedBy !== undefined && { rejectedBy: payload.rejectedBy }),
+    ...(payload.rejectedAt !== undefined && { rejectedAt: payload.rejectedAt }),
+    ...(payload.rejectionReason !== undefined && { rejectionReason: payload.rejectionReason }),
+  }),
   deleteInspection: (id) => localDb.deleteInspection(id),
 
   // appointments
@@ -705,6 +748,9 @@ const localAdapter = {
 // Hybrid mode keeps inspection-domain operations local-first for resilience,
 // while identity/collaboration domains stay cloud-backed.
 const cloudAdapter = USE_SUPABASE ? supaAdapter : pbAdapter;
+// Sync workers use this explicitly so hybrid APK operations never recurse
+// back into the local adapter when they are finally sent to the cloud.
+export const cloudData = cloudAdapter;
 const hybridAdapter = {
   // Local-first core data
   listInspections: (opts) => localAdapter.listInspections(opts),
@@ -712,6 +758,7 @@ const hybridAdapter = {
   createInspection: (payload) => localAdapter.createInspection(payload),
   upsertInspection: (payload) => localAdapter.upsertInspection(payload),
   updateInspection: (id, payload) => localAdapter.updateInspection(id, payload),
+  transitionInspectionStatus: (id, payload) => localAdapter.transitionInspectionStatus(id, payload),
   deleteInspection: (id) => localAdapter.deleteInspection(id),
 
   listAppointments: (opts) => localAdapter.listAppointments(opts),

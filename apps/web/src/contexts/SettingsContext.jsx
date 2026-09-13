@@ -131,6 +131,13 @@ export const SettingsProvider = ({ children }) => {
       boxWidthCm: 8.45,      // printed photo width  (used by the Excel export)
       boxHeightCm: 6.4,      // printed photo height (used by the Excel export)
     },
+    // Cloud transfer policy for hybrid devices. Capture remains local; this
+    // policy controls when the queued work is allowed to leave the device.
+    syncPolicy: {
+      mode: 'on-submit',       // 'on-submit' | 'wifi-only' | 'manual'
+      photoBatchSize: 4,
+      maxConcurrentUploads: 2,
+    },
   };
 
   const [settings, setSettings] = useState(defaultSettings);

@@ -567,6 +567,29 @@ const AdminSettingsPage = () => {
                     <label className="flex items-center justify-between rounded-xl border p-4 text-sm">Show summary counts<input type="checkbox" checked={localSettings.inspectionOrganization?.showSummaryCounts !== false} onChange={e => handleAppChange('inspectionOrganization', { ...(localSettings.inspectionOrganization || {}), showSummaryCounts: e.target.checked })} /></label>
                     <label className="flex items-center justify-between rounded-xl border p-4 text-sm">Hide empty groups<input type="checkbox" checked={localSettings.inspectionOrganization?.hideEmptyGroups !== false} onChange={e => handleAppChange('inspectionOrganization', { ...(localSettings.inspectionOrganization || {}), hideEmptyGroups: e.target.checked })} /></label>
                   </div>
+                  <div className="rounded-xl border bg-muted/20 p-5 space-y-4">
+                    <div>
+                      <p className="font-medium">Device sync policy</p>
+                      <p className="mt-1 text-xs text-muted-foreground">Inspections are captured locally. This controls when queued changes may leave a hybrid device.</p>
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-3">
+                      <div className="space-y-2 sm:col-span-2">
+                        <Label>Automatic transfer</Label>
+                        <Select value={localSettings.syncPolicy?.mode || 'on-submit'} onValueChange={mode => handleAppChange('syncPolicy', { ...(localSettings.syncPolicy || {}), mode })}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="on-submit">On submit + reconnect</SelectItem>
+                            <SelectItem value="wifi-only">Wi-Fi only</SelectItem>
+                            <SelectItem value="manual">Manual sync only</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="sync-photo-batch">Photo batch size</Label>
+                        <Input id="sync-photo-batch" type="number" min="1" max="12" value={localSettings.syncPolicy?.photoBatchSize || 4} onChange={e => handleAppChange('syncPolicy', { ...(localSettings.syncPolicy || {}), photoBatchSize: Math.min(12, Math.max(1, Number(e.target.value) || 1)) })} />
+                      </div>
+                    </div>
+                  </div>
                   {localSettings.inspectionOrganization?.mode === 'custom' && (
                     <div className="space-y-6">
                       <div>
@@ -586,7 +609,7 @@ const AdminSettingsPage = () => {
                       setOrganizationSaving(true);
                       setOrganizationResult(null);
                       try {
-                        const result = await updateSettings({ inspectionOrganization: localSettings.inspectionOrganization }, { syncCloud: true });
+                        const result = await updateSettings({ inspectionOrganization: localSettings.inspectionOrganization, syncPolicy: localSettings.syncPolicy }, { syncCloud: true });
                         setOrganizationResult({ success: result.success, message: result.success ? (result.synced ? 'Organization settings saved and synced.' : 'Saved on this device. Sync pending: ' + (result.warning || 'connect to sync.')) : result.error || 'Could not save. Please retry.' });
                       } catch (error) {
                         setOrganizationResult({ success: false, message: error.message || 'Could not save. Please retry.' });

@@ -1,9 +1,9 @@
 import { useCallback } from 'react';
 import { toast } from 'sonner';
 import data, { dataBackend } from '@/services/dataService.js';
-import { queueInspection, listPendingInspections, getPendingInspection, putCachedList, getCachedList } from '@/lib/localStore.js';
+import { queueInspection, queueInspectionStatus, listPendingInspections, getPendingInspection, putCachedList, getCachedList } from '@/lib/localStore.js';
 import { requestSync, isNetworkError } from '@/services/syncEngine.js';
-import { USE_LOCAL_INSPECTION_STORAGE } from '@/lib/appTarget.js';
+import { IS_HYBRID_APK, USE_LOCAL_INSPECTION_STORAGE } from '@/lib/appTarget.js';
 
 // Stale-while-revalidate cache so navigating away from a dashboard and back
 // shows the last known list INSTANTLY instead of a blank screen plus a full
@@ -121,12 +121,22 @@ export const useInspectionStatus = () => {
       const payload = { status: newStatus, ...extra };
       if (newStatus === 'approved') {
         payload.approvedBy = user?.name || user?.email || 'Admin';
+        payload.approvedById = user?.id || null;
         payload.approvedAt = new Date().toISOString();
       } else if (newStatus === 'rejected') {
         payload.rejectedBy = user?.name || user?.email || 'Admin';
+        payload.rejectedById = user?.id || null;
         payload.rejectedAt = new Date().toISOString();
       }
-      await data.updateInspection(inspectionId, payload);
+      // Hybrid capture is local-first. Persist the small transition locally,
+      // then queue only this status patch for the cloud adapter.
+      if (IS_HYBRID_APK) {
+        await data.transitionInspectionStatus(inspectionId, payload);
+        await queueInspectionStatus(inspectionId, payload);
+        requestSync();
+      } else {
+        await data.transitionInspectionStatus(inspectionId, payload);
+      }
       clearInspectionListCache();
       return true;
     } catch (error) {
@@ -244,7 +254,7 @@ export const useInspectionStatus = () => {
 
         // Every new inspection auto-provisions a group chat thread (inspector +
         // customer + admins). Best-effort — a failure must NOT block the save.
-        if (!USE_LOCAL_INSPECTION_STORAGE) try {
+        if (!USE_LOCAL_INSPECTION_STORAGE && !IS_HYBRID_APK) try {
           const adminIds = await data.listUsersByRole('admin').then((rows) => rows.map((r) => r.id));
           const participants = Array.from(new Set([
             ...adminIds, record.inspector, record.customer,
@@ -255,6 +265,13 @@ export const useInspectionStatus = () => {
         } catch (chatErr) {
           console.warn('Auto-create chat thread skipped:', chatErr?.message || chatErr);
         }
+      }
+      // Hybrid APKs keep capture local until the inspector submits. At that
+      // point queue one deduplicated full-record upsert; the sync worker sends
+      // it through cloudData rather than calling the local adapter again.
+      if (IS_HYBRID_APK && payload.status !== 'draft') {
+        await queueInspection(record);
+        requestSync();
       }
       clearInspectionListCache();
       return record;

@@ -178,9 +178,41 @@ export async function queueInspection(inspection) {
   return new Promise((resolve, reject) => {
     const t = db.transaction([STORES.inspections, STORES.outbox], 'readwrite');
     t.objectStore(STORES.inspections).put({ ...inspection, syncStatus: 'pending', updatedAt: now });
-    t.objectStore(STORES.outbox).add({ type: 'upsertInspection', id: undefined,
-      inspectionId: inspection.id, tries: 0, nextAttemptAt: now, createdAt: now });
+    // Collapse older full-record writes for the same inspection. This keeps a
+    // long editing session from producing dozens of redundant cloud writes.
+    const outbox = t.objectStore(STORES.outbox);
+    const existing = outbox.getAll();
+    existing.onsuccess = () => {
+      (existing.result || []).forEach((op) => {
+        if (op.type === 'upsertInspection' && op.inspectionId === inspection.id) outbox.delete(op.id);
+      });
+      outbox.add({ type: 'upsertInspection', id: undefined,
+        inspectionId: inspection.id, tries: 0, nextAttemptAt: now, createdAt: now });
+    };
+    existing.onerror = () => reject(existing.error);
     t.oncomplete = () => resolve(inspection);
+    t.onerror = () => reject(t.error);
+    t.onabort = () => reject(t.error);
+  });
+}
+
+// Queue a status-only mutation. Approval/rejection never needs the full
+// inspection payload, so this operation stays tiny and can safely be retried.
+export async function queueInspectionStatus(inspectionId, payload) {
+  const db = await openDB();
+  const now = Date.now();
+  return new Promise((resolve, reject) => {
+    const t = db.transaction(STORES.outbox, 'readwrite');
+    const outbox = t.objectStore(STORES.outbox);
+    const existing = outbox.getAll();
+    existing.onsuccess = () => {
+      (existing.result || []).forEach((op) => {
+        if (op.type === 'inspectionStatus' && op.inspectionId === inspectionId) outbox.delete(op.id);
+      });
+      outbox.add({ type: 'inspectionStatus', inspectionId, payload, tries: 0, nextAttemptAt: now, createdAt: now });
+    };
+    existing.onerror = () => reject(existing.error);
+    t.oncomplete = () => resolve(true);
     t.onerror = () => reject(t.error);
     t.onabort = () => reject(t.error);
   });
