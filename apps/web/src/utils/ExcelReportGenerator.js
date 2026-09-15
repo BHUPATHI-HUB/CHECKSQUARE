@@ -527,12 +527,17 @@ export async function buildXLSXBlob(inspection, settings) {
 
   // ─────────────────────── 5) PHOTO LOG (rooms) ───────────────────────────
   {
-    const ws = wb.addWorksheet('Inspection', { views: [{ state: 'frozen', ySplit: 1 }] });
+    const ws = wb.addWorksheet('Inspection', {
+      views: [{ state: 'frozen', xSplit: 3, ySplit: 1 }],
+      pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
+    });
     ws.columns = [
       { header: '#', key: 'n', width: 5 },
       { header: 'Room', key: 'room', width: 22 },
       { header: 'Location', key: 'loc', width: 22 },
-      { header: 'Description', key: 'desc', width: 46 },
+      { header: 'Classification', key: 'classify', width: 22 },
+      { header: 'Photo title', key: 'title', width: 28 },
+      { header: 'Description / comment', key: 'desc', width: 46 },
       { header: 'Severity', key: 'sev', width: 14 },
       { header: 'Photo', key: 'photo', width: photoColWidthChars },
     ];
@@ -544,11 +549,13 @@ export async function buildXLSXBlob(inspection, settings) {
     });
 
     let r = 2;
-    const addPhotoRow = async ({ n, room, loc, desc, sev, url }) => {
+    const addPhotoRow = async ({ n, room, loc, classify, title, desc, sev, url }) => {
       const row = ws.getRow(r);
       row.getCell('n').value = n ?? '';
       row.getCell('room').value = room || '';
       row.getCell('loc').value = loc || '';
+      row.getCell('classify').value = classify || '';
+      row.getCell('title').value = title || '';
       row.getCell('desc').value = desc || '';
       row.getCell('sev').value = sev || '';
       row.alignment = { vertical: 'middle', wrapText: true };
@@ -560,7 +567,7 @@ export async function buildXLSXBlob(inspection, settings) {
           const imgId = wb.addImage({ base64: processed.base64, extension: 'jpeg' });
           row.height = Math.round((processed.hPx * 72) / 96) + 6;
           ws.addImage(imgId, {
-            tl: { col: 5, row: r - 1 },
+            tl: { col: 7, row: r - 1 },
             ext: { width: processed.wPx, height: processed.hPx },
             editAs: 'oneCell',
           });
@@ -569,13 +576,42 @@ export async function buildXLSXBlob(inspection, settings) {
       r += 1;
     };
 
+    if (meta.propertyImage) {
+      await addPhotoRow({
+        n: '',
+        room: 'Property',
+        loc: 'Property overview',
+        title: 'Property photograph',
+        desc: meta.propertyAddress || '',
+        url: meta.propertyImage,
+      });
+    }
+
+    const waterImages = Array.isArray(inspection.waterQuality?.images)
+      ? inspection.waterQuality.images.filter((photo) => photo?.url)
+      : [];
+    for (let wi = 0; wi < waterImages.length; wi += 1) {
+      const photo = waterImages[wi];
+      // eslint-disable-next-line no-await-in-loop
+      await addPhotoRow({
+        n: '',
+        room: 'Property',
+        loc: 'Water quality',
+        classify: photo.classify || '',
+        title: photo.title || `Water test photo ${wi + 1}`,
+        desc: photo.description || photo.caption || '',
+        sev: photo.severity || '',
+        url: photo.url,
+      });
+    }
+
     for (const room of rooms) {
       const roomName = room?.name || 'Room';
       const corners = Array.isArray(room?.cornerPhotos) ? room.cornerPhotos : [];
       const defects = groupDefects(Array.isArray(room?.defects) ? room.defects : [], severityLevels, settings?.inspectionOrganization || {});
 
       const hr = ws.getRow(r);
-      ws.mergeCells(r, 1, r, 6);
+      ws.mergeCells(r, 1, r, 8);
       hr.getCell(1).value = roomName;
       hr.getCell(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
       hr.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: primary } };
@@ -587,7 +623,10 @@ export async function buildXLSXBlob(inspection, settings) {
         // eslint-disable-next-line no-await-in-loop
         await addPhotoRow({
           n: '', room: roomName, loc: p.corner || `Corner ${i + 1}`,
-          desc: 'Ambient photo', sev: '', url: p.url,
+          classify: p.classify || '',
+          title: p.title || p.corner || `Corner ${i + 1}`,
+          desc: p.description || p.caption || 'Ambient photo',
+          sev: p.severity || '', url: p.url,
         });
       }
 
@@ -602,7 +641,11 @@ export async function buildXLSXBlob(inspection, settings) {
         const loc = d.location || d.area || '';
         if (photos.length === 0) {
           // eslint-disable-next-line no-await-in-loop
-          await addPhotoRow({ n: di + 1, room: roomName, loc, desc, sev: d.severity || '', url: null });
+          await addPhotoRow({
+            n: di + 1, room: roomName, loc,
+            classify: d.classify || '', title: d.title || '', desc,
+            sev: d.severity || '', url: null,
+          });
         } else {
           for (let pi = 0; pi < photos.length; pi += 1) {
             const p = photos[pi];
@@ -611,8 +654,10 @@ export async function buildXLSXBlob(inspection, settings) {
               n: pi === 0 ? di + 1 : '',
               room: roomName,
               loc,
-              desc: pi === 0 ? desc : (p.caption || ''),
-              sev: pi === 0 ? (d.severity || '') : '',
+              classify: p.classify || d.classify || '',
+              title: p.title || (pi === 0 ? d.title : ''),
+              desc: p.description || p.caption || (pi === 0 ? desc : ''),
+              sev: p.severity || d.severity || '',
               url: p.url,
             });
           }

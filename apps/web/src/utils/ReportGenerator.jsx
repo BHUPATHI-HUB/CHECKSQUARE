@@ -9,6 +9,60 @@ import { computeInspectionScore, DEFAULT_SCORE_EXPLANATION_HTML, explainScore } 
 import { materializeInspectionPhotos } from '@/lib/supabasePhotoStorage.js';
 import { groupDefects } from '@/utils/defectTaxonomy.js';
 
+// One physical page contract for both offline exports. The DOCX uses A4 with
+// half-inch (720 twip) body margins; at the browser's 96 dpi CSS baseline that
+// is 794 x 1122 px with 48 px margins. Keeping these values in one place stops
+// the HTML-to-PDF renderer from silently using a shorter page than Word.
+const REPORT_PAGE = Object.freeze({
+  widthPx: 794,
+  // html2pdf floors its A4 canvas slice height. Using 1122 prevents the
+  // sub-pixel remainder from accumulating into a trailing blank page.
+  heightPx: 1122,
+  marginPx: 48,
+  marginTwips: 720,
+});
+
+const DEFAULT_REPORT_ORDER = Object.freeze([
+  { key: 'cover',            enabled: true },
+  { key: 'propertyDetails',  enabled: true },
+  { key: 'score',            enabled: true },
+  { key: 'scoreTable',       enabled: true },
+  { key: 'disclaimers',      enabled: true },
+  { key: 'severityTaxonomy', enabled: true },
+  { key: 'areaCalculations', enabled: true },
+  { key: 'environmental',    enabled: true },
+  { key: 'rooms',            enabled: true },
+  { key: 'thankYou',         enabled: true },
+]);
+
+const resolveReportOrder = (configured) => {
+  let order = configured;
+  if (!Array.isArray(order)) {
+    const legacy = configured && typeof configured === 'object' ? configured : {};
+    order = DEFAULT_REPORT_ORDER.map(({ key }) => ({ key, enabled: legacy[key] !== false }));
+  }
+
+  const present = new Set(order.map((item) => item?.key));
+  const merged = [];
+  let cursor = 0;
+  for (const def of DEFAULT_REPORT_ORDER) {
+    if (!present.has(def.key)) merged.push({ ...def });
+    while (
+      cursor < order.length
+      && order[cursor]
+      && (order[cursor].key === def.key || !DEFAULT_REPORT_ORDER.some((item) => item.key === order[cursor].key))
+    ) {
+      merged.push(order[cursor]);
+      cursor += 1;
+    }
+  }
+  while (cursor < order.length) {
+    merged.push(order[cursor]);
+    cursor += 1;
+  }
+  return merged;
+};
+
 // ─── Inline editorial SVG art (no network deps; render-safe in html2pdf) ──
 const HOUSE_SVG = (gold = '#c19a4b', ink = '#1f2937') => `
   <svg viewBox="0 0 220 160" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;">
@@ -218,9 +272,10 @@ export const buildReportHTML = (inspection, settings) => {
     <style>
       @page { margin: 0; }
       * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      body { margin: 0; }
+      html, body { margin: 0; padding: 0; width: ${REPORT_PAGE.widthPx}px; }
       .pg {
-        width: 100%; height: 1050px; padding: 70px 64px;
+        width: ${REPORT_PAGE.widthPx}px; height: ${REPORT_PAGE.heightPx}px;
+        padding: ${REPORT_PAGE.marginPx}px;
         font-family: Georgia, 'Times New Roman', serif;
         color: ${PRIMARY}; background: ${PAPER};
         page-break-after: always; position: relative;
@@ -230,7 +285,7 @@ export const buildReportHTML = (inspection, settings) => {
       .pg.cover, .pg.ty-pg { border: none; }
       .pg.cover { padding: 0; }
       .pg-footer {
-        position: absolute; left: 64px; right: 64px; bottom: 36px;
+        position: absolute; left: ${REPORT_PAGE.marginPx}px; right: ${REPORT_PAGE.marginPx}px; bottom: 28px;
         display: flex; justify-content: space-between; align-items: baseline;
         font-family: Helvetica, Arial, sans-serif; font-size: 9px;
         letter-spacing: 0.18em; text-transform: uppercase; color: ${MUTED};
@@ -750,10 +805,10 @@ export const buildReportHTML = (inspection, settings) => {
   `;
 
   const imageCover = `
-    <div class="pg cover" style="position:relative;width:100%;min-height:1050px;background:${TEAL};overflow:hidden;padding:0;margin:0;">
+    <div class="pg cover" style="position:relative;background:${TEAL};overflow:hidden;padding:0;margin:0;">
       <img src="${coverImageSrc}"
            alt="CheckSquare Home Inspection Report"
-           style="display:block;width:100%;height:1050px;object-fit:cover;object-position:center;"
+           style="display:block;width:${REPORT_PAGE.widthPx}px;height:${REPORT_PAGE.heightPx}px;object-fit:cover;object-position:center;"
            onerror="this.style.display='none';this.parentNode.querySelector('[data-cover-fallback]').style.display='flex';" />
       <div data-cover-fallback style="display:none;position:absolute;inset:0;">
         ${_builtInCheckSquareCover}
@@ -764,7 +819,7 @@ export const buildReportHTML = (inspection, settings) => {
   const cover = imageCover;
 
   const _htmlCover_unused = `
-    <div class="pg cover" style="position:relative;width:100%;min-height:1050px;background:${TEAL};overflow:hidden;padding:0;">
+    <div class="pg cover" style="position:relative;background:${TEAL};overflow:hidden;padding:0;">
 
       <!-- Decorative white diagonal swoosh on the upper right -->
       <div style="position:absolute;top:-60px;right:-120px;width:520px;height:340px;background:#ffffff;transform:rotate(-22deg);"></div>
@@ -874,7 +929,7 @@ export const buildReportHTML = (inspection, settings) => {
   const iconRef      = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12h6"/><path d="M9 16h6"/><path d="M14 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V8z"/><path d="M14 4v4h4"/></svg>`;
 
   const propertyDetailsPg = `
-    <div class="pg cover" style="position:relative;width:100%;min-height:1050px;background:#ffffff;overflow:hidden;padding:0;">
+    <div class="pg cover" style="position:relative;background:#ffffff;overflow:hidden;padding:0;">
       <!-- Top accent band -->
       <div style="position:absolute;left:0;right:0;top:0;height:8px;background:linear-gradient(90deg,${TEAL} 0%,#1F3F8E 100%);"></div>
 
@@ -1145,18 +1200,18 @@ export const buildReportHTML = (inspection, settings) => {
     // ── Phase B page(s) : Defects ────────────────────────────────
     // We paginate defects across as many .pg containers as needed so a
     // room with many defects never spills into the footer area. The .pg
-    // shell is clipped at 1050px tall (see the .pg rule earlier in this
+    // shell is clipped to the shared A4 page height (see the .pg rule earlier in this
     // stylesheet), so before this pagination logic the last defect on a
     // long Phase B page was rendered behind the absolute-positioned
     // footer. Now we measure each defect, chunk them by an estimated
     // available content height, and emit one .pg per chunk.
 
     // Usable vertical space inside a .pg for defect blocks =
-    //   1050 (pg height) − 140 (top/bottom padding) − ~110 (room title +
+    //   1123 (A4 page height) - 96 (top/bottom margins) - ~110 (room title +
     //   rule + phase label) − ~70 (footer + its top border + breathing
-    //   room) ≈ 730px on the first Phase B page. Continuation pages
+    //   room) leaves roughly 845px on the first Phase B page. Continuation pages
     //   reuse the same header/footer chrome so the capacity is the same.
-    const PHASE_B_CAPACITY = 720;
+    const PHASE_B_CAPACITY = 840;
     // Per-defect height estimate. Each block has:
     //  • defect-head:        ~34px
     //  • container border:   2px
@@ -1714,7 +1769,7 @@ export const buildReportHTML = (inspection, settings) => {
 
   const thankYouPg = `
     <div class="pg ty-pg" style="page-break-after: auto;">
-      <div style="position:relative;min-height:1050px;padding:88px 72px 64px;display:flex;flex-direction:column;">
+      <div style="position:relative;height:100%;padding:40px 24px 16px;display:flex;flex-direction:column;">
 
         <!-- Top welcome / thank-you block -->
         <div style="text-align:center;">
@@ -1761,50 +1816,7 @@ export const buildReportHTML = (inspection, settings) => {
     thankYou:         thankYouPg,
   };
 
-  const DEFAULT_ORDER = [
-    { key: 'cover',            enabled: true },
-    { key: 'propertyDetails',  enabled: true },
-    { key: 'score',            enabled: true },
-    { key: 'scoreTable',       enabled: true },
-    { key: 'disclaimers',      enabled: true },
-    { key: 'severityTaxonomy', enabled: true },
-    { key: 'areaCalculations', enabled: true },
-    { key: 'environmental',    enabled: true },
-    { key: 'rooms',            enabled: true },
-    { key: 'thankYou',         enabled: true },
-  ];
-
-  let order = settings?.reportSections;
-  if (!Array.isArray(order)) {
-    // Legacy object shape `{ cover:true, ... }` — promote to array using
-    // the default order so flips made under the old UI still apply.
-    const legacy = (settings?.reportSections && typeof settings.reportSections === 'object') ? settings.reportSections : {};
-    order = DEFAULT_ORDER.map(({ key }) => ({ key, enabled: legacy[key] !== false }));
-  }
-  // Merge in any newly-added built-in keys missing from a stale saved
-  // order (e.g. `scoreTable` introduced after the DB record was saved).
-  // We append them in their DEFAULT_ORDER position so reports stay sane.
-  {
-    const present = new Set(order.map((o) => o && o.key));
-    const merged = [];
-    let cursor = 0;
-    for (const def of DEFAULT_ORDER) {
-      if (!present.has(def.key)) {
-        // Splice missing defaults at their canonical index.
-        merged.push({ key: def.key, enabled: true });
-      }
-      // Copy any user-ordered entries whose key matches this point or earlier.
-      while (cursor < order.length && order[cursor] && (order[cursor].key === def.key || !DEFAULT_ORDER.some((d) => d.key === order[cursor].key))) {
-        merged.push(order[cursor]);
-        cursor += 1;
-      }
-    }
-    while (cursor < order.length) {
-      merged.push(order[cursor]);
-      cursor += 1;
-    }
-    order = merged;
-  }
+  const order = resolveReportOrder(settings?.reportSections);
 
   const parts = [stylesheet];
   for (const item of order) {
@@ -1825,28 +1837,99 @@ export const buildReportHTML = (inspection, settings) => {
   return parts.join('');
 };
 
-export const generatePDF = async (inspection, settings) => {
+const waitForReportAssets = async (root) => {
+  const waits = [];
+  if (document.fonts?.ready) waits.push(document.fonts.ready);
+
+  root.querySelectorAll('img').forEach((img) => {
+    if (img.complete && img.naturalWidth > 0) return;
+    waits.push(new Promise((resolve) => {
+      const done = () => resolve();
+      img.addEventListener('load', done, { once: true });
+      img.addEventListener('error', done, { once: true });
+    }));
+  });
+
+  // Room and defect photographs are CSS backgrounds so html2canvas can
+  // preserve their fit mode. Preload those URLs as well before cloning.
+  const backgroundUrls = new Set();
+  root.querySelectorAll('[style]').forEach((node) => {
+    const value = window.getComputedStyle(node).backgroundImage;
+    const match = value && value.match(/^url\(["']?(.*?)["']?\)$/);
+    if (match?.[1] && match[1] !== 'none') backgroundUrls.add(match[1]);
+  });
+  backgroundUrls.forEach((url) => {
+    waits.push(new Promise((resolve) => {
+      const img = new Image();
+      img.onload = resolve;
+      img.onerror = resolve;
+      img.src = url;
+    }));
+  });
+
+  await Promise.race([
+    Promise.allSettled(waits),
+    new Promise((resolve) => setTimeout(resolve, 10000)),
+  ]);
+};
+
+export const createPDFBlob = async (inspection, settings) => {
   // Resolve any Supabase storageKey-only photos to inline base64 dataURLs
   // BEFORE html2pdf runs.  Signed URLs would expire mid-render in long reports.
   await materializeInspectionPhotos(inspection);
-  const refId = String(inspection.id || '').substring(0, 8).toUpperCase();
   const html = buildReportHTML(inspection, settings);
   const element = document.createElement('div');
   element.innerHTML = html;
+  element.style.width = `${REPORT_PAGE.widthPx}px`;
+  const staging = document.createElement('div');
+  // Keep positioning on a wrapper that html2pdf will not clone. Copying
+  // off-screen or negative-z-index styles onto the render source makes the
+  // library's own white capture container cover the report, yielding a tiny
+  // blank PDF.
+  Object.assign(staging.style, {
+    position: 'fixed',
+    left: '0',
+    top: '0',
+    zIndex: '-1',
+    pointerEvents: 'none',
+  });
+  staging.appendChild(element);
+  document.body.appendChild(staging);
 
+  let pdfBlob;
+  try {
+    await waitForReportAssets(element);
+    pdfBlob = await html2pdf().set({
+      margin: 0,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: {
+        scale: 2,
+        useCORS: true,
+        letterRendering: true,
+        backgroundColor: '#ffffff',
+        width: REPORT_PAGE.widthPx,
+        windowWidth: REPORT_PAGE.widthPx,
+      },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      // Every report section is already one fixed A4-height `.pg`. Enabling
+      // html2pdf's CSS break scanner adds a second break after each shell and
+      // creates alternating blank pages in the downloaded file.
+      pagebreak: { mode: ['legacy'] },
+    }).from(element).outputPdf('blob');
+  } finally {
+    staging.remove();
+  }
+  return pdfBlob;
+};
+
+export const generatePDF = async (inspection, settings) => {
+  const refId = String(inspection.id || '').substring(0, 8).toUpperCase();
   const filename = `Inspection_${(inspection.metadata?.propertyAddress || 'Report').replace(/[^a-z0-9]/gi, '_')}_${refId}.pdf`;
 
   // Render to a Blob first (works on Android WebView where the default
   // anchor-based download fails silently), then hand to the cross-platform
   // saveFile() helper which uses Capacitor Filesystem on native.
-  const pdfBlob = await html2pdf().set({
-    margin: 0,
-    filename,
-    image: { type: 'jpeg', quality: 0.98 },
-    html2canvas: { scale: 2, useCORS: true, letterRendering: true, backgroundColor: '#ffffff' },
-    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-    pagebreak: { mode: ['css', 'legacy'] },
-  }).from(element).outputPdf('blob');
+  const pdfBlob = await createPDFBlob(inspection, settings);
   await saveFile(pdfBlob, filename, { inspectionId: inspection?.id });
 };
 
@@ -2352,7 +2435,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
     const out = [];
     const coverSrc = settings?.coverImage || settings?.reportCoverImage || '/report-cover.jpg';
     let coverImg = null;
-    if (coverSrc) coverImg = await cropImage(coverSrc, 794, 1123);
+    if (coverSrc) coverImg = await cropImage(coverSrc, REPORT_PAGE.widthPx, REPORT_PAGE.heightPx);
 
     if (coverImg) {
       // A4 at 96dpi ≈ 794×1123 px. With the cover section running at
@@ -2366,7 +2449,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
           new ImageRun({
             data: coverImg.data,
             type: coverImg.type,
-            transformation: { width: 794, height: 1123 },
+            transformation: { width: REPORT_PAGE.widthPx, height: REPORT_PAGE.heightPx },
           }),
         ],
       }));
@@ -4232,44 +4315,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
     thankYou:         buildThankYou,
   };
 
-  const DEFAULT_ORDER = [
-    { key: 'cover',            enabled: true },
-    { key: 'propertyDetails',  enabled: true },
-    { key: 'score',            enabled: true },
-    { key: 'scoreTable',       enabled: true },
-    { key: 'disclaimers',      enabled: true },
-    { key: 'severityTaxonomy', enabled: true },
-    { key: 'areaCalculations', enabled: true },
-    { key: 'environmental',    enabled: true },
-    { key: 'rooms',            enabled: true },
-    { key: 'thankYou',         enabled: true },
-  ];
-
-  let order = settings?.reportSections;
-  if (!Array.isArray(order)) {
-    const legacy = (settings?.reportSections && typeof settings.reportSections === 'object') ? settings.reportSections : {};
-    order = DEFAULT_ORDER.map(({ key }) => ({ key, enabled: legacy[key] !== false }));
-  }
-  // Merge in any newly-added built-in keys missing from a stale saved order.
-  {
-    const present = new Set(order.map((o) => o && o.key));
-    const merged = [];
-    let cursor = 0;
-    for (const def of DEFAULT_ORDER) {
-      if (!present.has(def.key)) {
-        merged.push({ key: def.key, enabled: true });
-      }
-      while (cursor < order.length && order[cursor] && (order[cursor].key === def.key || !DEFAULT_ORDER.some((d) => d.key === order[cursor].key))) {
-        merged.push(order[cursor]);
-        cursor += 1;
-      }
-    }
-    while (cursor < order.length) {
-      merged.push(order[cursor]);
-      cursor += 1;
-    }
-    order = merged;
-  }
+  const order = resolveReportOrder(settings?.reportSections);
 
   // Build sections in order. The cover gets its own DOCX section with
   // zero margins so the cover image truly bleeds to the page edges
@@ -4308,7 +4354,12 @@ export const generateDOCX = async (inspection, settings, opts) => {
     sections.push({
       properties: {
         page: {
-          margin: { top: 720, bottom: 720, left: 720, right: 720 },
+          margin: {
+            top: REPORT_PAGE.marginTwips,
+            bottom: REPORT_PAGE.marginTwips,
+            left: REPORT_PAGE.marginTwips,
+            right: REPORT_PAGE.marginTwips,
+          },
           borders: {
             pageBorderTop:    { style: BorderStyle.SINGLE, size: 6, color: INK, space: 24 },
             pageBorderBottom: { style: BorderStyle.SINGLE, size: 6, color: INK, space: 24 },
@@ -4324,7 +4375,16 @@ export const generateDOCX = async (inspection, settings, opts) => {
   // emit a single blank section so the docx Packer doesn't choke.
   if (sections.length === 0) {
     sections.push({
-      properties: { page: { margin: { top: 720, bottom: 720, left: 720, right: 720 } } },
+      properties: {
+        page: {
+          margin: {
+            top: REPORT_PAGE.marginTwips,
+            bottom: REPORT_PAGE.marginTwips,
+            left: REPORT_PAGE.marginTwips,
+            right: REPORT_PAGE.marginTwips,
+          },
+        },
+      },
       children: [new Paragraph({ children: [new TextRun({ text: '' })] })],
     });
   }
