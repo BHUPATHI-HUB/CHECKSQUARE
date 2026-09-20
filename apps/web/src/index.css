@@ -552,3 +552,47 @@ a:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 4px; bord
   .cs-launch { display: none; }
   .cs-glass-card, .cs-header, .auth-form-col, [role=dialog], [role=alertdialog] { background: white; backdrop-filter: none; box-shadow: none; }
 }
+
+/* Visible frosted panels over a mineral backdrop. */
+.cs-workspace {
+  background-image: radial-gradient(ellipse at 8% 12%, hsl(var(--primary) / .22), transparent 58%), radial-gradient(ellipse at 100% 65%, hsl(192 55% 75% / .25), transparent 65%), linear-gradient(135deg, hsl(185 25% 91%), hsl(210 30% 96%));
+}
+.cs-glass-card {
+  background: linear-gradient(135deg, hsl(var(--card) / .82), hsl(var(--card) / .58));
+  border: 1px solid hsl(var(--background) / .92);
+  box-shadow: inset 0 1px 0 hsl(var(--background)), 0 12px 28px -18px hsl(var(--primary) / .35);
+}
+.auth-shell {
+  padding: clamp(1rem, 3vw, 3rem);
+  gap: clamp(1rem, 3vw, 3rem);
+  background: radial-gradient(ellipse at 0 0, #8bbfbe, transparent 65%), radial-gradient(ellipse at 100% 100%, #578e99, transparent 60%), #d5e4e6;
+}
+.auth-form-col {
+  border: 1px solid rgb(255 255 255 / .9);
+  border-radius: 1.5rem;
+  background: linear-gradient(135deg, rgb(255 255 255 / .8), rgb(255 255 255 / .55));
+  box-shadow: inset 0 1px 0 white, 0 20px 50px -24px rgb(18 62 69 / .3);
+  padding-inline: clamp(1.25rem, 4vw, 4rem);
+}
+.auth-aside {
+  border: 1px solid rgb(255 255 255 / .45);
+  border-radius: 1.5rem;
+  background: linear-gradient(145deg, rgb(18 62 69 / .85), rgb(16 46 53 / .68));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .2), 0 20px 50px -24px rgb(18 62 69 / .3);
+}
+@supports ((backdrop-filter: blur(12px)) or (-webkit-backdrop-filter: blur(12px))) {
+  .auth-form-col, .cs-header, [role=dialog], [role=alertdialog] {
+    -webkit-backdrop-filter: blur(16px) saturate(125%);
+    backdrop-filter: blur(16px) saturate(125%);
+  }
+  .cs-header { background: hsl(var(--card) / .72); }
+  [role=dialog], [role=alertdialog] { background: hsl(var(--card) / .84); border-color: hsl(var(--background) / .9); }
+}
+@media (max-width: 640px) {
+  .auth-shell { padding: .75rem; }
+  .auth-form-col { border-radius: 1.25rem; padding-block: 1.75rem; }
+}
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .cs-glass-card, .auth-form-col, .cs-header, [role=dialog], [role=alertdialog] { background: hsl(var(--card)); backdrop-filter: none; -webkit-backdrop-filter: none; border-color: hsl(var(--border)); }
+  .auth-aside { background: #123e45; }
+}
