@@ -21,9 +21,9 @@ import { useAuth } from '@/contexts/AuthContext.jsx';
 import { useSettings } from '@/contexts/SettingsContext.jsx';
 
 const fadeUp = {
-  initial: { opacity: 0, y: 18 },
+  initial: { opacity: 0, y: 6 },
   animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.6, ease: [0.22, 1, 0.36, 1] },
+  transition: { duration: 0.2, ease: [0.22, 1, 0.36, 1] },
 };
 
 const TIME_SLOTS = ['09:00 AM', '10:00 AM', '11:00 AM', '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM'];
@@ -48,6 +48,7 @@ const EditorialCalendar = ({ selected, onSelect }) => {
       <div className="flex items-center justify-between mb-6">
         <button
           type="button"
+          aria-label="Previous month"
           onClick={() => setView(new Date(view.getFullYear(), view.getMonth() - 1, 1))}
           className="w-9 h-9 rounded-full border flex items-center justify-center hover:bg-muted transition-colors"
         >
@@ -56,6 +57,7 @@ const EditorialCalendar = ({ selected, onSelect }) => {
         <p className="font-display text-xl md:text-2xl">{monthLabel}</p>
         <button
           type="button"
+          aria-label="Next month"
           onClick={() => setView(new Date(view.getFullYear(), view.getMonth() + 1, 1))}
           className="w-9 h-9 rounded-full border flex items-center justify-center hover:bg-muted transition-colors"
         >
@@ -85,14 +87,16 @@ const EditorialCalendar = ({ selected, onSelect }) => {
               key={i}
               type="button"
               disabled={disabled}
+              aria-label={d.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+              aria-pressed={!!isSelected}
               onClick={() => onSelect(d)}
               className={[
-                'aspect-square flex items-center justify-center text-sm transition-all relative',
+                'h-11 sm:h-12 rounded-lg flex items-center justify-center text-sm transition-colors relative',
                 isSelected
                   ? 'bg-primary text-primary-foreground font-medium'
                   : disabled
-                    ? 'text-muted-foreground/30 cursor-not-allowed'
-                    : 'hover:bg-muted hover:scale-105 text-foreground',
+                    ? 'text-muted-foreground/50 cursor-not-allowed'
+                    : 'hover:bg-muted text-foreground',
                 isToday && !isSelected ? 'ring-1 ring-secondary' : '',
               ].join(' ')}
             >
@@ -219,14 +223,14 @@ const AppointmentBookingPage = () => {
         <main className="flex-1">
           {/* Editorial header */}
           <section className="border-b">
-            <div className="container mx-auto px-4 sm:px-6 lg:px-12 py-10 sm:py-14 lg:py-20">
+            <div className="container mx-auto px-4 sm:px-6 lg:px-12 py-6 sm:py-8">
               <motion.div {...fadeUp}>
                 <p className="editorial-eyebrow">Reserve a date</p>
                 <h1 className="editorial-headline mt-6 text-3xl sm:text-5xl md:text-6xl lg:text-7xl">
-                  Book the <em>walk-through.</em>
+                  Book an inspection
                 </h1>
                 <p className="editorial-deck mt-5 max-w-2xl">
-                  Choose a morning or an afternoon. A senior inspector arrives at the property and the rest is paperwork — done in their hands, not yours.
+                  Choose your preferred date and time, then add the property details.
                 </p>
               </motion.div>
             </div>
@@ -243,7 +247,7 @@ const AppointmentBookingPage = () => {
                     style={{ height: 1 }}
                     initial={{ width: 0 }}
                     animate={{ width: `${(completion / 4) * 100}%` }}
-                    transition={{ duration: 0.5 }}
+                    transition={{ duration: 0.2 }}
                   />
                 </div>
                 <p className="text-xs text-muted-foreground">{completion === 4 ? 'Ready to confirm' : 'Continue'}</p>
@@ -251,7 +255,7 @@ const AppointmentBookingPage = () => {
             </div>
           </section>
 
-          <div className="container mx-auto px-4 sm:px-6 lg:px-12 py-10 sm:py-14 lg:py-20">
+          <div className="container mx-auto px-4 sm:px-6 lg:px-12 py-6 sm:py-8">
             <div className="grid grid-cols-12 gap-8">
               {/* Left: Calendar + time + details */}
               <div className="col-span-12 lg:col-span-8 space-y-12">

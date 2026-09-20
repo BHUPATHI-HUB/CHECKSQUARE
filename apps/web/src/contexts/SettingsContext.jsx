@@ -1,3 +1,4 @@
+import { brandForeground } from '@/utils/brandContrast.js';
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { DEFAULT_WEIGHTS, DEFAULT_SCORE_EXPLANATION_HTML, PROPCHK_WEIGHTS, PROPCHK_ITEMS_PER_ROOM, DEFAULT_ROOM_SCORE_EXPR, DEFAULT_PRIORITY_EXPR } from '@/utils/scoring';
 import { STARTER_COMMENT_LIBRARY } from '@/utils/commentLibrary';
@@ -61,10 +62,10 @@ export const SettingsProvider = ({ children }) => {
     disclaimerPage1: defaultDisclaimer1,
     disclaimerPage2: defaultDisclaimer2,
     footer: 'Thank you for choosing CheckSquare. We appreciate your business.',
-    primaryColor: '#2DB4C6', 
-    primaryBrandColor: '#2DB4C6',
-    secondaryColor: '#1A8A9A', 
-    secondaryBrandColor: '#1A8A9A',
+    primaryColor: '#126773',
+    primaryBrandColor: '#126773',
+    secondaryColor: '#0e5963',
+    secondaryBrandColor: '#0e5963',
     accentColor: '#E0F4F7', 
     patternColor: '#4b6176', 
     commentLibrary: STARTER_COMMENT_LIBRARY,
@@ -248,6 +249,10 @@ export const SettingsProvider = ({ children }) => {
     if (secondary) document.documentElement.style.setProperty('--secondary', hexToHSL(secondary));
     if (settings.accentColor) document.documentElement.style.setProperty('--accent', hexToHSL(settings.accentColor));
     
+    if (primary) document.documentElement.style.setProperty('--primary-foreground', brandForeground(primary));
+    if (secondary) document.documentElement.style.setProperty('--secondary-foreground', brandForeground(secondary));
+    if (settings.accentColor) document.documentElement.style.setProperty('--accent-foreground', brandForeground(settings.accentColor));
+
     // Update favicon
     if (settings.favicon) {
       let link = document.querySelector("link[rel~='icon']");

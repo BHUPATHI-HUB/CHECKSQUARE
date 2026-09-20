@@ -1,3 +1,4 @@
+import { LoadingState } from '@/components/PageState.jsx';
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
@@ -58,16 +59,7 @@ const InspectionViewPage = () => {
     setIsEditing(wantsEdit);
   }, [inspection, user]);
 
-  if (!inspection) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="text-center">
-          <div className="w-12 h-12 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-sm uppercase tracking-[0.2em] text-muted-foreground">Loading inspection…</p>
-        </div>
-      </div>
-    );
-  }
+  if (!inspection) return <LoadingState label="Loading inspection" fullPage />;
 
   const dashboardPath = user?.role === 'admin' ? '/admin/dashboard' : '/inspector/dashboard';
   const address = inspection.metadata?.propertyAddress || 'Inspection';
@@ -86,7 +78,7 @@ const InspectionViewPage = () => {
         <main className="flex-1">
           {/* Editorial header */}
           <section className="border-b">
-            <div className="container mx-auto px-4 sm:px-6 lg:px-12 py-12 lg:py-16">
+            <div className="container mx-auto px-4 sm:px-6 lg:px-12 py-6 sm:py-8">
               <motion.div {...fadeUp}>
                 <Link to={dashboardPath} className="inline-flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-muted-foreground hover:text-foreground mb-6 link-underline">
                   <ArrowLeft className="w-3.5 h-3.5" /> Back to dashboard
@@ -131,7 +123,7 @@ const InspectionViewPage = () => {
             </div>
           </section>
 
-          <section className="container mx-auto px-4 sm:px-6 lg:px-12 py-12 lg:py-16">
+          <section className="container mx-auto px-4 sm:px-6 lg:px-12 py-6 sm:py-8">
             <motion.div {...fadeUp}>
               {isEditing ? (
                 <InspectionForm existingInspection={inspection} isEditing={true} />

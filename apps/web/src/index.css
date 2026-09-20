@@ -1,13 +1,10 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,300..900,0..100&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 body {
-  font-family: "Inter", "DM Sans", system-ui, sans-serif;
+  font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   font-feature-settings: "ss01", "cv11";
   -webkit-font-smoothing: antialiased;
   overflow-x: clip;
@@ -16,7 +13,7 @@ body {
 html { scroll-behavior: smooth; }
 
 .font-display {
-  font-family: "Fraunces", "Merriweather", Georgia, serif;
+  font-family: "Segoe UI", system-ui, sans-serif;
   font-feature-settings: "ss01", "ss02";
   letter-spacing: -0.02em;
 }
@@ -33,27 +30,27 @@ html { scroll-behavior: smooth; }
     --popover-foreground: 210 12% 16%;
     
     /* Sophisticated Slate Blue Primary */
-    --primary: 215 25% 27%;
+    --primary: 184 77% 25%;
     --primary-foreground: 0 0% 100%;
     
     /* Muted Gold Accent */
-    --secondary: 43 74% 66%;
+    --secondary: 183 35% 91%;
     --secondary-foreground: 210 12% 16%;
     
     --muted: 210 10% 96%;
-    --muted-foreground: 210 8% 45%;
+    --muted-foreground: 215 16% 40%;
     
     --accent: 215 25% 94%;
     --accent-foreground: 215 25% 27%;
     
-    --destructive: 0 84% 60%;
+    --destructive: 0 70% 43%;
     --destructive-foreground: 0 0% 100%;
     
-    --success: 142 71% 45%;
+    --success: 152 65% 30%;
     --success-foreground: 0 0% 100%;
     
-    --warning: 38 92% 50%;
-    --warning-foreground: 210 12% 16%;
+    --warning: 32 90% 32%;
+    --warning-foreground: 0 0% 100%;
     
     --border: 210 12% 88%;
     --input: 210 12% 88%;
@@ -97,14 +94,14 @@ html { scroll-behavior: smooth; }
     --accent: 215 25% 20%;
     --accent-foreground: 215 25% 94%;
     
-    --destructive: 0 84% 60%;
+    --destructive: 0 70% 43%;
     --destructive-foreground: 0 0% 100%;
     
-    --success: 142 71% 45%;
+    --success: 152 65% 30%;
     --success-foreground: 0 0% 100%;
     
-    --warning: 38 92% 50%;
-    --warning-foreground: 210 12% 16%;
+    --warning: 32 90% 32%;
+    --warning-foreground: 0 0% 100%;
     
     --border: 210 12% 20%;
     --input: 210 12% 20%;
@@ -395,9 +392,9 @@ html { scroll-behavior: smooth; }
 @media (max-width: 640px) {
   body, #root { overflow-x: hidden; }
   pre, code { white-space: pre-wrap; word-break: break-word; }
-  img, video, svg { max-width: 100%; height: auto; }
+  img, video { max-width: 100%; height: auto; }
   /* Ensure tap targets meet 44×44 minimum */
-  button:not(.size-icon), [role="button"], a.btn { min-height: 40px; }
+  button:not(.size-icon), [role="button"], a.btn { min-height: 44px; }
   /* Inputs should not zoom on iOS focus (font-size ≥ 16px) */
   input, select, textarea { font-size: 16px; }
 }
@@ -426,4 +423,132 @@ html { scroll-behavior: smooth; }
 @keyframes signal-scan { 0%, 100% { transform: translateY(0); opacity: .25; } 50% { transform: translateY(280px); opacity: .9; } }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; }
+}
+
+/* CheckSquare workspace system: shared states and task-first density. */
+:root { --cs-shadow: 0 8px 28px -16px rgb(15 23 42 / .2); }
+body { line-height: 1.5; }
+button, a, input, textarea, select { -webkit-tap-highlight-color: transparent; }
+a:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 4px; border-radius: 4px; }
+.cs-header { box-shadow: 0 1px 3px rgb(15 23 42 / .035); }
+.cs-header nav a { white-space: nowrap; }
+.cs-button:active:not(:disabled) { transform: translateY(1px); }
+.cs-workspace { background: hsl(var(--muted) / .35); }
+.cs-workspace .font-display { font-family: inherit; font-weight: 600; }
+.cs-workspace .editorial-headline { font-family: inherit; font-size: clamp(1.6rem, 2.6vw, 2.25rem); font-weight: 650; line-height: 1.2; letter-spacing: -.035em; margin-top: .65rem; }
+.cs-workspace .editorial-headline em { font-weight: inherit; color: inherit; }
+.cs-workspace .editorial-deck { font-weight: 400; font-size: .9375rem; margin-top: .65rem; }
+.cs-workspace .editorial-eyebrow { display: flex; letter-spacing: .08em; font-size: .6875rem; }
+.cs-workspace .editorial-eyebrow::before { display: none; }
+.cs-workspace .cs-button.rounded-full { border-radius: .65rem; }
+.cs-workspace input.rounded-full, .cs-workspace [role=combobox].rounded-full { border-radius: .65rem; }
+.cs-workspace main > section:first-child { background: hsl(var(--card)); }
+.cs-workspace .grid.grid-cols-2.md\:grid-cols-4 { border-radius: .75rem; overflow: hidden; border: 1px solid hsl(var(--border)); background: hsl(var(--border)); }
+.cs-workspace .grid.grid-cols-2.md\:grid-cols-4 > div { background: hsl(var(--card)); }
+.cs-workspace .grid.grid-cols-2.md\:grid-cols-4 p { font-variant-numeric: tabular-nums; }
+.cs-workspace .workspace-signal { display: none; }
+.cs-workspace .inspection-signal-pulse, .cs-workspace .workspace-signal::after { animation: none; }
+.cs-workspace main { min-width: 0; }
+.cs-workspace h1, .cs-workspace h2 { overflow-wrap: anywhere; }
+.cs-loading { padding: 2rem; width: 100%; max-width: 64rem; margin-inline: auto; }
+.cs-loading-page { min-height: 65dvh; padding-top: clamp(3rem, 10vh, 8rem); }
+.cs-skeleton-lines { display: grid; gap: 1rem; margin-top: 1.5rem; }
+.cs-skeleton-lines > div { height: 3.5rem; border-radius: .65rem; background: hsl(var(--muted)); }
+.cs-skeleton-lines > div:first-child { width: 60%; height: 1.5rem; }
+.cs-skeleton-lines > div:last-child { width: 85%; }
+.cs-error-state { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; padding: 1.25rem; border: 1px solid hsl(var(--destructive) / .25); border-radius: .75rem; background: hsl(var(--destructive) / .04); }
+.cs-route-error { max-width: 48rem; margin: 10vh auto; padding: 1.5rem; display: grid; gap: 1.5rem; }
+.cs-skip-link { position: fixed; left: 1rem; top: -8rem; z-index: 200; background: hsl(var(--foreground)); color: hsl(var(--background)); padding: .75rem 1rem; border-radius: .5rem; }
+.cs-skip-link:focus { top: 1rem; }
+[role=dialog], [role=alertdialog] { overscroll-behavior: contain; }
+[role=dialog] input, [role=dialog] textarea { min-width: 0; }
+@media (max-width: 640px) {
+  .cs-workspace .container { padding-left: 1rem; padding-right: 1rem; }
+  .cs-workspace main > section .py-10 { padding-top: 1.25rem; padding-bottom: 1.25rem; }
+  .cs-error-state > .cs-button { width: 100%; }
+  [role=dialog], [role=alertdialog] { max-height: calc(100dvh - 1.5rem); }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .cs-button:active:not(:disabled) { transform: none; }
+  .inspection-signal-frame { stroke-dashoffset: 0; }
+}
+
+/* Public and account screens share the same readable product typography. */
+.cs-public .editorial-headline { font-weight: 600; line-height: 1.08; letter-spacing: -.04em; }
+.cs-public .editorial-deck { font-weight: 400; }
+.auth-shell { min-height: 100dvh; }
+.auth-form-col { padding-top: 2.5rem; padding-bottom: 2.5rem; }
+.auth-shell .editorial-headline { font-size: clamp(2rem, 3.2vw, 3rem); }
+.auth-shell .editorial-eyebrow { letter-spacing: .08em; color: hsl(var(--muted-foreground)); }
+.auth-shell .editorial-eyebrow::before { display: none; }
+.auth-aside { --primary-foreground: 0 0% 100%; --secondary: 184 55% 75%; background: #123e45; color: #fff; }
+.auth-aside > .absolute { display: none; }
+.auth-aside .editorial-eyebrow { color: #fff; }
+.auth-aside p, .auth-aside li, .auth-aside figcaption { color: #d9e9eb; }
+.auth-aside em { color: #9ddde0; }
+.auth-shell label { letter-spacing: .04em; }
+.auth-shell input:focus-visible, .auth-shell [role=combobox]:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 3px; }
+.cs-public .home-aurora, .cs-public .home-particles, .cs-public .home-noise { display: none; }
+
+/* Glass shell with solid, readable evidence and form fields. */
+:root {
+  --cs-glass: hsl(var(--card) / .88);
+  --cs-glass-edge: hsl(var(--border) / .85);
+  --cs-glass-shadow: inset 0 1px 0 hsl(var(--background) / .9), 0 12px 32px -24px hsl(var(--foreground) / .3);
+}
+.cs-workspace, .auth-shell {
+  background-color: hsl(var(--background));
+  background-image: radial-gradient(ellipse at 0 0, hsl(var(--primary) / .12), transparent 65%), linear-gradient(125deg, hsl(var(--muted) / .8), hsl(var(--background)), hsl(var(--primary) / .06));
+}
+.cs-glass-card, .cs-workspace main > section:first-child {
+  background-color: var(--cs-glass);
+  border-color: var(--cs-glass-edge);
+  box-shadow: var(--cs-glass-shadow);
+}
+.cs-glass-card .cs-glass-card { background-color: hsl(var(--card)); box-shadow: none; }
+.cs-header, [role=dialog], [role=alertdialog] {
+  background-color: hsl(var(--card));
+  border-color: var(--cs-glass-edge);
+  box-shadow: var(--cs-glass-shadow);
+}
+.auth-form-col {
+  background: var(--cs-glass);
+  border-right: 1px solid var(--cs-glass-edge);
+  box-shadow: var(--cs-glass-shadow);
+}
+.auth-aside {
+  background: radial-gradient(ellipse at top right, #276d74, transparent 70%), linear-gradient(145deg, #123e45, #102e35);
+}
+@supports ((backdrop-filter: blur(12px)) or (-webkit-backdrop-filter: blur(12px))) {
+  .cs-header, [role=dialog], [role=alertdialog] {
+    background-color: hsl(var(--card) / .91);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+  }
+}
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .cs-glass-card, .cs-header, .auth-form-col, [role=dialog], [role=alertdialog], .cs-workspace main > section:first-child {
+    background: hsl(var(--card));
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    border-color: hsl(var(--border));
+  }
+}
+.cs-launch {
+  position: fixed; inset: 0; z-index: 300; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: .75rem;
+  background: hsl(var(--background)); color: hsl(var(--foreground));
+  animation: cs-launch-exit .2s ease .8s both;
+}
+.cs-launch strong { font-size: 1.75rem; letter-spacing: -.04em; }
+.cs-launch > span { color: hsl(var(--muted-foreground)); font-size: .875rem; }
+.cs-launch-mark { width: 5rem; height: 5rem; border-radius: 1.25rem; background: hsl(var(--primary) / .1); color: hsl(var(--primary)); animation: splash-pop .45s ease both; }
+.cs-launch-mark svg { width: 100%; height: 100%; stroke: currentColor; stroke-width: 3; }
+.cs-launch-mark path { stroke-dasharray: 40; stroke-dashoffset: 40; animation: cs-launch-check .4s ease .25s forwards; }
+@keyframes cs-launch-check { to { stroke-dashoffset: 0; } }
+@keyframes cs-launch-exit { to { opacity: 0; visibility: hidden; } }
+@media print {
+  .cs-launch { display: none; }
+  .cs-glass-card, .cs-header, .auth-form-col, [role=dialog], [role=alertdialog] { background: white; backdrop-filter: none; box-shadow: none; }
 }

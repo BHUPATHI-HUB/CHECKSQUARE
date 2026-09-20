@@ -13,7 +13,7 @@ import { ArrowRight, Mail, Lock, AlertCircle, CheckSquare } from 'lucide-react';
 import GoogleSignInButton from '@/components/GoogleSignInButton.jsx';
 import InspectionSignal from '@/components/InspectionSignal.jsx';
 
-const fadeUp = { initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.6, ease: [0.22, 1, 0.36, 1] } };
+const fadeUp = { initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.18, ease: [0.22, 1, 0.36, 1] } };
 
 const LoginPage = () => {
   const { login, requestPasswordReset, getCachedUsersByRole, user, isAuthenticated } = useAuth();
@@ -142,7 +142,7 @@ const LoginPage = () => {
                     id="email" type="email" placeholder="you@domain.com"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="h-12 pl-8 pr-0 border-0 border-b rounded-none focus-visible:ring-0 text-base bg-transparent"
+                    className="h-12 pl-10 pr-3 rounded-lg text-base"
                     list="offline-cached-users"
                   />
                 </div>
@@ -170,7 +170,7 @@ const LoginPage = () => {
                     id="password" type="password" placeholder="••••••••"
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    className="h-12 pl-8 pr-0 border-0 border-b rounded-none focus-visible:ring-0 text-base bg-transparent"
+                    className="h-12 pl-10 pr-3 rounded-lg text-base"
                   />
                 </div>
                 {errors.password && <p className="text-xs text-destructive mt-2 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors.password}</p>}
@@ -182,7 +182,7 @@ const LoginPage = () => {
                 </div>
               )}
 
-              <Button type="submit" disabled={loading} size="lg" className="w-full h-14 rounded-none text-base mt-4 group">
+              <Button type="submit" disabled={loading} size="lg" className="w-full h-12 rounded-lg text-base mt-4 group">
                 {loading ? 'Signing in…' : <>Sign in <ArrowRight className="w-4 h-4 ml-2 transition-transform group-hover:translate-x-1" /></>}
               </Button>
             </form>
@@ -220,20 +220,15 @@ const LoginPage = () => {
             </div>
           </div>
           <div className="relative h-full flex flex-col justify-between p-16 z-10">
-            <p className="editorial-eyebrow text-secondary">Issue 06 · Spring 2026</p>
+            <p className="editorial-eyebrow text-secondary">Your inspection workspace</p>
             <div>
               <h2 className="editorial-headline text-primary-foreground text-4xl xl:text-5xl 2xl:text-6xl max-w-md">
-                The home, <em>considered.</em>
+                Every detail.<br />Clearly documented.
               </h2>
               <p className="text-primary-foreground/70 mt-8 max-w-md leading-relaxed">
-                Every inspection is a record. We keep yours bound, signed, and accessible &mdash; for the life
-                of the property.
+                Property details, inspection evidence and reports — together in one workspace.
               </p>
-              <div className="mt-12 pt-6 border-t border-primary-foreground/15 grid grid-cols-3 gap-6">
-                <div><p className="font-display text-3xl text-primary-foreground">2,847</p><p className="text-[10px] uppercase tracking-[0.2em] text-primary-foreground/60 mt-2">Reports</p></div>
-                <div><p className="font-display text-3xl text-primary-foreground">14yr</p><p className="text-[10px] uppercase tracking-[0.2em] text-primary-foreground/60 mt-2">Tenure</p></div>
-                <div><p className="font-display text-3xl text-primary-foreground">4.96</p><p className="text-[10px] uppercase tracking-[0.2em] text-primary-foreground/60 mt-2">Rating</p></div>
-              </div>
+              <div className="mt-10 grid gap-3 border-t border-white/20 pt-6 text-sm"><p>01 &nbsp; Capture property findings</p><p>02 &nbsp; Review inspection reports</p><p>03 &nbsp; Keep your team connected</p></div>
             </div>
           </div>
         </aside>

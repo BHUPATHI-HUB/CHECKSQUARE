@@ -1,3 +1,4 @@
+import { LoadingState } from '@/components/PageState.jsx';
 
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
@@ -12,16 +13,7 @@ const ProtectedRoute = ({ children, requiredRole }) => {
   const location = useLocation();
 
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="flex flex-col items-center">
-          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4"></div>
-          <p className="text-muted-foreground font-medium">Verifying session...</p>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <LoadingState label="Verifying session" fullPage />;
 
   if (!user) {
     // Redirect to login but save the attempted url

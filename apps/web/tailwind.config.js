@@ -17,8 +17,8 @@ module.exports = {
     },
     extend: {
       fontFamily: {
-        display: ['Fraunces', 'Merriweather', 'Georgia', 'serif'],
-        sans: ['Inter', 'DM Sans', 'system-ui', 'sans-serif'],
+        display: ['Segoe UI', 'system-ui', 'sans-serif'],
+        sans: ['Segoe UI', 'system-ui', '-apple-system', 'sans-serif'],
       },
       colors: {
         border: "hsl(var(--border))",

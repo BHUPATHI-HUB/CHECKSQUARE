@@ -25,6 +25,7 @@ const PhotoImg = ({
   ...rest
 }) => {
   const [src, setSrc] = useState(photo?.url || '');
+  const [failed, setFailed] = useState(false);
   // Re-fetch the signed URL once if the browser returns 404 — Supabase
   // signed URLs expire after 1 h, and a long inspector session can outlive
   // the original mint.  The retry flag short-circuits infinite loops.
@@ -33,24 +34,31 @@ const PhotoImg = ({
   useEffect(() => {
     let cancelled = false;
     setRetried(false);
+    setFailed(false);
+    setSrc(photo?.url || '');
     if (photo?.url) { setSrc(photo.url); return undefined; }
     // Offline-admin build: photos live on the device filesystem and are
     // stored as { filePath }. Resolve to a WebView-safe URI.
     if (photo?.filePath) {
-      getInspectionPhotoUrl(photo).then((u) => { if (!cancelled) setSrc(u); });
+      getInspectionPhotoUrl(photo).then((u) => { if (!cancelled) { setSrc(u); setFailed(!u); } }).catch(() => { if (!cancelled) setFailed(true); });
       return () => { cancelled = true; };
     }
     if (photo?.storageKey) {
-      getInspectionPhotoUrl(photo).then((u) => { if (!cancelled) setSrc(u); });
+      getInspectionPhotoUrl(photo).then((u) => { if (!cancelled) { setSrc(u); setFailed(!u); } }).catch(() => { if (!cancelled) setFailed(true); });
+    } else {
+      setFailed(true);
     }
     return () => { cancelled = true; };
   }, [photo?.url, photo?.storageKey, photo?.filePath]);
 
   const handleError = async () => {
-    if (retried || !(photo?.storageKey || photo?.filePath)) return;
+    if (retried || !(photo?.storageKey || photo?.filePath)) { setFailed(true); return; }
     setRetried(true);
-    const fresh = await getInspectionPhotoUrl(photo);
-    if (fresh) setSrc(`${fresh}#r=${Date.now()}`); // cache-bust the <img>
+    try {
+      const fresh = await getInspectionPhotoUrl(photo);
+      if (fresh) setSrc(`${fresh}#r=${Date.now()}`);
+      else setFailed(true);
+    } catch { setFailed(true); }
   };
 
   // Default container shading helps `object-contain` letterboxing look
@@ -58,6 +66,9 @@ const PhotoImg = ({
   // own background class in `className`.
   const fitClass = fit === 'cover' ? 'object-cover' : 'object-contain bg-muted/30';
 
+  if (failed) {
+    return <div className={`flex items-center justify-center border border-dashed bg-muted/30 p-3 text-center text-xs text-muted-foreground ${className}`} role="img" aria-label={`${alt}: unavailable`} {...rest}>Photo unavailable</div>;
+  }
   if (!src) {
     return (
       <div
@@ -74,6 +85,7 @@ const PhotoImg = ({
       alt={alt}
       className={`${fitClass} ${className}`}
       loading={loading}
+      decoding="async"
       onError={handleError}
       {...rest}
     />

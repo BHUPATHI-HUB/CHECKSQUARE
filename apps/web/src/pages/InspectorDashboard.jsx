@@ -1,3 +1,4 @@
+import { LoadingState, ErrorState } from '@/components/PageState.jsx';
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
@@ -17,20 +18,19 @@ import {
   MessageCircle, ArrowUpRight, Undo2,
 } from 'lucide-react';
 import AdminDownloadReport from '@/components/AdminDownloadReport.jsx';
-import InspectionSignal from '@/components/InspectionSignal.jsx';
 import { useFeedback } from '@/contexts/FeedbackContext.jsx';
 import { toast } from 'sonner';
 
 const fadeUp = {
-  initial: { opacity: 0, y: 18 },
+  initial: { opacity: 0, y: 6 },
   animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.6, ease: [0.22, 1, 0.36, 1] },
+  transition: { duration: 0.2, ease: [0.22, 1, 0.36, 1] },
 };
 
 const InspectorDashboard = () => {
   const { user } = useAuth();
   const { unreadCount } = useChatContext();
-  const { getInspectionsForInspector, updateInspectionStatus } = useInspectionStatus();
+  const { listError, getInspectionsForInspector, updateInspectionStatus } = useInspectionStatus();
   const { showSuccess } = useFeedback();
   const { settings } = useSettings();
   const brand = settings?.appName || 'CheckSquare';
@@ -141,17 +141,18 @@ const InspectorDashboard = () => {
         <Header />
 
         <main className="flex-1">
+          {listError && <div className="container mx-auto px-4 py-4"><ErrorState title="Inspection refresh failed" message={listError} onRetry={reload} /></div>}
           {/* Editorial header */}
           <section className="border-b">
-            <div className="container mx-auto px-4 sm:px-6 lg:px-12 py-10 sm:py-14 lg:py-20">
+            <div className="container mx-auto px-4 sm:px-6 lg:px-12 py-6 sm:py-8">
               <motion.div {...fadeUp} className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-8">
                 <div>
                   <p className="editorial-eyebrow">Field office · {user?.name}</p>
                   <h1 className="editorial-headline mt-6 text-3xl sm:text-5xl md:text-6xl lg:text-7xl">
-                    The work, <em>at hand.</em>
+                    Your inspections
                   </h1>
                   <p className="editorial-deck mt-5 max-w-xl">
-                    Open reports, drafts in progress, and the ones the studio has signed.
+                    Continue a draft, start an inspection or check the status of submitted reports.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-3">
@@ -171,9 +172,6 @@ const InspectorDashboard = () => {
                     </Link>
                   </Button>
                 </div>
-                <div className="workspace-signal hidden xl:block w-[260px] shrink-0 p-3" aria-hidden="true">
-                  <InspectionSignal />
-                </div>
               </motion.div>
             </div>
           </section>
@@ -192,7 +190,7 @@ const InspectorDashboard = () => {
                     key={s.label}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5, delay: i * 0.05 }}
+                    transition={{ duration: 0.2, delay: i * 0.05 }}
                     className="bg-muted/30 px-4 sm:px-6 py-4 sm:py-5"
                   >
                     <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">{s.label}</p>
@@ -204,11 +202,11 @@ const InspectorDashboard = () => {
           </section>
 
           {/* Filters + table */}
-          <section className="container mx-auto px-4 sm:px-6 lg:px-12 py-10 sm:py-14 lg:py-20">
+          <section className="container mx-auto px-4 sm:px-6 lg:px-12 py-6 sm:py-8">
             <motion.div {...fadeUp}>
               <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
                 <div>
-                  <p className="editorial-eyebrow">The ledger</p>
+                  <p className="editorial-eyebrow">Reports</p>
                   <h2 className="font-display text-3xl md:text-4xl mt-3">Inspection history</h2>
                 </div>
                 <div className="flex flex-col md:flex-row gap-3 md:items-center">
@@ -308,10 +306,7 @@ const InspectorDashboard = () => {
                     ))}
                   </div>
                 ) : loading ? (
-                  <div className="py-20 text-center">
-                    <div className="w-10 h-10 mx-auto mb-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                    <p className="text-sm uppercase tracking-[0.2em] text-muted-foreground">Loading inspections…</p>
-                  </div>
+                  <LoadingState label="Loading inspections" />
                 ) : (
                   <div className="py-20 text-center">
                     <FileText className="w-10 h-10 mx-auto text-muted-foreground/50 mb-4" strokeWidth={1.5} />

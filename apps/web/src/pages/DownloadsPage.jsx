@@ -1,3 +1,4 @@
+import { LoadingState, ErrorState } from '@/components/PageState.jsx';
 import React, { useEffect, useState } from 'react';
 import { Helmet } from 'react-helmet';
 import { Link } from 'react-router-dom';
@@ -34,12 +35,14 @@ const DownloadsPage = () => {
 	const { user } = useAuth();
 	const [items, setItems] = useState([]);
 	const [loading, setLoading] = useState(true);
+	const [loadError, setLoadError] = useState(false);
 	const [deleting, setDeleting] = useState(null); // id pending delete
 	const [confirm, setConfirm] = useState(null);   // record awaiting confirmation
 
 	const load = async () => {
 		if (!user?.id) return;
 		setLoading(true);
+		setLoadError(false);
 		try {
 			const records = await data.listReportDownloads(user.id);
 			setItems(records);
@@ -47,6 +50,7 @@ const DownloadsPage = () => {
 			if (!String(err?.message || '').includes('autocancel')) {
 				console.warn('Could not load downloads:', err?.message || err);
 				toast.error('Could not load your downloads.');
+				setLoadError(true);
 				setItems([]);
 			}
 		} finally {
@@ -132,8 +136,10 @@ const DownloadsPage = () => {
 				</div>
 
 				{loading ? (
-					<div className="text-sm text-muted-foreground py-12 text-center">Loading…</div>
-				) : items.length === 0 ? (
+					<LoadingState label="Loading downloads" />
+				) : loadError ? (
+          <ErrorState title="Downloads could not be loaded" onRetry={load} />
+        ) : items.length === 0 ? (
 					<Card>
 						<CardHeader>
 							<CardTitle>No downloads yet</CardTitle>

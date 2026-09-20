@@ -295,7 +295,7 @@ const ChatPage = () => {
         <title>{`Messages - ${brand}`}</title>
       </Helmet>
 
-      <div className="h-screen bg-background flex flex-col overflow-hidden">
+      <div className="h-[100dvh] bg-background flex flex-col overflow-hidden">
         <Header />
 
         <div className="flex-1 flex overflow-hidden border-t">

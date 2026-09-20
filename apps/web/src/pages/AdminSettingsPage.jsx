@@ -5,7 +5,6 @@ import { motion } from 'framer-motion';
 import Header from '@/components/Header.jsx';
 import Footer from '@/components/Footer.jsx';
 import OrganizationOrderEditor from '@/components/OrganizationOrderEditor.jsx';
-import InspectionSignal from '@/components/InspectionSignal.jsx';
 import { Alert as OrganizationAlert } from '@/components/ui/alert';
 import { useSettings } from '@/contexts/SettingsContext.jsx';
 import useOnlineStatus from '@/hooks/useOnlineStatus.js';
@@ -404,20 +403,20 @@ const AdminSettingsPage = () => {
         <main className="flex-1">
           {/* Editorial header */}
           <section className="border-b">
-            <div className="container mx-auto px-4 sm:px-6 lg:px-12 py-14 lg:py-16">
+            <div className="container mx-auto px-4 sm:px-6 lg:px-12 py-6 sm:py-8">
               <motion.div
-                initial={{ opacity: 0, y: 18 }}
+                initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+                transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
                 className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-8"
               >
                 <div>
-                  <p className="editorial-eyebrow">Studio configuration</p>
+                  <p className="editorial-eyebrow">Configuration</p>
                   <h1 className="editorial-headline mt-6 text-3xl sm:text-4xl md:text-5xl lg:text-6xl">
-                    Platform <em>settings.</em>
+                    Workspace settings
                   </h1>
                   <p className="editorial-deck mt-5 max-w-2xl">
-                    Brand voice, report typography, comment library, severity scale. Adjustments here propagate everywhere.
+                    Manage branding, report templates, inspection comments and severity settings.
                   </p>
                   <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -444,12 +443,11 @@ const AdminSettingsPage = () => {
                     </Button>
                   </div>
                 </div>
-                <div className="workspace-signal hidden lg:block w-[280px] shrink-0 p-3" aria-hidden="true"><InspectionSignal /></div>
               </motion.div>
             </div>
           </section>
 
-          <section className="container mx-auto px-4 sm:px-6 lg:px-12 py-12 lg:py-16">
+          <section className="container mx-auto px-4 sm:px-6 lg:px-12 py-6 sm:py-8">
           <Tabs defaultValue="branding" className="space-y-8">
             <div className="-mx-6 px-6 lg:mx-0 lg:px-0 border-b">
               <TabsList className="flex flex-wrap w-full justify-start bg-transparent rounded-none p-0 h-auto gap-x-1 gap-y-0">

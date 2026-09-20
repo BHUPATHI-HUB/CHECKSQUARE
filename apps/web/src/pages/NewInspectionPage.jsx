@@ -10,12 +10,11 @@ import { useAuth } from '@/contexts/AuthContext.jsx';
 import { useSettings } from '@/contexts/SettingsContext.jsx';
 import { toast } from 'sonner';
 import { Shield, Users, ArrowLeft } from 'lucide-react';
-import InspectionSignal from '@/components/InspectionSignal.jsx';
 
 const fadeUp = {
-  initial: { opacity: 0, y: 18 },
+  initial: { opacity: 0, y: 6 },
   animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.6, ease: [0.22, 1, 0.36, 1] },
+  transition: { duration: 0.2, ease: [0.22, 1, 0.36, 1] },
 };
 
 const NewInspectionPage = () => {
@@ -62,7 +61,7 @@ const NewInspectionPage = () => {
         <main className="flex-1">
           {/* Editorial header */}
           <section className="border-b">
-            <div className="container mx-auto px-4 sm:px-6 lg:px-12 py-14 lg:py-20">
+            <div className="container mx-auto px-4 sm:px-6 lg:px-12 py-6 sm:py-8">
               <motion.div {...fadeUp} className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-8">
                 <div>
                   <Link to={dashboardPath} className="inline-flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-muted-foreground hover:text-foreground mb-8 link-underline">
@@ -70,13 +69,12 @@ const NewInspectionPage = () => {
                   </Link>
                   <p className="editorial-eyebrow">New report</p>
                   <h1 className="editorial-headline mt-6 text-3xl sm:text-4xl md:text-5xl lg:text-6xl">
-                    Begin a <em>new inspection.</em>
+                    New inspection
                   </h1>
                   <p className="editorial-deck mt-5 max-w-2xl">
-                    The form below mirrors the field notebook. Save as draft, return anytime, submit when the document is honest.
+                    Record the property details and inspection findings. Save a draft to continue later.
                   </p>
                 </div>
-                <div className="workspace-signal hidden lg:block w-[280px] shrink-0 p-3" aria-hidden="true"><InspectionSignal /></div>
               </motion.div>
             </div>
           </section>
@@ -110,7 +108,7 @@ const NewInspectionPage = () => {
             </div>
           </section>
 
-          <section className="container mx-auto px-4 sm:px-6 lg:px-12 py-12 lg:py-16">
+          <section className="container mx-auto px-4 sm:px-6 lg:px-12 py-6 sm:py-8">
             <motion.div {...fadeUp}>
               <InspectionForm />
             </motion.div>

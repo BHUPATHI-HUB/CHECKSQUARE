@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import InspectionSignal from '@/components/InspectionSignal.jsx';
 
-const fadeUp = { initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.6, ease: [0.22, 1, 0.36, 1] } };
+const fadeUp = { initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.18, ease: [0.22, 1, 0.36, 1] } };
 
 const Field = ({ id, label, icon: Icon, error, children }) => (
   <div>
@@ -120,23 +120,23 @@ const CustomerSignupPage = () => {
             <form onSubmit={handleSubmit} className="mt-8 sm:mt-10 space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <Field id="name" label="Full name *" icon={User} error={errors.name}>
-                  <Input id="name" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder="John Doe" className="h-12 pl-8 pr-0 border-0 border-b rounded-none focus-visible:ring-0 text-base bg-transparent" />
+                  <Input id="name" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder="John Doe" className="h-12 pl-10 pr-3 rounded-lg text-base" />
                 </Field>
                 <Field id="phone" label="Phone *" icon={Phone} error={errors.phone}>
-                  <Input id="phone" type="tel" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} placeholder="(555) 123-4567" className="h-12 pl-8 pr-0 border-0 border-b rounded-none focus-visible:ring-0 text-base bg-transparent" />
+                  <Input id="phone" type="tel" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} placeholder="(555) 123-4567" className="h-12 pl-10 pr-3 rounded-lg text-base" />
                 </Field>
               </div>
 
               <Field id="email" label="Email *" icon={Mail} error={errors.email}>
-                <Input id="email" type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} placeholder="john@example.com" className="h-12 pl-8 pr-0 border-0 border-b rounded-none focus-visible:ring-0 text-base bg-transparent" />
+                <Input id="email" type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} placeholder="john@example.com" className="h-12 pl-10 pr-3 rounded-lg text-base" />
               </Field>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <Field id="password" label="Password *" icon={Lock} error={errors.password}>
-                  <Input id="password" type="password" value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} className="h-12 pl-8 pr-0 border-0 border-b rounded-none focus-visible:ring-0 text-base bg-transparent" />
+                  <Input id="password" type="password" value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} className="h-12 pl-10 pr-3 rounded-lg text-base" />
                 </Field>
                 <Field id="confirmPassword" label="Confirm *" icon={Lock} error={errors.confirmPassword}>
-                  <Input id="confirmPassword" type="password" value={formData.confirmPassword} onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })} className="h-12 pl-8 pr-0 border-0 border-b rounded-none focus-visible:ring-0 text-base bg-transparent" />
+                  <Input id="confirmPassword" type="password" value={formData.confirmPassword} onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })} className="h-12 pl-10 pr-3 rounded-lg text-base" />
                 </Field>
               </div>
 
@@ -161,7 +161,7 @@ const CustomerSignupPage = () => {
                 </div>
               )}
 
-              <Button type="submit" disabled={loading} size="lg" className="w-full h-14 rounded-none text-base mt-4 group">
+              <Button type="submit" disabled={loading} size="lg" className="w-full h-12 rounded-lg text-base mt-4 group">
                 {loading ? 'Creating account…' : <>Create account & sign in <ArrowRight className="w-4 h-4 ml-2 transition-transform group-hover:translate-x-1" /></>}
               </Button>
             </form>

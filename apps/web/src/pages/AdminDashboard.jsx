@@ -1,3 +1,4 @@
+import { LoadingState, ErrorState } from '@/components/PageState.jsx';
 import React, { useState, useEffect, useMemo } from 'react';
 import { Helmet } from 'react-helmet';
 import { Link, useNavigate } from 'react-router-dom';
@@ -24,14 +25,13 @@ import AdminInspectionDetailModal from '@/components/AdminInspectionDetailModal.
 import AdminApprovalActions from '@/components/AdminApprovalActions.jsx';
 import AdminDownloadReport from '@/components/AdminDownloadReport.jsx';
 import DeletedReportsArchive from '@/components/DeletedReportsArchive.jsx';
-import InspectionSignal from '@/components/InspectionSignal.jsx';
 import data from '@/services/dataService.js';
 import { toast } from 'sonner';
 
 const fadeUp = {
-  initial: { opacity: 0, y: 18 },
+  initial: { opacity: 0, y: 6 },
   animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.6, ease: [0.22, 1, 0.36, 1] },
+  transition: { duration: 0.2, ease: [0.22, 1, 0.36, 1] },
 };
 
 const AdminDashboard = () => {
@@ -39,7 +39,7 @@ const AdminDashboard = () => {
   const navigate = useNavigate();
   const { unreadCount, chats, createChat, getChats } = useChatContext();
   const { showDeleted } = useFeedback();
-  const { getAllInspections, softDeleteInspection } = useInspectionStatus();
+  const { listError, getAllInspections, softDeleteInspection } = useInspectionStatus();
   const { settings } = useSettings();
   const brand = settings?.appName || 'CheckSquare';
   const [inspections, setInspections] = useState(() => getCachedAllInspections() || []);
@@ -167,26 +167,27 @@ const AdminDashboard = () => {
   return (
     <>
       <Helmet>
-        <title>{`Studio oversight | ${brand}`}</title>
+        <title>{`Inspection overview | ${brand}`}</title>
       </Helmet>
 
       <div className="min-h-screen bg-background flex flex-col">
         <Header />
 
         <main className="flex-1">
+          {listError && <div className="container mx-auto px-4 py-4"><ErrorState title="Inspection refresh failed" message={listError} onRetry={loadData} /></div>}
           {/* Editorial header */}
           <section className="border-b">
-            <div className="container mx-auto px-4 sm:px-6 lg:px-12 py-10 sm:py-14 lg:py-20">
+            <div className="container mx-auto px-4 sm:px-6 lg:px-12 py-6 sm:py-8">
               <motion.div {...fadeUp} className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-8">
                 <div>
                   <p className="editorial-eyebrow flex items-center gap-2">
-                    <Shield className="w-3.5 h-3.5" /> Editorial board
+                    <Shield className="w-3.5 h-3.5" /> Administration
                   </p>
                   <h1 className="editorial-headline mt-6 text-3xl sm:text-5xl md:text-6xl lg:text-7xl">
-                    The studio, <em>watched.</em>
+                    Inspection overview
                   </h1>
                   <p className="editorial-deck mt-5 max-w-xl">
-                    Approve, review, archive. The full ledger of every inspection, every conversation, every report.
+                    Review inspection reports, manage approvals and keep your team’s work moving.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-3">
@@ -211,9 +212,6 @@ const AdminDashboard = () => {
                     </Link>
                   </Button>
                 </div>
-                <div className="workspace-signal hidden xl:block w-[260px] shrink-0 p-3" aria-hidden="true">
-                  <InspectionSignal />
-                </div>
               </motion.div>
             </div>
           </section>
@@ -232,7 +230,7 @@ const AdminDashboard = () => {
                     key={s.label}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5, delay: i * 0.05 }}
+                    transition={{ duration: 0.2, delay: i * 0.05 }}
                     className="bg-muted/30 px-4 sm:px-6 py-4 sm:py-5 flex items-start justify-between"
                   >
                     <div>
@@ -246,7 +244,7 @@ const AdminDashboard = () => {
             </div>
           </section>
 
-          <section className="container mx-auto px-4 sm:px-6 lg:px-12 py-10 sm:py-14 lg:py-20">
+          <section className="container mx-auto px-4 sm:px-6 lg:px-12 py-6 sm:py-8">
             <Tabs defaultValue="active" className="space-y-8">
               <TabsList className="bg-transparent border-b w-full justify-start rounded-none p-0 h-auto">
                 <TabsTrigger
@@ -269,7 +267,7 @@ const AdminDashboard = () => {
                     <div className="relative flex-1">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                       <Input
-                        placeholder="Search by ID, address, or inspector…"
+                        aria-label="Search inspections" placeholder="Search by ID, address, or inspector…"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                         className="pl-10 h-11 rounded-full border-2"
@@ -389,15 +387,12 @@ const AdminDashboard = () => {
                         ))}
                       </div>
                     ) : loading ? (
-                      <div className="py-20 text-center">
-                        <div className="w-10 h-10 mx-auto mb-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                        <p className="text-sm uppercase tracking-[0.2em] text-muted-foreground">Loading inspections…</p>
-                      </div>
+                      <LoadingState label="Loading inspections" />
                     ) : (
                       <div className="py-20 text-center">
                         <FileText className="w-10 h-10 mx-auto text-muted-foreground/50 mb-4" strokeWidth={1.5} />
                         <p className="font-display text-2xl mb-2">No active inspections</p>
-                        <p className="text-muted-foreground">The ledger is empty — for now.</p>
+                        <p className="text-muted-foreground">Create an inspection to start your report history.</p>
                       </div>
                     )}
                   </div>

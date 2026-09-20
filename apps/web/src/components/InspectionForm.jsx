@@ -731,8 +731,8 @@ const InspectionForm = ({ existingInspection = null, isEditing = false }) => {
       <Card className="card-elevated">
         <CardHeader>
           <CardTitle className="text-2xl">{isEditing ? 'Edit Inspection' : 'New Inspection Report'}</CardTitle>
-          <CardDescription>Phase {currentPhase} of 5</CardDescription>
-          <Progress value={(currentPhase / 5) * 100} className="mt-4" />
+          <CardDescription aria-live="polite">Step {currentPhase} of 5 · {['Property details', 'Areas and measurements', 'Water and materials', 'Rooms and findings', 'Review and submit'][currentPhase - 1]}</CardDescription>
+          <Progress aria-label="Inspection progress" value={(currentPhase / 5) * 100} className="mt-4" />
         </CardHeader>
         <CardContent className="space-y-6">
 
@@ -751,7 +751,7 @@ const InspectionForm = ({ existingInspection = null, isEditing = false }) => {
                     <UserIcon className="w-3.5 h-3.5 text-muted-foreground" /> Prepared For <span className="text-destructive">*</span>
                   </Label>
                   <Input
-                    id="preparedFor"
+                    id="preparedFor" aria-required="true"
                     value={formData.metadata.preparedFor}
                     onChange={e => updateMetadata('preparedFor', e.target.value)}
                     placeholder="Client / homeowner name"
@@ -764,7 +764,7 @@ const InspectionForm = ({ existingInspection = null, isEditing = false }) => {
                     <MapPin className="w-3.5 h-3.5 text-muted-foreground" /> Property Address <span className="text-destructive">*</span>
                   </Label>
                   <Input
-                    id="propertyAddress"
+                    id="propertyAddress" aria-required="true"
                     value={formData.metadata.propertyAddress}
                     onChange={e => updateMetadata('propertyAddress', e.target.value)}
                     placeholder="Flat / house, street, city"
@@ -779,7 +779,7 @@ const InspectionForm = ({ existingInspection = null, isEditing = false }) => {
                   <div className="relative mt-1.5">
                     <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                     <Input
-                      id="inspectionDate"
+                      id="inspectionDate" aria-required="true"
                       type="date"
                       value={formData.metadata.inspectionDate}
                       onChange={e => updateMetadata('inspectionDate', e.target.value)}
@@ -1250,7 +1250,7 @@ const InspectionForm = ({ existingInspection = null, isEditing = false }) => {
                             ))}
                           </div>
                           {/* Axis hint */}
-                          <div className="flex justify-between text-[10px] text-muted-foreground mt-1 pl-[25%] pr-[16%]">
+                          <div className="flex flex-wrap gap-3 justify-between text-[10px] text-muted-foreground mt-1 pl-[25%] pr-[16%]">
                             <span>0</span><span>25</span><span>50</span><span>75</span><span>100</span>
                           </div>
                         </div>

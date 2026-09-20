@@ -1,6 +1,6 @@
 
-import React, { Suspense, lazy, useEffect } from 'react';
-import { Route, createBrowserRouter, createRoutesFromElements, RouterProvider, Outlet, Navigate } from 'react-router-dom';
+import React, { Suspense, lazy, useEffect, useState } from 'react';
+import { Route, createBrowserRouter, createRoutesFromElements, RouterProvider, Outlet, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext.jsx';
 import { SettingsProvider } from '@/contexts/SettingsContext.jsx';
 import { ChatProvider } from '@/contexts/ChatContext.jsx';
@@ -13,11 +13,12 @@ import SyncStatusBadge from '@/components/SyncStatusBadge.jsx';
 import { startSyncEngine } from '@/services/syncEngine.js';
 import { IS_OFFLINE_ADMIN } from '@/lib/appTarget.js';
 import { Toaster } from 'sonner';
-import { CheckSquare, Home, ScanLine } from 'lucide-react';
-import InspectionSignal from '@/components/InspectionSignal.jsx';
+import { MotionConfig } from 'framer-motion';
+import { LoadingState, ErrorState } from '@/components/PageState.jsx';
+
 
 // Public pages stay eager-loaded — they're tiny and needed on first paint.
-import HomePage from '@/pages/HomePage.jsx';
+const HomePage = lazy(() => import('@/pages/HomePage.jsx'));
 import LoginPage from '@/pages/LoginPage.jsx';
 import NotFoundPage from '@/pages/NotFoundPage.jsx';
 
@@ -39,48 +40,35 @@ const CustomerDashboard       = lazy(() => import('@/pages/CustomerDashboard.jsx
 const AppointmentBookingPage  = lazy(() => import('@/pages/AppointmentBookingPage.jsx'));
 const DownloadsPage           = lazy(() => import('@/pages/DownloadsPage.jsx'));
 
-const RouteFallback = () => (
-  <div className="min-h-screen flex items-center justify-center text-sm text-muted-foreground">
-    Loading…
-  </div>
-);
+const RouteFallback = () => <LoadingState label="Loading page" fullPage />;
 
-const BrandSplash = ({ visible }) => (
-  <div className={`fixed inset-0 z-[100] flex items-center justify-center bg-stone-950 transition-opacity duration-500 ${visible ? 'opacity-100' : 'pointer-events-none opacity-0'}`} aria-hidden={!visible}>
-    <div className="absolute inset-0 flex items-center justify-center px-6 opacity-30" aria-hidden="true">
-      <InspectionSignal tone="dark" label="" className="max-w-2xl" />
-    </div>
-    <div className="relative flex flex-col items-center gap-5 text-white">
-      <div className="relative flex h-24 w-24 items-center justify-center rounded-[2rem] bg-cyan-500 shadow-[0_20px_60px_rgba(34,211,238,0.28)] motion-safe:animate-[splash-pop_700ms_cubic-bezier(.2,.8,.2,1)_both]">
-        <Home className="h-12 w-12" strokeWidth={1.5} />
-        <ScanLine className="absolute inset-0 m-auto h-16 w-16 text-cyan-100 opacity-70 motion-safe:animate-pulse" />
-        <CheckSquare className="absolute -bottom-2 -right-2 h-9 w-9 rounded-lg bg-stone-950 p-1.5 text-cyan-300" />
-      </div>
-      <div className="text-center motion-safe:animate-[splash-rise_700ms_120ms_ease-out_both]">
-        <p className="text-2xl font-semibold tracking-tight">Check<span className="text-cyan-300">Square</span></p>
-        <p className="mt-1 text-[10px] font-medium uppercase tracking-[0.28em] text-stone-400">Inspect. Repair. Verify.</p>
-      </div>
-    </div>
-  </div>
-);
+const RouteError = () => <div className="cs-route-error"><ErrorState onRetry={() => window.location.reload()} /><a className="underline" href="/">Return to home</a></div>;
 
 const RouteShell = () => {
   const { loading } = useAuth();
-  const [showSplash, setShowSplash] = React.useState(true);
+  const [opening, setOpening] = useState(() => !window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   useEffect(() => {
-    const timer = window.setTimeout(() => setShowSplash(false), 2200);
+    const timer = window.setTimeout(() => setOpening(false), 1000);
     return () => window.clearTimeout(timer);
   }, []);
-  return <>
-  <BrandSplash visible={showSplash || loading} />
-  <ScrollToTop /><OfflineBanner /><SyncStatusBadge />
-  <Suspense fallback={<RouteFallback />}><Outlet /></Suspense>
-  <Toaster position="top-right" richColors closeButton />
-</>;
+  const { pathname } = useLocation();
+  const workspace = /^\/(admin|inspector|customer|downloads|chat)(\/|$)/.test(pathname);
+  return <div className={workspace ? 'cs-workspace' : 'cs-public'}>
+    {opening && <div className="cs-launch" role="status" aria-label="Opening CheckSquare">
+      <div className="cs-launch-mark" aria-hidden="true"><svg viewBox="0 0 64 64" fill="none"><rect x="10" y="10" width="44" height="44" rx="12" /><path d="m21 32 8 8 15-17" /></svg></div>
+      <strong>CheckSquare</strong><span>Inspection workspace</span>
+    </div>}
+    <a className="cs-skip-link" href="#page-content">Skip to content</a>
+    <ScrollToTop /><OfflineBanner /><SyncStatusBadge />
+    <div id="page-content" tabIndex={-1}>
+      {loading ? <LoadingState label="Verifying session" fullPage /> : <Suspense fallback={<RouteFallback />}><Outlet /></Suspense>}
+    </div>
+    <Toaster position="top-right" richColors closeButton />
+  </div>;
 };
 
 const router = createBrowserRouter(createRoutesFromElements(
-  <Route element={<RouteShell />}>
+  <Route element={<RouteShell />} errorElement={<RouteError />}>
               {/* Public Routes */}
               <Route path="/" element={IS_OFFLINE_ADMIN ? <Navigate to="/admin/dashboard" replace /> : <HomePage />} />
               <Route path="/login" element={<LoginPage />} />
@@ -250,6 +238,7 @@ function App() {
   useEffect(() => { if (!IS_OFFLINE_ADMIN) startSyncEngine(); }, []);
 
   return (
+    <MotionConfig reducedMotion="user">
     <SettingsProvider>
       <AuthProvider>
         <SupabaseAuthProvider>
@@ -262,6 +251,7 @@ function App() {
         </SupabaseAuthProvider>
       </AuthProvider>
     </SettingsProvider>
+    </MotionConfig>
   );
 }
 

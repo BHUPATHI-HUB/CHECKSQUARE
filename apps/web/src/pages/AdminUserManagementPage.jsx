@@ -250,7 +250,7 @@ const AdminUserManagementPage = () => {
           <div>
             <p className="editorial-eyebrow text-[10px]">Organization · People</p>
             <h1 className="font-display font-light text-3xl mt-1 leading-tight">
-              User <em className="text-secondary italic">management.</em>
+              People and access
             </h1>
             <p className="text-sm text-muted-foreground mt-2 max-w-xl">
               Create, demote, promote and remove the accounts that power your inspection workflow.

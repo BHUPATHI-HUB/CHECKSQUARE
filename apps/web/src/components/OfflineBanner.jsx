@@ -15,7 +15,7 @@ export default function OfflineBanner() {
 		<div
 			role="status"
 			aria-live="polite"
-			className="fixed top-0 inset-x-0 z-[9999] bg-amber-500 text-amber-950 shadow-md"
+			className="relative z-40 border-b border-amber-300 bg-amber-100 text-amber-950"
 		>
 			<div className="max-w-5xl mx-auto px-4 py-2 flex items-center gap-2 text-sm font-medium">
 				<WifiOff className="w-4 h-4 flex-shrink-0" />

@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 import data, { dataBackend } from '@/services/dataService.js';
 import { queueInspection, queueInspectionStatus, listPendingInspections, getPendingInspection, putCachedList, getCachedList } from '@/lib/localStore.js';
@@ -54,23 +54,26 @@ const LIST_FIELDS = [
 // so existing callers (AdminDashboard, InspectorDashboard, InspectionForm, etc.)
 // just need to await the returned promises.
 export const useInspectionStatus = () => {
+  const [listError, setListError] = useState('');
   // List ACTIVE (non-deleted) inspections. Server-side filtering by role is
   // enforced by the collection rules, so admins get everything and inspectors
   // only get their own.
   const getAllInspections = useCallback(async (options = {}) => {
+    setListError('');
     let records;
     try {
       records = await data.listInspections({ filter: 'deletedAt = null', sort: '-created', ...options });
       inspectionListCache.all = records;
       putCachedList('inspections:all', records);
     } catch (error) {
-      if (!error?.isAbort) console.error('Failed to fetch inspections', error);
+      if (!error?.isAbort) setListError('Could not refresh inspections. Any saved records shown below may be out of date.');
       records = inspectionListCache.all || (await getCachedList('inspections:all')) || [];
     }
     return mergePending(records, await listPendingInspections());
   }, []);
 
   const getInspectionsForInspector = useCallback(async (inspectorId) => {
+    setListError('');
     if (!inspectorId) return [];
     const cacheKey = `inspections:inspector:${inspectorId}`;
     let records;
@@ -82,7 +85,7 @@ export const useInspectionStatus = () => {
       inspectionListCache.byInspector[inspectorId] = records;
       putCachedList(cacheKey, records);
     } catch (error) {
-      if (!error?.isAbort) console.error('Failed to fetch inspector inspections', error);
+      if (!error?.isAbort) setListError('Could not refresh inspections. Any saved records shown below may be out of date.');
       records = inspectionListCache.byInspector[inspectorId] || (await getCachedList(cacheKey)) || [];
     }
     const pending = (await listPendingInspections()).filter((p) => p.inspector === inspectorId);

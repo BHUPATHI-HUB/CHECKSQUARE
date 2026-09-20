@@ -35,9 +35,10 @@ const Header = () => {
     <>
       <Link
         to="/"
+        aria-current={isActive('/') ? 'page' : undefined}
         className={`${
-          isActive('/') ? 'text-primary font-medium' : 'text-foreground hover:text-primary'
-        } transition-colors duration-200 ${mobile ? 'block py-2' : ''}`}
+          isActive('/') ? 'bg-accent text-accent-foreground font-semibold' : 'text-foreground hover:text-primary'
+        } transition-colors duration-200 rounded-lg px-3 ${mobile ? 'block py-3' : 'py-2 text-sm'}`}
         onClick={() => mobile && setMobileOpen(false)}
       >
         Home
@@ -46,8 +47,8 @@ const Header = () => {
         <Link
           to={role === 'admin' ? '/admin/dashboard' : role === 'inspector' ? '/inspector/dashboard' : '/customer'}
           className={`${
-            location.pathname.includes('dashboard') || location.pathname === '/customer' ? 'text-primary font-medium' : 'text-foreground hover:text-primary'
-          } transition-colors duration-200 ${mobile ? 'block py-2' : ''}`}
+            location.pathname.includes('dashboard') || location.pathname === '/customer' ? 'bg-accent text-accent-foreground font-semibold' : 'text-foreground hover:text-primary'
+          } transition-colors duration-200 rounded-lg px-3 ${mobile ? 'block py-3' : 'py-2 text-sm'}`}
           onClick={() => mobile && setMobileOpen(false)}
         >
           Dashboard
@@ -56,9 +57,10 @@ const Header = () => {
       {isAuthenticated && (
         <Link
           to="/downloads"
+          aria-current={isActive('/downloads') ? 'page' : undefined}
           className={`${
-            isActive('/downloads') ? 'text-primary font-medium' : 'text-foreground hover:text-primary'
-          } transition-colors duration-200 ${mobile ? 'block py-2' : ''}`}
+            isActive('/downloads') ? 'bg-accent text-accent-foreground font-semibold' : 'text-foreground hover:text-primary'
+          } transition-colors duration-200 rounded-lg px-3 ${mobile ? 'block py-3' : 'py-2 text-sm'}`}
           onClick={() => mobile && setMobileOpen(false)}
         >
           Downloads
@@ -70,8 +72,8 @@ const Header = () => {
             <Link
               to="/admin/users"
               className={`${
-                isActive('/admin/users') ? 'text-primary font-medium' : 'text-foreground hover:text-primary'
-              } transition-colors duration-200 ${mobile ? 'block py-2' : ''}`}
+                isActive('/admin/users') ? 'bg-accent text-accent-foreground font-semibold' : 'text-foreground hover:text-primary'
+              } transition-colors duration-200 rounded-lg px-3 ${mobile ? 'block py-3' : 'py-2 text-sm'}`}
               onClick={() => mobile && setMobileOpen(false)}
             >
               Users
@@ -79,9 +81,10 @@ const Header = () => {
           )}
           <Link
             to="/admin/settings"
+            aria-current={isActive('/admin/settings') ? 'page' : undefined}
             className={`${
-              isActive('/admin/settings') ? 'text-primary font-medium' : 'text-foreground hover:text-primary'
-            } transition-colors duration-200 ${mobile ? 'block py-2' : ''}`}
+              isActive('/admin/settings') ? 'bg-accent text-accent-foreground font-semibold' : 'text-foreground hover:text-primary'
+            } transition-colors duration-200 rounded-lg px-3 ${mobile ? 'block py-3' : 'py-2 text-sm'}`}
             onClick={() => mobile && setMobileOpen(false)}
           >
             Settings
@@ -97,10 +100,10 @@ const Header = () => {
   const displayAppName = settings.appName || 'CheckSquare';
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className="cs-header sticky top-0 z-40 w-full border-b bg-background">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between gap-2">
-          <div className="flex items-center gap-8 min-w-0 flex-1">
+          <div className="flex items-center gap-6 min-w-0 flex-1">
             <Link to="/" className="flex items-center gap-2 min-w-0">
               {displayLogo && !logoBroken ? (
                 <img
@@ -117,7 +120,7 @@ const Header = () => {
               <span className="font-bold text-lg sm:text-xl text-primary tracking-tight truncate">{displayAppName}</span>
             </Link>
             
-            <nav className="hidden md:flex items-center gap-6">
+            <nav aria-label="Main navigation" className="hidden xl:flex items-center gap-1">
               <NavLinks />
             </nav>
           </div>
@@ -126,8 +129,8 @@ const Header = () => {
             {isAuthenticated ? (
               <>
                 {!IS_OFFLINE_ADMIN && (
-                  <Button variant="ghost" size="icon" asChild className="relative hidden md:flex">
-                    <Link to="/chat">
+                  <Button variant="ghost" size="icon" asChild className="relative hidden xl:flex">
+                    <Link to="/chat" aria-label="Messages">
                       <MessageCircle className="w-5 h-5" />
                       {unreadCount > 0 && (
                         <span className="absolute top-1 right-1 badge-unread">
@@ -138,7 +141,7 @@ const Header = () => {
                   </Button>
                 )}
 
-                <div className="hidden md:flex items-center gap-2 px-3 py-1 rounded-full bg-accent text-accent-foreground text-sm font-medium">
+                <div className="hidden xl:flex items-center gap-2 px-3 py-1 rounded-full bg-accent text-accent-foreground text-sm font-medium">
                   {role === 'admin' ? (
                     <Shield className="w-4 h-4" />
                   ) : (
@@ -149,7 +152,7 @@ const Header = () => {
                 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" className="hidden md:flex items-center gap-2 hover:bg-muted">
+                    <Button variant="ghost" className="hidden xl:flex items-center gap-2 hover:bg-muted">
                       <div className="w-8 h-8 bg-primary/10 rounded-xl flex items-center justify-center">
                         <span className="text-primary font-semibold text-sm">
                           {user?.name?.charAt(0).toUpperCase()}
@@ -198,7 +201,7 @@ const Header = () => {
                 </DropdownMenu>
               </>
             ) : (
-              <div className="hidden md:flex items-center gap-3">
+              <div className="hidden xl:flex items-center gap-3">
                 <Button variant="ghost" asChild>
                   <Link to="/login">Login</Link>
                 </Button>
@@ -213,7 +216,7 @@ const Header = () => {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="relative md:hidden"
+                  className="relative xl:hidden"
                   aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
                   aria-expanded={mobileOpen}
                   aria-controls="mobile-nav-sheet"
@@ -224,11 +227,11 @@ const Header = () => {
                   )}
                 </Button>
               </SheetTrigger>
-              <SheetContent side="right" id="mobile-nav-sheet">
+              <SheetContent side="right" id="mobile-nav-sheet" aria-describedby={undefined}>
                 <SheetHeader className="text-left mb-6">
                   <SheetTitle>{displayAppName}</SheetTitle>
                 </SheetHeader>
-                <nav className="flex flex-col gap-4">
+                <nav aria-label="Mobile navigation" className="flex flex-col gap-4">
                   <NavLinks mobile />
                   {isAuthenticated ? (
                     <>

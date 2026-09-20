@@ -1,3 +1,4 @@
+import { ErrorState } from '@/components/PageState.jsx';
 import React, { useEffect, useState } from 'react';
 import { Helmet } from 'react-helmet';
 import { Link } from 'react-router-dom';
@@ -26,9 +27,9 @@ const formatDate = (iso) => {
 };
 
 const fadeUp = {
-  initial: { opacity: 0, y: 18 },
+  initial: { opacity: 0, y: 6 },
   animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.6, ease: [0.22, 1, 0.36, 1] },
+  transition: { duration: 0.2, ease: [0.22, 1, 0.36, 1] },
 };
 
 // Stale-while-revalidate cache (per customer) so returning to the portal shows
@@ -40,6 +41,8 @@ const CustomerDashboard = () => {
   const { unreadCount, chats, createChat } = useChatContext();
   const { settings } = useSettings();
   const brand = settings?.appName || 'CheckSquare';
+  const [loadError, setLoadError] = useState(false);
+  const [retry, setRetry] = useState(0);
   const [upcomingAppointments, setUpcomingAppointments] = useState(() => customerDashCache[user?.id]?.appts || []);
   const [pastInspections, setPastInspections] = useState(() => customerDashCache[user?.id]?.insps || []);
   const [loading, setLoading] = useState(() => !customerDashCache[user?.id]);
@@ -65,6 +68,7 @@ const CustomerDashboard = () => {
     let cancelled = false;
     (async () => {
       if (!customerDashCache[user.id]) setLoading(true);
+      setLoadError(false);
       try {
         const nowIso = new Date().toISOString().replace('T', ' ');
         const [appts, insps] = await Promise.all([
@@ -101,13 +105,13 @@ const CustomerDashboard = () => {
         }
       } catch (e) {
         console.error('Failed to load customer dashboard', e);
-        if (!cancelled) { setUpcomingAppointments([]); setPastInspections([]); }
+        if (!cancelled) setLoadError(true);
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
     return () => { cancelled = true; };
-  }, [user?.id]);
+  }, [user?.id, retry]);
 
   const firstName = user?.name?.split(' ')[0] || 'there';
   const next = upcomingAppointments[0];
@@ -123,17 +127,18 @@ const CustomerDashboard = () => {
         <Header />
 
         <main className="flex-1">
+          {loadError && <div className="container mx-auto px-4 py-4"><ErrorState title="Your portal could not be refreshed" message="Check your connection and try again. Previously loaded records may be out of date." onRetry={() => setRetry(v => v + 1)} /></div>}
           {/* Editorial header */}
           <section className="border-b">
-            <div className="container mx-auto px-4 sm:px-6 lg:px-12 py-10 sm:py-14 lg:py-20">
+            <div className="container mx-auto px-4 sm:px-6 lg:px-12 py-6 sm:py-8">
               <motion.div {...fadeUp} className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-8">
                 <div>
                   <p className="editorial-eyebrow">Your portal · {new Date().toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</p>
                   <h1 className="editorial-headline mt-6 text-3xl sm:text-5xl md:text-6xl lg:text-7xl">
-                    Good morning, <em>{firstName}.</em>
+                    Welcome, {firstName}
                   </h1>
                   <p className="editorial-deck mt-5 max-w-xl">
-                    Your appointments, reports, and conversations — held in one quiet place.
+                    Manage your appointments, review inspection reports and contact your team.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-3">
@@ -171,7 +176,7 @@ const CustomerDashboard = () => {
                     key={s.label}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5, delay: i * 0.05 }}
+                    transition={{ duration: 0.2, delay: i * 0.05 }}
                     className="bg-muted/30 px-4 sm:px-6 py-4 sm:py-5"
                   >
                     <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">{s.label}</p>
@@ -182,7 +187,7 @@ const CustomerDashboard = () => {
             </div>
           </section>
 
-          <div className="container mx-auto px-4 sm:px-6 lg:px-12 py-10 sm:py-14 lg:py-20">
+          <div className="container mx-auto px-4 sm:px-6 lg:px-12 py-6 sm:py-8">
             <div className="grid grid-cols-12 gap-8">
               {/* Left: appointment + history */}
               <div className="col-span-12 lg:col-span-8 space-y-16">
