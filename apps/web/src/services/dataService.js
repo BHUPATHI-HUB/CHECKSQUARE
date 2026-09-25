@@ -10,6 +10,7 @@ import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient.js';
 import { IS_OFFLINE_ADMIN, IS_HYBRID_APK, OFFLINE_ADMIN_USER } from '@/lib/appTarget.js';
 import localDb from '@/lib/localDb.js';
 import { deleteReportUpload, listOutbox, deleteOutbox } from '@/lib/localStore.js';
+import { mergeReportDownloads } from './reportDownloads.js';
 
 const USE_SUPABASE = isSupabaseConfigured;
 
@@ -196,8 +197,14 @@ const supaAdapter = {
     if (error) throw error;
     return (data || []).map(rowToChat);
   },
-  async findChat() {
-    throw new Error('findChat with arbitrary filter is not yet implemented for Supabase.');
+  async findChat(filter) {
+    const match = /^inspectionId\s*=\s*"([0-9a-f-]{36})"$/i.exec(filter || '');
+    if (!match) throw new Error(`Unsupported chat filter: ${filter}`);
+    const { data, error } = await supabase.from('chats').select('*')
+      .eq('inspection_id', match[1]).order('created_at', { ascending: true }).limit(1).maybeSingle();
+    if (error) throw error;
+    if (!data) throw Object.assign(new Error('Chat not found'), { status: 404 });
+    return rowToChat(data);
   },
   async createChat(payload) {
     const { data, error } = await supabase.from('chats').insert(snake({ ...payload, inspectionId: payload.inspectionId || null })).select().single();
@@ -605,7 +612,18 @@ const hybridAdapter = {
   transitionAppointment: (id, payload) => localAdapter.transitionAppointment(id, payload),
   createNotification: (...args) => cloudAdapter.createNotification(...args),
 
-  listReportDownloads: (...args) => localAdapter.listReportDownloads(...args),
+  listReportDownloads: async (userId) => {
+    const local = await localAdapter.listReportDownloads(userId);
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return local;
+    try {
+      const cloud = await cloudAdapter.listReportDownloads(userId);
+      return mergeReportDownloads(local, cloud);
+    } catch (error) {
+      const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+      if (offline || /failed to fetch|network|timeout|load failed/i.test(String(error?.message || error))) return local;
+      throw error;
+    }
+  },
   listAllReportDownloads: (...args) => cloudAdapter.listAllReportDownloads(...args),
   getReportDownloadFileUrl: async (rec) => {
     if (rec?.storage_key || rec?.storageKey) return cloudAdapter.getReportDownloadFileUrl(rec);

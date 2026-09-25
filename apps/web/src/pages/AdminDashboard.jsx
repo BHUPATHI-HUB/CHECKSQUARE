@@ -88,7 +88,9 @@ const AdminDashboard = () => {
       if (!existing) {
         try {
           existing = await data.findChat(`inspectionId = "${inspection.id}"`);
-        } catch (_) { /* not found */ }
+        } catch (error) {
+          if (error?.status !== 404) throw error;
+        }
       }
       if (existing) { navigate(`/chat/${existing.id}`); return; }
       const participants = [user.id, inspection.inspector].filter(Boolean);

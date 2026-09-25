@@ -10,8 +10,8 @@ import { toast } from 'sonner';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
 import { IS_OFFLINE_ADMIN, USE_LOCAL_INSPECTION_STORAGE, OFFLINE_ADMIN_USER } from '@/lib/appTarget.js';
 import data from '@/services/dataService.js';
-import { queueReportUpload } from '@/lib/localStore.js';
-import { requestSync } from '@/services/syncEngine.js';
+import { getReportUpload, listOutbox, queueReportUpload } from '@/lib/localStore.js';
+import { requestSync, retryFailed } from '@/services/syncEngine.js';
 
 const isNative = () => {
 	try {
@@ -39,6 +39,12 @@ const extToFormat = (filename) => {
 	if (ext === 'pdf' || ext === 'docx' || ext === 'xlsx') return ext;
 	return 'other';
 };
+
+const reportContentType = (format) => ({
+	pdf: 'application/pdf',
+	docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+	xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+}[format] || 'application/octet-stream');
 
 /**
  * Save a Blob to the user's device + queue a durable Supabase upload.
@@ -105,6 +111,13 @@ export async function saveFile(blob, filename, opts = {}) {
 			} catch (err) {
 				console.warn('Could not read report sync identity:', err?.message || err);
 			}
+			if (!userId && USE_LOCAL_INSPECTION_STORAGE) {
+				try {
+					// An offline-PIN session has an app user but no Supabase session yet.
+					// Keep that ownership on the device so the export remains visible.
+					userId = JSON.parse(localStorage.getItem('auth-offline-session-v1') || 'null')?.user?.id || null;
+				} catch { /* the Documents copy remains available */ }
+			}
 		}
 		const report = {
 			id: crypto.randomUUID(), userId, inspectionId: inspectionId || null,
@@ -132,9 +145,15 @@ export async function saveFile(blob, filename, opts = {}) {
 			} catch (err) {
 				console.warn('Could not queue report for Supabase sync:', err?.message || err);
 				if (USE_LOCAL_INSPECTION_STORAGE) {
-					await data.updateReportDownload(report.id, { syncStatus: 'failed', lastSyncError: String(err?.message || err) });
+					try {
+						await data.updateReportDownload(report.id, { syncStatus: 'failed', lastSyncError: String(err?.message || err) });
+					} catch (recordError) {
+						console.warn('Could not mark local report sync failure:', recordError?.message || recordError);
+					}
 				}
-				toast.warning('Report saved locally, but cloud sync could not be queued.');
+				toast.warning(nativeUri
+					? 'Report saved locally, but cloud sync could not be queued. Retry from My Downloads.'
+					: 'Cloud sync could not be queued. Export again to retry.');
 			}
 		} else if (cloudEnabled) {
 			toast.warning('Report saved locally. Sign in to enable cloud sync.');
@@ -142,6 +161,44 @@ export async function saveFile(blob, filename, opts = {}) {
 	}
 
 	return { method, uri: nativeUri };
+}
+
+// A native Documents copy is the recovery source when IndexedDB could not
+// commit the upload and outbox together. Existing queued failures use the
+// normal backoff reset, so a retry never creates a duplicate operation.
+export async function retryReportUpload(rec) {
+	if (IS_OFFLINE_ADMIN || !isSupabaseConfigured || !supabase || !rec?.id) {
+		throw new Error('Cloud report sync is unavailable.');
+	}
+	const { data: { session } = {}, error } = await supabase.auth.getSession();
+	const userId = session?.user?.id;
+	if (error || !userId || (rec.user || rec.user_id) !== userId) {
+		throw new Error('Sign in with the account that created this report.');
+	}
+	const queued = (await listOutbox()).find((op) => op.type === 'uploadReport' && op.reportId === rec.id);
+	if (queued) {
+		if (queued.userId !== userId) throw new Error('This report belongs to another sync account.');
+		await retryFailed();
+		return;
+	}
+	let report = await getReportUpload(rec.id);
+	if (!report?.blob && rec.docPath && isNative()) {
+		const { Filesystem, Directory } = await import('@capacitor/filesystem');
+		const { data: base64 } = await Filesystem.readFile({ path: rec.docPath, directory: Directory.Documents });
+		const bytes = typeof base64 === 'string'
+			? Uint8Array.from(atob(base64), (char) => char.charCodeAt(0))
+			: base64;
+		report = {
+			id: rec.id, userId, inspectionId: rec.inspection || rec.inspection_id || null,
+			filename: rec.filename, format: rec.format, fileSize: rec.fileSize ?? rec.file_size ?? 0,
+			contentType: reportContentType(rec.format), created: rec.created || rec.created_at,
+			blob: new Blob([bytes], { type: reportContentType(rec.format) }),
+		};
+	}
+	if (!report?.blob) throw new Error('The saved report file is unavailable. Export it again to retry.');
+	await queueReportUpload({ ...report, userId });
+	await data.updateReportDownload(rec.id, { syncStatus: 'pending', lastSyncError: null });
+	requestSync({ force: true });
 }
 
 export default saveFile;

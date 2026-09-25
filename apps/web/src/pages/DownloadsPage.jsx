@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/dialog';
 import { Download, Trash2, FileText, FileSpreadsheet, FileType2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
-import { saveFile } from '@/utils/saveFile';
+import { retryReportUpload, saveFile } from '@/utils/saveFile';
 import { USE_LOCAL_INSPECTION_STORAGE } from '@/lib/appTarget.js';
 
 const formatIcon = (fmt) => {
@@ -37,6 +37,7 @@ const DownloadsPage = () => {
 	const [loading, setLoading] = useState(true);
 	const [loadError, setLoadError] = useState(false);
 	const [deleting, setDeleting] = useState(null); // id pending delete
+	const [retrying, setRetrying] = useState(null);
 	const [confirm, setConfirm] = useState(null);   // record awaiting confirmation
 
 	const load = async () => {
@@ -118,6 +119,20 @@ const DownloadsPage = () => {
 		}
 	};
 
+	const handleRetry = async (rec) => {
+		setRetrying(rec.id);
+		try {
+			await retryReportUpload(rec);
+			setItems((prev) => prev.map((item) => item.id === rec.id
+				? { ...item, syncStatus: 'pending' } : item));
+			toast.success('Report queued for cloud sync.');
+		} catch (err) {
+			toast.error(err?.message || 'Could not retry this report.');
+		} finally {
+			setRetrying(null);
+		}
+	};
+
 	return (
 		<div className="min-h-screen flex flex-col bg-background">
 			<Helmet><title>My Downloads</title></Helmet>
@@ -129,7 +144,7 @@ const DownloadsPage = () => {
 						<h1 className="text-2xl sm:text-3xl font-bold tracking-tight">My Downloads</h1>
 						<p className="text-sm text-muted-foreground mt-1">
 							{USE_LOCAL_INSPECTION_STORAGE
-								? 'Reports saved on this device. Use Share to send a report when needed.'
+								? 'Reports saved on this device and available from the cloud after sync.'
 								: 'Reports you have downloaded, synced across all your devices.'}
 						</p>
 					</div>
@@ -188,6 +203,12 @@ const DownloadsPage = () => {
 										</p>
 									</div>
 									<div className="flex items-center gap-2 flex-shrink-0">
+										{USE_LOCAL_INSPECTION_STORAGE && (rec.syncStatus || rec.sync_status) === 'failed' && rec.docPath && (
+											<Button size="sm" variant="outline" onClick={() => handleRetry(rec)} disabled={retrying === rec.id} title="Retry cloud upload">
+												<RefreshCw className={`w-4 h-4 ${retrying === rec.id ? 'animate-spin' : ''}`} />
+												<span className="hidden sm:inline ml-2">Retry upload</span>
+											</Button>
+										)}
 										<Button
 											size="sm"
 											variant="outline"
