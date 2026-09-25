@@ -33,6 +33,8 @@ const AdminDashboard          = lazy(() => import('@/pages/AdminDashboard.jsx'))
 const AdminSettingsPage       = lazy(() => import('@/pages/AdminSettingsPage.jsx'));
 const AdminActivityPage       = lazy(() => import('@/pages/AdminActivityPage.jsx'));
 const AdminUserManagementPage = lazy(() => import('@/pages/AdminUserManagementPage.jsx'));
+const AdminAppointmentsPage  = lazy(() => import('@/pages/AdminAppointmentsPage.jsx'));
+const AdminDocumentsPage     = lazy(() => import('@/pages/AdminDocumentsPage.jsx'));
 const InspectionViewPage      = lazy(() => import('@/pages/InspectionViewPage.jsx'));
 const InspectorDashboard      = lazy(() => import('@/pages/InspectorDashboard.jsx'));
 const NewInspectionPage       = lazy(() => import('@/pages/NewInspectionPage.jsx'));
@@ -178,6 +180,14 @@ const router = createBrowserRouter(createRoutesFromElements(
                     <AdminUserManagementPage />
                   </ProtectedRoute>
                 }
+              />
+              <Route
+                path="/admin/appointments"
+                element={<ProtectedRoute requiredRole="admin"><AdminAppointmentsPage /></ProtectedRoute>}
+              />
+              <Route
+                path="/admin/documents"
+                element={<ProtectedRoute requiredRole="admin"><AdminDocumentsPage /></ProtectedRoute>}
               />
               <Route
                 path="/admin/new-inspection"

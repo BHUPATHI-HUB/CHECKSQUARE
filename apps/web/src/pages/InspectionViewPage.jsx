@@ -50,9 +50,9 @@ const InspectionViewPage = () => {
   useEffect(() => {
     const path = window.location.pathname;
     const wantsEdit = path.includes('/edit');
-    // Approved reports are immutable to inspectors — only admins may edit
-    // them. Silently downgrade an inspector's edit request to view-only.
-    if (wantsEdit && inspection?.status === 'approved' && user?.role !== 'admin') {
+    // Submitted and approved reports are immutable to inspectors. Only a
+    // rejected report returns to the inspector for correction.
+    if (wantsEdit && user?.role === 'inspector' && !['draft', 'rejected'].includes(inspection?.status)) {
       setIsEditing(false);
       return;
     }

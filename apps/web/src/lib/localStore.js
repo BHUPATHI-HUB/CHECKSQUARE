@@ -13,8 +13,8 @@
 // resolve to no-ops / nulls so the online flow is never blocked.
 
 const DB_NAME = 'checksquare-offline';
-const DB_VERSION = 2;
-const STORES = { photos: 'photos', outbox: 'outbox', inspections: 'inspections', lists: 'lists' };
+const DB_VERSION = 3;
+const STORES = { photos: 'photos', outbox: 'outbox', inspections: 'inspections', lists: 'lists', reports: 'reports' };
 
 let dbPromise = null;
 
@@ -40,6 +40,9 @@ function openDB() {
       }
       if (!db.objectStoreNames.contains(STORES.lists)) {
         db.createObjectStore(STORES.lists, { keyPath: 'key' });
+      }
+      if (!db.objectStoreNames.contains(STORES.reports)) {
+        db.createObjectStore(STORES.reports, { keyPath: 'id' });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -94,6 +97,25 @@ export async function markPhotoSynced(path) {
 
 export async function deletePhotoBlob(path) {
   try { await tx(STORES.photos, 'readwrite', (s) => s.delete(path)); }
+  catch { /* non-fatal */ }
+}
+
+// ─── report uploads ─────────────────────────────────────────────────────
+// Report blobs are kept separately from the metadata record so the metadata
+// can be stored in SQLite/localStorage while the binary remains in IndexedDB
+// until Supabase acknowledges the upload.
+export async function putReportUpload(record) {
+  await tx(STORES.reports, 'readwrite', (s) => s.put(record));
+  return record;
+}
+
+export async function getReportUpload(id) {
+  try { return await tx(STORES.reports, 'readonly', (s) => reqToPromise(s.get(id))); }
+  catch { return null; }
+}
+
+export async function deleteReportUpload(id) {
+  try { await tx(STORES.reports, 'readwrite', (s) => s.delete(id)); }
   catch { /* non-fatal */ }
 }
 
@@ -171,6 +193,17 @@ export async function putPendingInspection(inspection) {
     }));
 }
 
+export async function putInspectionMirror(inspection) {
+  await tx(STORES.inspections, 'readwrite', (s) => s.put({
+    ...inspection,
+    inspector: inspection.inspector || inspection.inspectorId || null,
+    customer: inspection.customer || inspection.customerId || null,
+    syncStatus: 'synced',
+    lastSyncedAt: Date.now(),
+    updatedAt: Date.now(),
+  }));
+}
+
 // A successful offline save must commit BOTH the record and its sync request.
 export async function queueInspection(inspection) {
   const db = await openDB();
@@ -187,7 +220,9 @@ export async function queueInspection(inspection) {
         if (op.type === 'upsertInspection' && op.inspectionId === inspection.id) outbox.delete(op.id);
       });
       outbox.add({ type: 'upsertInspection', id: undefined,
-        inspectionId: inspection.id, tries: 0, nextAttemptAt: now, createdAt: now });
+        inspectionId: inspection.id,
+        userId: inspection.inspector || inspection.inspectorId || null,
+        tries: 0, nextAttemptAt: now, createdAt: now });
     };
     existing.onerror = () => reject(existing.error);
     t.oncomplete = () => resolve(inspection);
@@ -198,7 +233,7 @@ export async function queueInspection(inspection) {
 
 // Queue a status-only mutation. Approval/rejection never needs the full
 // inspection payload, so this operation stays tiny and can safely be retried.
-export async function queueInspectionStatus(inspectionId, payload) {
+export async function queueInspectionStatus(inspectionId, payload, userId = null) {
   const db = await openDB();
   const now = Date.now();
   return new Promise((resolve, reject) => {
@@ -209,7 +244,7 @@ export async function queueInspectionStatus(inspectionId, payload) {
       (existing.result || []).forEach((op) => {
         if (op.type === 'inspectionStatus' && op.inspectionId === inspectionId) outbox.delete(op.id);
       });
-      outbox.add({ type: 'inspectionStatus', inspectionId, payload, tries: 0, nextAttemptAt: now, createdAt: now });
+      outbox.add({ type: 'inspectionStatus', inspectionId, payload, userId, tries: 0, nextAttemptAt: now, createdAt: now });
     };
     existing.onerror = () => reject(existing.error);
     t.oncomplete = () => resolve(true);
@@ -223,10 +258,21 @@ export async function getPendingInspection(id) {
   catch { return null; }
 }
 
-export async function listPendingInspections() {
+// Keep the local mirror after cloud acknowledgement. It is not returned by
+// listPendingInspections(), but remains available for offline viewing/audit.
+export async function markInspectionSynced(id, patch = {}) {
+  try {
+    await tx(STORES.inspections, 'readwrite', async (s) => {
+      const record = await reqToPromise(s.get(id));
+      if (record) s.put({ ...record, ...patch, syncStatus: 'synced', lastSyncedAt: Date.now(), updatedAt: Date.now() });
+    });
+  } catch { /* non-fatal; the outbox remains the retry source */ }
+}
+
+export async function listPendingInspections(userId = null) {
   try {
     const all = (await tx(STORES.inspections, 'readonly', (s) => reqToPromise(s.getAll()))) || [];
-    return all.filter((i) => i.syncStatus !== 'synced');
+    return all.filter((i) => i.syncStatus !== 'synced' && (!userId || i.inspector === userId || i.inspectorId === userId));
   } catch { return []; }
 }
 

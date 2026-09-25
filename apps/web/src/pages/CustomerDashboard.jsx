@@ -70,10 +70,9 @@ const CustomerDashboard = () => {
       if (!customerDashCache[user.id]) setLoading(true);
       setLoadError(false);
       try {
-        const nowIso = new Date().toISOString().replace('T', ' ');
         const [appts, insps] = await Promise.all([
           data.listAppointments({
-            filter: `customer = "${user.id}" && status = "scheduled" && scheduledAt >= "${nowIso}"`,
+            filter: `customer = "${user.id}"`,
             sort: 'scheduledAt',
           }),
           data.listInspections({
@@ -82,26 +81,31 @@ const CustomerDashboard = () => {
           }),
         ]);
 
+        const activeAppointments = appts.filter((appointment) => (
+          ['requested', 'scheduled', 'in_progress'].includes(appointment.status)
+          && new Date(appointment.scheduledAt).getTime() >= Date.now()
+        ));
+
         // Re-hydrate the inspector display name for every upcoming appointment.
         // We dropped the PB `expand: 'inspector'` shortcut when migrating to
         // dataService — a separate batched lookup keeps the dashboard text
         // ("with Inspector X") intact without inventing a new service method.
-        const inspectorIds = [...new Set(appts.map((a) => a.inspector).filter(Boolean))];
+        const inspectorIds = [...new Set(activeAppointments.map((a) => a.inspector).filter(Boolean))];
         if (inspectorIds.length) {
           const inspectors = await Promise.all(
             inspectorIds.map((id) => data.getUser(id).catch(() => null)),
           );
           const byId = Object.fromEntries(inspectors.filter(Boolean).map((u) => [u.id, u]));
-          appts.forEach((a) => {
+          activeAppointments.forEach((a) => {
             if (a.inspector && byId[a.inspector]) {
               a.expand = { ...(a.expand || {}), inspector: byId[a.inspector] };
             }
           });
         }
         if (!cancelled) {
-          setUpcomingAppointments(appts);
+          setUpcomingAppointments(activeAppointments);
           setPastInspections(insps);
-          customerDashCache[user.id] = { appts, insps };
+          customerDashCache[user.id] = { appts: activeAppointments, insps };
         }
       } catch (e) {
         console.error('Failed to load customer dashboard', e);
@@ -198,7 +202,7 @@ const CustomerDashboard = () => {
                       <div className="grid grid-cols-1 md:grid-cols-3">
                         <div className="md:col-span-2 p-5 sm:p-8 lg:p-10">
                           <Badge className="bg-secondary/20 text-secondary border-none uppercase tracking-wider text-[10px]">
-                            Scheduled
+                            {next.status === 'requested' ? 'Request submitted' : next.status === 'in_progress' ? 'In progress' : 'Scheduled'}
                           </Badge>
                           <h2 className="font-display font-light text-2xl sm:text-3xl md:text-4xl mt-4 sm:mt-5 leading-tight break-words">
                             {next.propertyAddress}
@@ -225,7 +229,7 @@ const CustomerDashboard = () => {
                           </div>
                           <Button asChild variant="secondary" className="mt-6 rounded-full">
                             <Link to="/chat">
-                              Message inspector <ArrowRight className="w-4 h-4 ml-2" />
+                              {next.inspector ? 'Message inspector' : 'Message team'} <ArrowRight className="w-4 h-4 ml-2" />
                             </Link>
                           </Button>
                         </div>

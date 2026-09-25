@@ -182,7 +182,22 @@ create policy "own downloads only" on public.report_downloads for select
   using (user_id = auth.uid() or public.current_role() = 'admin');
 
 create policy "downloads insert self" on public.report_downloads for insert
-  with check (user_id = auth.uid());
+  with check (
+    user_id = auth.uid()
+    and (
+      inspection_id is null
+      or public.current_role() = 'admin'
+      or exists (
+        select 1 from public.inspections i
+        where i.id = inspection_id
+          and (i.customer_id = auth.uid() or i.inspector_id = auth.uid())
+      )
+    )
+  );
+
+create policy "downloads update self / admin" on public.report_downloads for update
+  using (user_id = auth.uid() or public.current_role() = 'admin')
+  with check (user_id = auth.uid() or public.current_role() = 'admin');
 
 create policy "downloads delete self / admin" on public.report_downloads for delete
   using (user_id = auth.uid() or public.current_role() = 'admin');

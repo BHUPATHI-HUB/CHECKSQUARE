@@ -19,7 +19,7 @@ create extension if not exists "pgcrypto";
 
 create type user_role         as enum ('customer','inspector','admin');
 create type inspection_status  as enum ('draft','pending','approved','rejected');
-create type appointment_status as enum ('scheduled','in_progress','completed','cancelled');
+create type appointment_status as enum ('requested','scheduled','in_progress','completed','cancelled');
 create type property_type      as enum ('Residential','Commercial','Industrial');
 create type chat_type          as enum ('direct','group');
 create type report_format      as enum ('pdf','docx','xlsx','other');
@@ -57,6 +57,8 @@ create table public.inspections (
     rejected_by        text,
     rejected_at        timestamptz,
     rejection_reason   text,
+    submitted_at       timestamptz,
+    submitted_by       text,
     deleted_at         timestamptz,
     deleted_by         text,
     deletion_reason    text,
@@ -89,6 +91,12 @@ create table public.appointments (
     time_slot        text not null,
     property_address text not null,
     notes            text,
+    cancel_reason    text,
+    cancelled_by     uuid references public.profiles(id) on delete set null,
+    cancelled_at     timestamptz,
+    previous_scheduled_at timestamptz,
+    reschedule_count integer not null default 0 check (reschedule_count >= 0),
+    reschedule_reason text,
     status           appointment_status not null default 'scheduled',
     created_at       timestamptz not null default now(),
     updated_at       timestamptz not null default now()
@@ -150,7 +158,12 @@ create table public.report_downloads (
     format        report_format not null,
     file_size     bigint,
     storage_key   text,
-    created_at    timestamptz not null default now()
+    created_at    timestamptz not null default now(),
+    sync_status   text not null default 'synced' check (sync_status in ('pending','synced','failed')),
+    sync_attempts integer not null default 0 check (sync_attempts >= 0),
+    last_sync_error text,
+    synced_at     timestamptz,
+    updated_at    timestamptz not null default now()
 );
 create index report_downloads_user_idx on public.report_downloads (user_id, created_at desc);
 
@@ -191,17 +204,41 @@ create policy "self / admin update profile"
   on public.profiles for update using (id = auth.uid() or public.current_role() = 'admin');
 
 create policy "inspectors / admins create"
-  on public.inspections for insert with check (public.current_role() in ('inspector','admin'));
+  on public.inspections for insert with check (
+    public.current_role() = 'admin'
+    or (public.current_role() = 'inspector' and inspector_id = auth.uid()
+        and status in ('draft','pending') and approved_by is null and approved_at is null
+        and deleted_at is null)
+  );
 create policy "owners + assignees + admins read"
   on public.inspections for select using (
     public.current_role() = 'admin' or inspector_id = auth.uid() or customer_id = auth.uid()
   );
 create policy "owner / admin update while not approved"
   on public.inspections for update using (
-    public.current_role() = 'admin' or (inspector_id = auth.uid() and status <> 'approved')
+    public.current_role() = 'admin' or (inspector_id = auth.uid() and status in ('draft','rejected'))
+  ) with check (
+    public.current_role() = 'admin'
+    or (public.current_role() = 'inspector' and inspector_id = auth.uid() and status in ('draft','pending'))
   );
 create policy "only admins delete"
   on public.inspections for delete using (public.current_role() = 'admin');
+
+create or replace function public.set_inspection_submission_audit()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if new.status = 'pending' and (tg_op = 'INSERT' or old.status is distinct from new.status) then
+    new.submitted_at := now();
+    new.submitted_by := coalesce(auth.uid()::text, new.inspector_id::text);
+  end if;
+  new.updated_at := now();
+  return new;
+end;
+$$;
+drop trigger if exists set_inspection_submission_audit on public.inspections;
+create trigger set_inspection_submission_audit
+before insert or update on public.inspections
+for each row execute function public.set_inspection_submission_audit();
 
 create policy "photos follow inspection visibility"
   on public.inspection_photos for select using (
@@ -211,24 +248,94 @@ create policy "photos follow inspection visibility"
 create policy "photo write follows inspection edit"
   on public.inspection_photos for insert with check (
     exists (select 1 from public.inspections i where i.id = inspection_id
-      and (public.current_role() = 'admin' or (i.inspector_id = auth.uid() and i.status <> 'approved')))
+      and (public.current_role() = 'admin' or (i.inspector_id = auth.uid() and i.status in ('draft','rejected'))))
   );
 create policy "photo delete follows inspection edit"
   on public.inspection_photos for delete using (
     exists (select 1 from public.inspections i where i.id = inspection_id
-      and (public.current_role() = 'admin' or (i.inspector_id = auth.uid() and i.status <> 'approved')))
+      and (public.current_role() = 'admin' or (i.inspector_id = auth.uid() and i.status in ('draft','rejected'))))
   );
 
 create policy "customers / admins book"
-  on public.appointments for insert with check (public.current_role() in ('customer','admin'));
+  on public.appointments for insert with check (
+    public.current_role() = 'admin'
+    or (public.current_role() = 'customer' and customer_id = auth.uid())
+  );
 create policy "appointment visibility"
   on public.appointments for select using (
     public.current_role() = 'admin' or customer_id = auth.uid() or inspector_id = auth.uid()
   );
 create policy "appointment update"
-  on public.appointments for update using (
-    public.current_role() = 'admin' or customer_id = auth.uid() or inspector_id = auth.uid()
-  );
+  on public.appointments for update
+  using (public.current_role() in ('admin','inspector') or customer_id = auth.uid())
+  with check (public.current_role() in ('admin','inspector') or customer_id = auth.uid());
+
+create or replace function public.validate_appointment_write()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if public.current_role() = 'customer' then
+    if tg_op = 'INSERT' and new.customer_id <> auth.uid() then
+      raise exception 'Customers may only create appointments for themselves' using errcode = '42501';
+    end if;
+    if tg_op = 'UPDATE' and (
+      new.customer_id is distinct from old.customer_id
+      or new.inspector_id is distinct from old.inspector_id
+      or new.inspection_id is distinct from old.inspection_id
+      or new.scheduled_at is distinct from old.scheduled_at
+      or new.time_slot is distinct from old.time_slot
+      or new.property_address is distinct from old.property_address
+      or new.reschedule_count is distinct from old.reschedule_count
+      or new.cancelled_by is distinct from old.cancelled_by
+      or new.cancelled_at is distinct from old.cancelled_at
+      or new.cancel_reason is distinct from old.cancel_reason
+      or new.reschedule_reason is distinct from old.reschedule_reason
+      or new.status not in ('cancelled'::appointment_status, old.status)
+    ) then
+      raise exception 'Customers may only cancel their own appointments' using errcode = '42501';
+    end if;
+  end if;
+
+  if public.current_role() = 'inspector' and tg_op = 'UPDATE' and (
+    old.inspector_id <> auth.uid()
+    or new.customer_id is distinct from old.customer_id
+    or new.inspector_id is distinct from old.inspector_id
+    or new.inspection_id is distinct from old.inspection_id
+    or new.scheduled_at is distinct from old.scheduled_at
+    or new.time_slot is distinct from old.time_slot
+    or new.property_address is distinct from old.property_address
+    or new.notes is distinct from old.notes
+    or new.reschedule_count is distinct from old.reschedule_count
+    or new.cancelled_by is distinct from old.cancelled_by
+    or new.cancelled_at is distinct from old.cancelled_at
+    or new.cancel_reason is distinct from old.cancel_reason
+    or new.reschedule_reason is distinct from old.reschedule_reason
+    or new.status not in ('in_progress'::appointment_status, 'completed'::appointment_status)
+  ) then
+    raise exception 'Inspectors may only advance their own appointment status' using errcode = '42501';
+  end if;
+
+  if new.inspection_id is not null and not exists (
+    select 1 from public.inspections i where i.id = new.inspection_id
+      and i.customer_id = new.customer_id
+      and (new.inspector_id is null or i.inspector_id = new.inspector_id)
+  ) then
+    raise exception 'Appointment and inspection ownership do not match' using errcode = '23514';
+  end if;
+  if tg_op = 'UPDATE' and new.scheduled_at is distinct from old.scheduled_at then
+    new.previous_scheduled_at := old.scheduled_at;
+    new.reschedule_count := old.reschedule_count + 1;
+  end if;
+  if new.status = 'cancelled' and (tg_op = 'INSERT' or old.status is distinct from new.status) then
+    new.cancelled_at := coalesce(new.cancelled_at, now());
+    new.cancelled_by := coalesce(new.cancelled_by, auth.uid());
+  end if;
+  new.updated_at := now();
+  return new;
+end;
+$$;
+create trigger validate_appointment_write
+before insert or update on public.appointments
+for each row execute function public.validate_appointment_write();
 create policy "only admin delete appt"
   on public.appointments for delete using (public.current_role() = 'admin');
 
@@ -255,6 +362,8 @@ create policy "message delete by sender / staff" on public.messages for delete
 create policy "notifications self" on public.notifications for select using (user_id = auth.uid());
 create policy "notifications update self" on public.notifications for update using (user_id = auth.uid());
 create policy "notifications delete self" on public.notifications for delete using (user_id = auth.uid());
+create policy "admin creates notifications" on public.notifications for insert
+  with check (public.current_role() = 'admin');
 
 create policy "settings readable to all authed" on public.app_settings for select
   using (auth.role() = 'authenticated');
@@ -264,7 +373,33 @@ create policy "settings write only admin" on public.app_settings for all
 create policy "own downloads only" on public.report_downloads for select
   using (user_id = auth.uid() or public.current_role() = 'admin');
 create policy "downloads insert self" on public.report_downloads for insert
-  with check (user_id = auth.uid());
+  with check (
+    user_id = auth.uid()
+    and (
+      inspection_id is null
+      or public.current_role() = 'admin'
+      or exists (
+        select 1 from public.inspections i
+        where i.id = inspection_id
+          and (i.customer_id = auth.uid() or i.inspector_id = auth.uid())
+      )
+    )
+  );
+create policy "downloads update self / admin" on public.report_downloads for update
+  using (user_id = auth.uid() or public.current_role() = 'admin')
+  with check (user_id = auth.uid() or public.current_role() = 'admin');
+
+create or replace function public.touch_report_download()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  new.updated_at := now();
+  return new;
+end;
+$$;
+drop trigger if exists touch_report_download on public.report_downloads;
+create trigger touch_report_download
+before update on public.report_downloads
+for each row execute function public.touch_report_download();
 create policy "downloads delete self / admin" on public.report_downloads for delete
   using (user_id = auth.uid() or public.current_role() = 'admin');
 

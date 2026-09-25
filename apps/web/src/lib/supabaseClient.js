@@ -1,14 +1,7 @@
-// Supabase client — additive to PocketBase.
+// Supabase client — cloud system of record for auth, Postgres and storage.
 //
-// PocketBase remains the system of record. Supabase is used (so far) for:
-//   1. Storage      → room / property photos (replaces base64-in-JSON)
-//   2. Auth         → optional Google OAuth & email magic-link
-//   3. Postgres     → reserved for the Phase-3 analytics warehouse
-//
-// If the env vars are absent the helpers fall back to PocketBase-only
-// behaviour so the app keeps building locally without a Supabase project.
-//
-// Read SUPABASE_SETUP.md at the repo root for the one-time provisioning steps.
+// If the env vars are absent, use VITE_APP_TARGET=offline-admin for the
+// local-only build; cloud web builds require Supabase configuration.
 
 import { createClient } from '@supabase/supabase-js';
 

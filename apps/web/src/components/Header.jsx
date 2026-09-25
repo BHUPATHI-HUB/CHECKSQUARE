@@ -7,7 +7,7 @@ import { useChatContext } from '@/contexts/ChatContext.jsx';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Menu, Home, LogOut, User, Shield, Settings, MessageCircle, CheckSquare, Users as UsersIcon, Download } from 'lucide-react';
+import { Menu, Home, LogOut, User, Shield, Settings, MessageCircle, CheckSquare, Users as UsersIcon, Download, CalendarClock, Files } from 'lucide-react';
 import { IS_OFFLINE_ADMIN } from '@/lib/appTarget.js';
 
 const Header = () => {
@@ -70,6 +70,18 @@ const Header = () => {
         <>
           {!IS_OFFLINE_ADMIN && (
             <Link
+              to="/admin/appointments"
+              aria-current={isActive('/admin/appointments') ? 'page' : undefined}
+              className={`${
+                isActive('/admin/appointments') ? 'bg-accent text-accent-foreground font-semibold' : 'text-foreground hover:text-primary'
+              } transition-colors duration-200 rounded-lg px-3 ${mobile ? 'block py-3' : 'py-2 text-sm'}`}
+              onClick={() => mobile && setMobileOpen(false)}
+            >
+              Appointments
+            </Link>
+          )}
+          {!IS_OFFLINE_ADMIN && (
+            <Link
               to="/admin/users"
               className={`${
                 isActive('/admin/users') ? 'bg-accent text-accent-foreground font-semibold' : 'text-foreground hover:text-primary'
@@ -77,6 +89,18 @@ const Header = () => {
               onClick={() => mobile && setMobileOpen(false)}
             >
               Users
+            </Link>
+          )}
+          {!IS_OFFLINE_ADMIN && (
+            <Link
+              to="/admin/documents"
+              aria-current={isActive('/admin/documents') ? 'page' : undefined}
+              className={`${
+                isActive('/admin/documents') ? 'bg-accent text-accent-foreground font-semibold' : 'text-foreground hover:text-primary'
+              } transition-colors duration-200 rounded-lg px-3 ${mobile ? 'block py-3' : 'py-2 text-sm'}`}
+              onClick={() => mobile && setMobileOpen(false)}
+            >
+              Documents
             </Link>
           )}
           <Link
@@ -177,6 +201,22 @@ const Header = () => {
                     </DropdownMenuItem>
                     {role === 'admin' && (
                       <>
+                        {!IS_OFFLINE_ADMIN && (
+                          <DropdownMenuItem asChild className="cursor-pointer">
+                            <Link to="/admin/appointments">
+                              <CalendarClock className="w-4 h-4 mr-2" />
+                              Appointments
+                            </Link>
+                          </DropdownMenuItem>
+                        )}
+                        {!IS_OFFLINE_ADMIN && (
+                          <DropdownMenuItem asChild className="cursor-pointer">
+                            <Link to="/admin/documents">
+                              <Files className="w-4 h-4 mr-2" />
+                              Cloud documents
+                            </Link>
+                          </DropdownMenuItem>
+                        )}
                         {!IS_OFFLINE_ADMIN && (
                           <DropdownMenuItem asChild className="cursor-pointer">
                             <Link to="/admin/users">

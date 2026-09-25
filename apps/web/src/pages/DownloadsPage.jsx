@@ -62,7 +62,7 @@ const DownloadsPage = () => {
 
 	const handleDownload = async (rec) => {
 		// Offline build: re-open / share the file already saved on the device.
-		if (USE_LOCAL_INSPECTION_STORAGE) {
+		if (USE_LOCAL_INSPECTION_STORAGE && !rec.storage_key && !rec.storageKey) {
 			try {
 				const { Capacitor } = await import('@capacitor/core');
 				if (Capacitor?.isNativePlatform?.() && rec.docPath) {
@@ -102,7 +102,7 @@ const DownloadsPage = () => {
 	const handleDelete = async (rec) => {
 		setDeleting(rec.id);
 		try {
-			await data.deleteReportDownload(rec.id);
+			await data.deleteReportDownload(rec.id, rec);
 			setItems((prev) => prev.filter((x) => x.id !== rec.id));
 			toast.success('Permanently deleted.');
 		} catch (err) {
@@ -164,6 +164,8 @@ const DownloadsPage = () => {
 											<Badge variant="secondary" className="uppercase text-xs">
 												{rec.format}
 											</Badge>
+											{(rec.syncStatus || rec.sync_status) === 'pending' && <Badge variant="outline" className="text-xs">Waiting to sync</Badge>}
+											{(rec.syncStatus || rec.sync_status) === 'failed' && <Badge variant="destructive" className="text-xs">Sync failed</Badge>}
 										</div>
 										<p className="text-xs text-muted-foreground mt-0.5">
 											{prettyBytes(rec.fileSize ?? rec.file_size)} ·{' '}
@@ -216,8 +218,8 @@ const DownloadsPage = () => {
 					<DialogHeader>
 						<DialogTitle>Permanently delete?</DialogTitle>
 						<DialogDescription>
-							{USE_LOCAL_INSPECTION_STORAGE
-								? <>Remove <strong>{confirm?.filename}</strong> from this list? The file remains in your device Documents folder.</>
+													{USE_LOCAL_INSPECTION_STORAGE && !confirm?.storage_key && !confirm?.storageKey
+														? <>Remove <strong>{confirm?.filename}</strong> from this list? The file remains in your device Documents folder.</>
 								: <>This will permanently remove <strong>{confirm?.filename}</strong> and its stored file from the server. The copy already on your device is not affected. This cannot be undone.</>}
 						</DialogDescription>
 					</DialogHeader>

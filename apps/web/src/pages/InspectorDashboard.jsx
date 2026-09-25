@@ -20,6 +20,7 @@ import {
 import AdminDownloadReport from '@/components/AdminDownloadReport.jsx';
 import { useFeedback } from '@/contexts/FeedbackContext.jsx';
 import { toast } from 'sonner';
+import data from '@/services/dataService.js';
 
 const fadeUp = {
   initial: { opacity: 0, y: 6 },
@@ -38,6 +39,7 @@ const InspectorDashboard = () => {
   const [loading, setLoading] = useState(() => !getCachedInspectorInspections(user.id));
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [appointments, setAppointments] = useState([]);
 
   const reload = async () => {
     const records = await getInspectionsForInspector(user.id);
@@ -54,16 +56,28 @@ const InspectorDashboard = () => {
     return () => { cancelled = true; };
   }, [user.id, getInspectionsForInspector]);
 
-  // Inspector can pull a previously-submitted, approved, or rejected
-  // inspection back into draft state so they can keep editing without
-  // anyone reviewing it. Approved reports also clear the approval trail
-  // when recalled so a subsequent re-submit goes through review again.
+  useEffect(() => {
+    let cancelled = false;
+    data.listAppointments({ filter: `inspector = "${user.id}"`, sort: 'scheduledAt' })
+      .then((rows) => { if (!cancelled) setAppointments(rows); })
+      .catch((error) => console.warn('Could not load appointments', error));
+    return () => { cancelled = true; };
+  }, [user.id]);
+
+  const updateAppointmentStatus = async (appointment, status) => {
+    try {
+      const updated = await data.transitionAppointment(appointment.id, { status });
+      setAppointments((rows) => rows.map((row) => row.id === updated.id ? { ...row, ...updated } : row));
+      toast.success(`Appointment marked ${status.replace('_', ' ')}`);
+    } catch (error) { toast.error(error?.message || 'Could not update appointment'); }
+  };
+
+  // Only an admin rejection reopens an inspection. Once submitted, the
+  // inspector cannot recall or delete it while it is under review.
   const handleRecallToDraft = async (inspection) => {
-    const wasApproved = inspection.status === 'approved';
+    if (inspection.status !== 'rejected') return;
     const ok = window.confirm(
-      wasApproved
-        ? `"${inspection.metadata?.propertyAddress || 'This inspection'}" is already approved. Moving it to Draft will remove the approval and require it to be re-submitted and re-approved. Continue?`
-        : `Move "${inspection.metadata?.propertyAddress || 'this inspection'}" back to Draft? You can keep editing and re-submit it whenever you're ready.`,
+      `Move "${inspection.metadata?.propertyAddress || 'this inspection'}" back to Draft? You can correct it and re-submit it for review.`,
     );
     if (!ok) return;
     const success = await updateInspectionStatus(inspection.id, 'draft', user, {
@@ -76,12 +90,7 @@ const InspectorDashboard = () => {
     if (success) {
       const addr = inspection.metadata?.propertyAddress || 'The inspection';
       reload();
-      showSuccess(
-        'Moved to Draft',
-        wasApproved
-          ? `Approval cleared on "${addr}". Make your edits and re-submit it for review.`
-          : `"${addr}" is back in your drafts. Keep editing it whenever you're ready.`,
-      );
+      showSuccess('Moved to Draft', `"${addr}" is back in your drafts. Correct it and re-submit it for review.`);
     }
   };
 
@@ -276,22 +285,20 @@ const InspectorDashboard = () => {
                               <Eye className="w-4 h-4" />
                             </Link>
                           </Button>
-                          {inspection.status !== 'approved' && (
+                          {['draft', 'rejected'].includes(inspection.status) && (
                             <Button variant="ghost" size="icon" asChild className="rounded-full">
                               <Link to={`/inspector/inspection/${inspection.id}/edit`} title="Edit">
                                 <Edit className="w-4 h-4" />
                               </Link>
                             </Button>
                           )}
-                          {inspection.status !== 'draft' && (
+                          {inspection.status === 'rejected' && (
                             <Button
                               variant="ghost"
                               size="icon"
                               className="rounded-full text-muted-foreground hover:text-foreground"
                               title={
-                                inspection.status === 'approved'
-                                  ? 'Recall to Draft — will remove approval and require re-review'
-                                  : 'Recall to Draft — keep editing before re-submitting'
+                                'Recall rejected inspection to Draft for correction'
                               }
                               onClick={() => handleRecallToDraft(inspection)}
                             >
@@ -321,6 +328,13 @@ const InspectorDashboard = () => {
                 )}
               </div>
             </motion.div>
+          </section>
+
+          <section className="container mx-auto px-4 sm:px-6 lg:px-12 py-6 sm:py-8">
+            <div className="border bg-card">
+              <div className="px-4 sm:px-6 py-4 border-b bg-muted/30"><p className="editorial-eyebrow">Schedule</p><h2 className="font-display text-2xl mt-2">Assigned appointments</h2></div>
+              {appointments.length === 0 ? <p className="p-6 text-muted-foreground">No appointments assigned.</p> : <div className="divide-y">{appointments.map((appointment) => <div key={appointment.id} className="px-4 sm:px-6 py-4 flex flex-wrap items-center justify-between gap-4"><div><p className="font-medium">{appointment.propertyAddress}</p><p className="text-sm text-muted-foreground">{new Date(appointment.scheduledAt).toLocaleString()} · {appointment.status}</p></div><div className="flex gap-2">{appointment.status === 'scheduled' && <Button size="sm" onClick={() => updateAppointmentStatus(appointment, 'in_progress')}>Start</Button>}{appointment.status === 'in_progress' && <Button size="sm" onClick={() => updateAppointmentStatus(appointment, 'completed')}>Complete</Button>}</div></div>)}</div>}
+            </div>
           </section>
 
           {/* Quick prompt */}

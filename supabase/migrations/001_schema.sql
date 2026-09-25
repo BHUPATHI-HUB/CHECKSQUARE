@@ -54,6 +54,8 @@ create table public.inspections (
     rejected_by        uuid references public.profiles(id),
     rejected_at        timestamptz,
     rejection_reason   text,
+    submitted_at       timestamptz,
+    submitted_by       text,
     deleted_at         timestamptz,
     deleted_by         uuid references public.profiles(id),
     deletion_reason    text,
@@ -152,6 +154,11 @@ create table public.report_downloads (
     format        report_format not null,
     file_size     bigint,
     storage_key   text,                                  -- key in 'reports' bucket
-    created_at    timestamptz not null default now()
+    created_at    timestamptz not null default now(),
+    sync_status   text not null default 'synced' check (sync_status in ('pending','synced','failed')),
+    sync_attempts integer not null default 0 check (sync_attempts >= 0),
+    last_sync_error text,
+    synced_at     timestamptz,
+    updated_at    timestamptz not null default now()
 );
 create index report_downloads_user_idx on public.report_downloads (user_id, created_at desc);

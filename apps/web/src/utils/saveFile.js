@@ -12,6 +12,8 @@ import pb from '@/lib/pocketbaseClient';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
 import { IS_OFFLINE_ADMIN, USE_LOCAL_INSPECTION_STORAGE, OFFLINE_ADMIN_USER } from '@/lib/appTarget.js';
 import data from '@/services/dataService.js';
+import { enqueue, putReportUpload } from '@/lib/localStore.js';
+import { requestSync } from '@/services/syncEngine.js';
 
 const isNative = () => {
 	try {
@@ -41,7 +43,7 @@ const extToFormat = (filename) => {
 };
 
 /**
- * Save a Blob to the user's device + optionally sync to PocketBase.
+ * Save a Blob to the user's device + queue a durable Supabase upload.
  *
  * @param {Blob} blob
  * @param {string} filename
@@ -89,8 +91,10 @@ export async function saveFile(blob, filename, opts = {}) {
 		saveAs(blob, filename);
 	}
 
-	// 2. Sync report download record (best-effort — silent on failure).
-	const USE_SUPABASE_DB = isSupabaseConfigured && (import.meta.env?.VITE_USE_SUPABASE_DB === 'true');
+	// 2. Persist report metadata locally and queue the cloud upload. The local
+	// copy is already safe before this block runs; the outbox makes reconnects
+	// and app restarts retryable instead of best-effort.
+	const USE_SUPABASE_DB = isSupabaseConfigured;
 
 	if (sync && USE_LOCAL_INSPECTION_STORAGE) {
 		// Offline build: record the download in local SQLite so the Downloads
@@ -114,33 +118,38 @@ export async function saveFile(blob, filename, opts = {}) {
 		try {
 			const { data: { user } = {} } = await supabase.auth.getUser();
 			if (user?.id) {
-				// Upload the report blob to the private `reports` bucket so it can be
-				// re-downloaded later from the Downloads page. Best-effort: if the
-				// upload fails we still record the metadata row.
-				let storageKey = null;
-				try {
-					const path = `${user.id}/${Date.now()}-${filename}`;
-					const { error: upErr } = await supabase.storage
-						.from('reports')
-						.upload(path, blob, {
-							contentType: blob.type || 'application/octet-stream',
-							upsert: false,
-						});
-					if (!upErr) storageKey = path;
-				} catch (upErr) {
-					console.warn('Could not upload report to Supabase storage:', upErr?.message || upErr);
-				}
-				await supabase.from('report_downloads').insert({
-					user_id: user.id,
-					inspection_id: inspectionId || null,
+				const id = crypto.randomUUID();
+				const report = {
+					id,
+					userId: user.id,
+					inspectionId: inspectionId || null,
 					filename,
 					format: extToFormat(filename),
-					file_size: blob.size || 0,
-					storage_key: storageKey,
-				});
+					fileSize: blob.size || 0,
+					contentType: blob.type || 'application/octet-stream',
+					created: new Date().toISOString(),
+					syncStatus: 'pending',
+					syncAttempts: 0,
+				};
+				if (USE_LOCAL_INSPECTION_STORAGE) {
+					await data.createReportDownload({
+						id,
+						user: user.id,
+						inspection: inspectionId || null,
+						filename,
+						format: report.format,
+						fileSize: report.fileSize,
+						created: report.created,
+						syncStatus: 'pending',
+						syncAttempts: 0,
+					});
+				}
+				await putReportUpload({ ...report, blob });
+				await enqueue({ type: 'uploadReport', reportId: id, userId: user.id });
+				requestSync();
 			}
 		} catch (err) {
-			console.warn('Could not sync download to Supabase:', err?.message || err);
+			console.warn('Could not queue report for Supabase sync:', err?.message || err);
 		}
 	} else if (sync && pb?.authStore?.isValid) {
 		const authUser = pb?.authStore?.record || pb?.authStore?.model;

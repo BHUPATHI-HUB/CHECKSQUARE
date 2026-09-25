@@ -22,7 +22,7 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { Browser } from '@capacitor/browser';
 
 const SupabaseAuthContext = createContext(null);
-const USE_SUPABASE_AUTH = isSupabaseConfigured && (import.meta.env?.VITE_USE_SUPABASE_AUTH === 'true');
+const USE_SUPABASE_AUTH = isSupabaseConfigured;
 const NATIVE_CALLBACK_URL = 'com.bhupathi.checksquare://auth/callback';
 const shouldUseNativeOAuth = () => IS_HYBRID_APK || Capacitor.isNativePlatform();
 

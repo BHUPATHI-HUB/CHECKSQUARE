@@ -5,7 +5,7 @@ import { IS_OFFLINE_ADMIN, OFFLINE_ADMIN_USER, DEV_TEST_LOGIN } from '@/lib/appT
 import { logActivity } from '@/services/activityLogger.js';
 
 const AuthContext = createContext(null);
-const USE_SUPABASE_AUTH = isSupabaseConfigured && (import.meta.env?.VITE_USE_SUPABASE_AUTH === 'true');
+const USE_SUPABASE_AUTH = isSupabaseConfigured;
 const OFFLINE_CACHE_KEY = 'auth-offline-cache-v1';
 const OFFLINE_SESSION_KEY = 'auth-offline-session-v1';
 const PIN_MAX_ATTEMPTS = 5;

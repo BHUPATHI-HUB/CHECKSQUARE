@@ -1,10 +1,7 @@
 // dataService — single entry point for every CRUD / realtime operation in
-// the React app.  Encapsulates the "PocketBase OR Supabase" decision so
+// the React app. Encapsulates the "Local OR Supabase" decision so
 // individual pages do NOT import either client directly.
 //
-// Toggle: set VITE_USE_SUPABASE_DB=true to route reads/writes through
-// Supabase Postgres.  Default (false) keeps PocketBase.  This lets us cut
-// over one collection at a time during Phase 3 without touching the UI.
 //
 // Each adapter exposes the SAME function signatures.  The PocketBase
 // adapter is the production default; the Supabase adapter exists so a
@@ -14,9 +11,9 @@
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient.js';
 import { IS_OFFLINE_ADMIN, IS_HYBRID_APK, OFFLINE_ADMIN_USER } from '@/lib/appTarget.js';
 import localDb from '@/lib/localDb.js';
+import { deleteReportUpload, listOutbox, deleteOutbox } from '@/lib/localStore.js';
 
-const USE_SUPABASE = isSupabaseConfigured
-  && (import.meta.env?.VITE_USE_SUPABASE_DB === 'true');
+const USE_SUPABASE = isSupabaseConfigured;
 
 let pbClientPromise = null;
 const getPB = async () => {
@@ -85,6 +82,18 @@ const pbAdapter = {
   async updateAppointment(id, payload) {
     const pb = await getPB();
     return pb.collection('appointments').update(id, payload, { $autoCancel: false });
+  },
+  async transitionAppointment(id, payload) {
+    const allowed = ['status', 'inspector', 'inspection', 'scheduledAt', 'timeSlot', 'notes', 'cancelReason', 'rescheduleReason'];
+    const patch = Object.fromEntries(Object.entries(payload).filter(([key]) => allowed.includes(key)));
+    return this.updateAppointment(id, patch);
+  },
+  async createNotification(payload) {
+    const pb = await getPB();
+    return pb.collection('notifications').create({
+      userId: payload.userId, type: payload.type, title: payload.title,
+      message: payload.message || payload.body || '', read: false,
+    }, { $autoCancel: false });
   },
 
   // ─── users ───────────────────────────────────────────────────────────
@@ -172,6 +181,10 @@ const pbAdapter = {
       filter: `user = "${userId}"`, sort: '-created', $autoCancel: false,
     });
   },
+  async listAllReportDownloads() {
+    const pb = await getPB();
+    return pb.collection('report_downloads').getFullList({ sort: '-created', $autoCancel: false });
+  },
   getReportDownloadFileUrl: async (rec) => {
     const pb = await getPB();
     const token = await pb.files.getToken();
@@ -241,7 +254,8 @@ const INSPECTION_LIST_COLUMNS = [
   'id', 'inspector_id', 'inspector_name', 'customer_id', 'status',
   'property_type', 'metadata', 'score', 'score_breakdown', 'include_score',
   'property_metrics', 'approved_by', 'approved_at', 'rejected_by',
-  'rejected_at', 'rejection_reason', 'deleted_at', 'deleted_by',
+  'rejected_at', 'rejection_reason', 'submitted_at', 'submitted_by',
+  'deleted_at', 'deleted_by',
   'deletion_reason', 'created_at', 'updated_at',
 ].join(',');
 
@@ -291,7 +305,7 @@ const supaAdapter = {
       .from('inspections')
       .update(inspectionStatusToRow(payload))
       .eq('id', id)
-      .select('id,status,approved_by,approved_at,rejected_by,rejected_at,rejection_reason,updated_at')
+      .select('id,status,approved_by,approved_at,rejected_by,rejected_at,rejection_reason,submitted_at,submitted_by,updated_at')
       .single();
     if (error) throw error;
     return rowToInspection(data);
@@ -319,6 +333,18 @@ const supaAdapter = {
     const { data, error } = await supabase.from('appointments').update(snake(payload)).eq('id', id).select().single();
     if (error) throw error;
     return rowToAppointment(data);
+  },
+  async transitionAppointment(id, payload) {
+    const allowed = ['status', 'inspector', 'inspection', 'scheduledAt', 'timeSlot', 'notes', 'cancelReason', 'rescheduleReason'];
+    const patch = Object.fromEntries(Object.entries(payload).filter(([key]) => allowed.includes(key)));
+    const { data, error } = await supabase.from('appointments').update(snake(patch)).eq('id', id).select().single();
+    if (error) throw error;
+    return rowToAppointment(data);
+  },
+  async createNotification(payload) {
+    const { data, error } = await supabase.from('notifications').insert(snake({ ...payload, read: false })).select().single();
+    if (error) throw error;
+    return data;
   },
 
   // ─── users (mapped to public.profiles) ──────────────────────────────
@@ -450,13 +476,30 @@ const supaAdapter = {
     if (error) throw error;
     return data || [];
   },
+  async listAllReportDownloads() {
+    const { data, error } = await supabase.from('report_downloads').select('*')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  },
+  async createReportDownload(payload) {
+    const { data, error } = await supabase.from('report_downloads')
+      .insert(snake(payload)).select().single();
+    if (error) throw error;
+    return data;
+  },
   async getReportDownloadFileUrl(rec) {
     if (!rec?.storage_key) return null;
     const { data, error } = await supabase.storage.from('reports').createSignedUrl(rec.storage_key, 3600);
     if (error) throw error;
     return data?.signedUrl;
   },
-  async deleteReportDownload(id) {
+  async deleteReportDownload(id, record = null) {
+    const storageKey = record?.storage_key || record?.storageKey;
+    if (storageKey) {
+      const { error: storageError } = await supabase.storage.from('reports').remove([storageKey]);
+      if (storageError) throw storageError;
+    }
     const { error } = await supabase.from('report_downloads').delete().eq('id', id);
     if (error) throw error;
   },
@@ -578,6 +621,8 @@ function inspectionToRow(p) {
     rejected_by:       p.rejectedBy,
     rejected_at:       p.rejectedAt,
     rejection_reason:  p.rejectionReason,
+    submitted_at:      p.submittedAt,
+    submitted_by:      p.submittedBy,
     deleted_at:        p.deletedAt,
     deleted_by:        p.deletedBy,
     deletion_reason:   p.deletionReason,
@@ -596,6 +641,8 @@ function inspectionStatusToRow(p) {
   else if (p.rejectedBy !== undefined && /^[0-9a-f-]{36}$/i.test(String(p.rejectedBy))) row.rejected_by = p.rejectedBy;
   if (p.rejectedAt !== undefined) row.rejected_at = p.rejectedAt;
   if (p.rejectionReason !== undefined) row.rejection_reason = p.rejectionReason;
+  if (p.submittedAt !== undefined) row.submitted_at = p.submittedAt;
+  if (p.submittedBy !== undefined) row.submitted_by = p.submittedBy;
   return row;
 }
 function rowToInspection(r) {
@@ -621,6 +668,8 @@ function rowToInspection(r) {
     rejectedBy:        r.rejected_by,
     rejectedAt:        r.rejected_at,
     rejectionReason:   r.rejection_reason,
+    submittedAt:       r.submitted_at,
+    submittedBy:        r.submitted_by,
     deletedAt:         r.deleted_at,
     deletedBy:         r.deleted_by,
     deletionReason:    r.deletion_reason,
@@ -710,6 +759,8 @@ const localAdapter = {
   listAppointments: (opts) => localDb.listAppointments(opts),
   createAppointment: (payload) => localDb.createAppointment(payload),
   updateAppointment: (id, payload) => localDb.updateAppointment(id, payload),
+  transitionAppointment: (id, payload) => localDb.updateAppointment(id, payload),
+  createNotification: async () => null,
 
   // users — only ever the hardcoded admin
   listUsers: async () => [OFFLINE_ADMIN_USER],
@@ -731,10 +782,17 @@ const localAdapter = {
   deleteMessage: async () => {},
 
   // report_downloads
-  listReportDownloads: () => localDb.listReportDownloads(),
+  listReportDownloads: (userId) => localDb.listReportDownloads(userId),
+  listAllReportDownloads: () => localDb.listReportDownloads(),
   getReportDownloadFileUrl: async (rec) => rec?.url || '',
   createReportDownload: (payload) => localDb.createReportDownload(payload),
-  deleteReportDownload: (id) => localDb.deleteReportDownload(id),
+  updateReportDownload: (id, payload) => localDb.updateReportDownload(id, payload),
+  deleteReportDownload: async (id) => {
+    await localDb.deleteReportDownload(id);
+    await deleteReportUpload(id);
+    const pending = (await listOutbox()).filter((op) => op.type === 'uploadReport' && op.reportId === id);
+    await Promise.all(pending.map((op) => deleteOutbox(op.id)));
+  },
 
   // app_settings
   getAppSettings: () => localDb.getAppSettings(),
@@ -764,11 +822,21 @@ const hybridAdapter = {
   listAppointments: (opts) => localAdapter.listAppointments(opts),
   createAppointment: (payload) => localAdapter.createAppointment(payload),
   updateAppointment: (id, payload) => localAdapter.updateAppointment(id, payload),
+  transitionAppointment: (id, payload) => localAdapter.transitionAppointment(id, payload),
+  createNotification: (...args) => cloudAdapter.createNotification(...args),
 
   listReportDownloads: (...args) => localAdapter.listReportDownloads(...args),
-  getReportDownloadFileUrl: (...args) => localAdapter.getReportDownloadFileUrl(...args),
+  listAllReportDownloads: (...args) => cloudAdapter.listAllReportDownloads(...args),
+  getReportDownloadFileUrl: async (rec) => {
+    if (rec?.storage_key || rec?.storageKey) return cloudAdapter.getReportDownloadFileUrl(rec);
+    return localAdapter.getReportDownloadFileUrl(rec);
+  },
   createReportDownload: (payload) => localAdapter.createReportDownload(payload),
-  deleteReportDownload: (id) => localAdapter.deleteReportDownload(id),
+  updateReportDownload: (id, payload) => localAdapter.updateReportDownload(id, payload),
+  deleteReportDownload: async (id, record) => {
+    if (record?.storage_key || record?.storageKey) await cloudAdapter.deleteReportDownload(id, record);
+    return localAdapter.deleteReportDownload(id);
+  },
 
   // Cloud-backed settings record (local write-through is handled in SettingsContext)
   getAppSettings: (...args) => cloudAdapter.getAppSettings(...args),
@@ -791,16 +859,18 @@ const hybridAdapter = {
   sendMessage: (...args) => cloudAdapter.sendMessage(...args),
   updateMessage: (...args) => cloudAdapter.updateMessage(...args),
   deleteMessage: (...args) => cloudAdapter.deleteMessage(...args),
+  transitionAppointment: (...args) => cloudAdapter.transitionAppointment(...args),
+  createNotification: (...args) => cloudAdapter.createNotification(...args),
 
   subscribe: (...args) => cloudAdapter.subscribe(...args),
 };
 
 export const dataBackend = IS_OFFLINE_ADMIN
   ? 'local'
-  : (IS_HYBRID_APK ? 'hybrid' : (USE_SUPABASE ? 'supabase' : 'pocketbase'));
+  : (IS_HYBRID_APK ? 'hybrid' : (USE_SUPABASE ? 'supabase' : 'local'));
 
 const adapter = IS_OFFLINE_ADMIN
   ? localAdapter
-  : (IS_HYBRID_APK ? hybridAdapter : (USE_SUPABASE ? supaAdapter : pbAdapter));
+  : (IS_HYBRID_APK ? hybridAdapter : (USE_SUPABASE ? supaAdapter : localAdapter));
 
 export default adapter;

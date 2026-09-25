@@ -1,7 +1,8 @@
 import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext.jsx';
 import data, { dataBackend } from '@/services/dataService.js';
-import { queueInspection, queueInspectionStatus, listPendingInspections, getPendingInspection, putCachedList, getCachedList } from '@/lib/localStore.js';
+import { queueInspection, queueInspectionStatus, listPendingInspections, getPendingInspection, markInspectionSynced, putInspectionMirror, putCachedList, getCachedList } from '@/lib/localStore.js';
 import { requestSync, isNetworkError } from '@/services/syncEngine.js';
 import { IS_HYBRID_APK, USE_LOCAL_INSPECTION_STORAGE } from '@/lib/appTarget.js';
 
@@ -54,6 +55,7 @@ const LIST_FIELDS = [
 // so existing callers (AdminDashboard, InspectorDashboard, InspectionForm, etc.)
 // just need to await the returned promises.
 export const useInspectionStatus = () => {
+  const { user } = useAuth();
   const [listError, setListError] = useState('');
   // List ACTIVE (non-deleted) inspections. Server-side filtering by role is
   // enforced by the collection rules, so admins get everything and inspectors
@@ -69,8 +71,8 @@ export const useInspectionStatus = () => {
       if (!error?.isAbort) setListError('Could not refresh inspections. Any saved records shown below may be out of date.');
       records = inspectionListCache.all || (await getCachedList('inspections:all')) || [];
     }
-    return mergePending(records, await listPendingInspections());
-  }, []);
+    return mergePending(records, await listPendingInspections(user?.role === 'admin' ? null : user?.id));
+  }, [user?.id]);
 
   const getInspectionsForInspector = useCallback(async (inspectorId) => {
     setListError('');
@@ -88,7 +90,7 @@ export const useInspectionStatus = () => {
       if (!error?.isAbort) setListError('Could not refresh inspections. Any saved records shown below may be out of date.');
       records = inspectionListCache.byInspector[inspectorId] || (await getCachedList(cacheKey)) || [];
     }
-    const pending = (await listPendingInspections()).filter((p) => p.inspector === inspectorId);
+    const pending = (await listPendingInspections(inspectorId)).filter((p) => p.inspector === inspectorId || p.inspectorId === inspectorId);
     return mergePending(records, pending);
   }, []);
 
@@ -111,13 +113,13 @@ export const useInspectionStatus = () => {
       // the full local copy so it can still be viewed/edited.
       if (error?.status === 404 || error?.code === 'PGRST116' || isNetworkError(error)) {
         const local = await getPendingInspection(inspectionId);
-        if (local) return local;
+        if (local && (user?.role === 'admin' || local.inspector === user?.id || local.customer === user?.id)) return local;
         if (error?.status === 404 || error?.code === 'PGRST116') return null;
       }
       console.error('Failed to fetch inspection', error);
       return null;
     }
-  }, []);
+  }, [user?.id, user?.role]);
 
   const updateInspectionStatus = useCallback(async (inspectionId, newStatus, user, extra = {}) => {
     try {
@@ -135,10 +137,11 @@ export const useInspectionStatus = () => {
       // then queue only this status patch for the cloud adapter.
       if (IS_HYBRID_APK) {
         await data.transitionInspectionStatus(inspectionId, payload);
-        await queueInspectionStatus(inspectionId, payload);
+        await queueInspectionStatus(inspectionId, payload, user?.id);
         requestSync();
       } else {
         await data.transitionInspectionStatus(inspectionId, payload);
+        await markInspectionSynced(inspectionId, payload);
       }
       clearInspectionListCache();
       return true;
@@ -147,7 +150,7 @@ export const useInspectionStatus = () => {
       toast.error('Failed to update status');
       return false;
     }
-  }, []);
+  }, [user?.id]);
 
   const softDeleteInspection = useCallback(async (inspectionId, user, reason = 'Manual Admin Deletion') => {
     try {
@@ -183,6 +186,11 @@ export const useInspectionStatus = () => {
 
   const permanentlyDeleteInspection = useCallback(async (inspectionId) => {
     try {
+      const record = await data.getInspection(inspectionId).catch(() => getPendingInspection(inspectionId));
+      if (user?.role === 'inspector' && (!record || record.status !== 'draft')) {
+        toast.error('Submitted inspections cannot be deleted by an inspector.');
+        return false;
+      }
       await data.deleteInspection(inspectionId);
       clearInspectionListCache();
       return true;
@@ -191,9 +199,20 @@ export const useInspectionStatus = () => {
       toast.error('Failed to permanently delete');
       return false;
     }
-  }, []);
+  }, [user?.role]);
 
   const saveInspection = useCallback(async (inspectionData, existingId = null) => {
+    const currentStatus = inspectionData.status || 'draft';
+    if (user?.role === 'inspector' && existingId) {
+      const existing = await data.getInspection(existingId).catch(() => getPendingInspection(existingId));
+      if (!existing || !['draft', 'rejected'].includes(existing.status)) {
+        toast.error('This inspection is submitted for admin review and is locked.');
+        return null;
+      }
+    }
+    const submittedAt = currentStatus === 'pending'
+      ? (inspectionData.submittedAt || new Date().toISOString())
+      : inspectionData.submittedAt;
     const payload = {
       metadata: inspectionData.metadata || {},
       areaCalculations: inspectionData.areaCalculations || [],
@@ -203,6 +222,8 @@ export const useInspectionStatus = () => {
       roomInspections: inspectionData.roomInspections || [],
       propertyType: inspectionData.propertyType || 'Residential',
       status: inspectionData.status || 'pending',
+      ...(submittedAt && { submittedAt }),
+      ...(currentStatus === 'pending' && user?.id && { submittedBy: inspectionData.submittedBy || user.id }),
       inspector: inspectionData.inspector,
       inspectorName: inspectionData.inspectorName,
       customer: inspectionData.customer || null,
@@ -275,6 +296,10 @@ export const useInspectionStatus = () => {
       if (IS_HYBRID_APK && payload.status !== 'draft') {
         await queueInspection(record);
         requestSync();
+      } else if (!USE_LOCAL_INSPECTION_STORAGE) {
+        // Keep a durable on-device mirror of cloud-saved inspections so a
+        // successful upload never removes the inspector's local copy.
+        await putInspectionMirror(record);
       }
       clearInspectionListCache();
       return record;
@@ -288,7 +313,7 @@ export const useInspectionStatus = () => {
       toast.error('Failed to save inspection');
       return null;
     }
-  }, []);
+  }, [user?.id, user?.role]);
 
   return {
     getAllInspections,

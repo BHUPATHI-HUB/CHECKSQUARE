@@ -28,7 +28,7 @@ const InspectionDetailView = ({ inspection, onUpdate }) => {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   const isAdmin = role === 'admin';
-  const canEdit = isAdmin || (user?.id === inspection.inspectorId && inspection.status !== 'approved');
+  const canEdit = isAdmin || (user?.id === inspection.inspector && ['draft', 'rejected'].includes(inspection.status));
   const canDownload = inspection.status === 'approved' || isAdmin;
 
   const handleApprove = () => updateStatus('approved');

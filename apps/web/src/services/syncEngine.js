@@ -10,11 +10,13 @@
 
 import { supabase, isSupabaseConfigured, SUPABASE_PHOTO_BUCKET } from '@/lib/supabaseClient.js';
 import { cloudData } from '@/services/dataService.js';
+import localDb from '@/lib/localDb.js';
 import { IS_OFFLINE_ADMIN } from '@/lib/appTarget.js';
 import {
   listOutbox, updateOutbox, deleteOutbox,
-  getPhotoBlob, markPhotoSynced, deletePhotoBlob,
-  getPendingInspection, deletePendingInspection, outboxStats,
+  getPhotoBlob, markPhotoSynced, markInspectionSynced,
+  getReportUpload,
+  getPendingInspection, outboxStats,
   resetOutboxBackoff, requestPersistentStorage,
 } from '@/lib/localStore.js';
 
@@ -57,6 +59,12 @@ const automaticSyncAllowed = () => {
 };
 
 async function handleOp(op) {
+  if (isSupabaseConfigured && ['upsertInspection', 'inspectionStatus'].includes(op.type) && op.userId) {
+    const { data: { user } = {} } = await supabase.auth.getUser();
+    if (!user?.id || user.id !== op.userId) {
+      throw new Error('This inspection sync belongs to a different signed-in user.');
+    }
+  }
   if (op.type === 'uploadPhoto') {
     if (!isSupabaseConfigured) throw new Error('Photo storage is not configured.');
     const rec = await getPhotoBlob(op.path);
@@ -66,15 +74,58 @@ async function handleOp(op) {
       .upload(op.path, rec.blob, { contentType: rec.contentType || 'image/jpeg', upsert: true });
     if (error) throw error;
     await markPhotoSynced(op.path);
-    await deletePhotoBlob(op.path); // signed URLs serve it from now on
   } else if (op.type === 'upsertInspection') {
     const inspectionId = op.inspectionId || op.id;
     const insp = await getPendingInspection(inspectionId);
     if (!insp) return;
     await cloudData.upsertInspection(insp);
-    await deletePendingInspection(inspectionId);
+    // Keep the local submitted copy for offline viewing and audit.
+    await markInspectionSynced(inspectionId);
   } else if (op.type === 'inspectionStatus') {
     await cloudData.transitionInspectionStatus(op.inspectionId, op.payload || {});
+    await markInspectionSynced(op.inspectionId, op.payload || {});
+  } else if (op.type === 'uploadReport') {
+    if (!isSupabaseConfigured) throw new Error('Report storage is not configured.');
+    const report = await getReportUpload(op.reportId);
+    if (!report?.blob) return;
+    const { data: { user } = {} } = await supabase.auth.getUser();
+    if (!user?.id || user.id !== report.userId) {
+      throw new Error('The report is queued for a different signed-in user.');
+    }
+    const safeName = String(report.filename || 'report').replace(/[^a-zA-Z0-9._-]/g, '_');
+    const storageKey = report.storageKey || `${report.userId}/${report.id}-${safeName}`;
+    const { error: uploadError } = await supabase.storage.from('reports').upload(
+      storageKey,
+      report.blob,
+      { contentType: report.contentType || 'application/octet-stream', upsert: true },
+    );
+    if (uploadError) throw uploadError;
+
+    const { error: rowError } = await supabase.from('report_downloads').upsert({
+      id: report.id,
+      user_id: report.userId,
+      inspection_id: report.inspectionId || null,
+      filename: report.filename,
+      format: report.format,
+      file_size: report.fileSize || 0,
+      storage_key: storageKey,
+      sync_status: 'synced',
+      sync_attempts: report.syncAttempts || 0,
+      last_sync_error: null,
+      synced_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'id' });
+    if (rowError) throw rowError;
+
+    await localDb.updateReportDownload(report.id, {
+      storageKey,
+      syncStatus: 'synced',
+      syncAttempts: report.syncAttempts || 0,
+      lastSyncError: null,
+      syncedAt: new Date().toISOString(),
+    });
+    // Keep the local report blob as an offline re-open/audit copy. Explicit
+    // user/admin deletion removes it through the normal delete flow.
   }
 }
 
@@ -105,6 +156,15 @@ export async function drainOutbox() {
         op.tries = (op.tries || 0) + 1;
         op.nextAttemptAt = Date.now() + Math.min(5 * 60 * 1000, 1000 * 2 ** op.tries);
         op.lastError = String(e?.message || e);
+        if (op.type === 'uploadReport') {
+          try {
+            await localDb.updateReportDownload(op.reportId, {
+              syncStatus: 'failed',
+              syncAttempts: op.tries,
+              lastSyncError: op.lastError,
+            });
+          } catch { /* keep the outbox as the source of truth */ }
+        }
         // eslint-disable-next-line no-await-in-loop
         await updateOutbox(op);
         if (isNetworkError(e)) break; // stop hammering a dead connection

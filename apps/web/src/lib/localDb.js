@@ -242,11 +242,19 @@ export const localDb = {
   },
 
   // report_downloads
-  async listReportDownloads() {
-    return applySort(await readAll('report_downloads'), '-created');
+  async listReportDownloads(userId = null) {
+    const rows = await readAll('report_downloads');
+    const filtered = userId
+      ? rows.filter((row) => (row.user || row.user_id) === userId)
+      : rows;
+    return applySort(filtered, '-created');
   },
   async createReportDownload(payload) {
     return writeOne('report_downloads', { ...payload, id: payload.id || genId() });
+  },
+  async updateReportDownload(id, payload) {
+    const existing = (await readOne('report_downloads', id)) || { id };
+    return writeOne('report_downloads', { ...existing, ...payload, id });
   },
   async deleteReportDownload(id) {
     return deleteOne('report_downloads', id);

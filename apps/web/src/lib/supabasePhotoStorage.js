@@ -19,7 +19,7 @@
 
 import { supabase, isSupabaseConfigured, SUPABASE_PHOTO_BUCKET } from '@/lib/supabaseClient.js';
 import {
-  putPhotoBlob, getPhotoBlob, markPhotoSynced, deletePhotoBlob, enqueue,
+  putPhotoBlob, getPhotoBlob, markPhotoSynced, enqueue,
 } from '@/lib/localStore.js';
 import { requestSync } from '@/services/syncEngine.js';
 import { IS_OFFLINE_ADMIN } from '@/lib/appTarget.js';
@@ -185,7 +185,6 @@ export async function uploadInspectionPhoto(file, { inspectionId = 'draft', room
         .upload(path, blob, { contentType, upsert: true });
       if (error) throw error;
       await markPhotoSynced(path);
-      await deletePhotoBlob(path); // synced — signed URLs serve it from now on
       return { id, storageKey: path, capturedAt };
     } catch (e) {
       console.warn('[supabase] direct upload failed, queuing for sync:', e?.message || e);
