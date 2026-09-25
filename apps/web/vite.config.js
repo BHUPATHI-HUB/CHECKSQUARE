@@ -6,7 +6,6 @@ import inlineEditPlugin from './plugins/visual-editor/vite-plugin-react-inline-e
 import editModeDevPlugin from './plugins/visual-editor/vite-plugin-edit-mode.js';
 import selectionModePlugin from './plugins/selection-mode/vite-plugin-selection-mode.js';
 import iframeRouteRestorationPlugin from './plugins/vite-plugin-iframe-route-restoration.js';
-import pocketbaseAuthPlugin from './plugins/vite-plugin-pocketbase-auth.js';
 
 import { readFileSync } from 'node:fs';
 
@@ -296,7 +295,7 @@ export default defineConfig({
 	},
 	customLogger: logger,
 	plugins: [
-		...(isDev ? [inlineEditPlugin(), editModeDevPlugin(), selectionModePlugin(), iframeRouteRestorationPlugin(), pocketbaseAuthPlugin()] : []),
+		...(isDev ? [inlineEditPlugin(), editModeDevPlugin(), selectionModePlugin(), iframeRouteRestorationPlugin()] : []),
 		react(),
 		addTransformIndexHtml,
 		VitePWA({
@@ -312,35 +311,6 @@ export default defineConfig({
 				cleanupOutdatedCaches: true,
 				clientsClaim: true,
 				skipWaiting: true,
-				// Level 2 offline support: cache PocketBase API GETs + uploaded files
-				// so users can browse previously-loaded data with no network.
-				// Writes (POST/PATCH/DELETE) are NOT cached — they will fail offline
-				// and the OfflineBanner UI tells the user to reconnect.
-				runtimeCaching: [
-					{
-						// Collection list/view records (e.g. /api/collections/inspections/records)
-						urlPattern: /\/api\/collections\/[^/]+\/records/,
-						method: 'GET',
-						handler: 'NetworkFirst',
-						options: {
-							cacheName: 'pb-api-records',
-							networkTimeoutSeconds: 5,
-							expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 7 },
-							cacheableResponse: { statuses: [0, 200] },
-						},
-					},
-					{
-						// Uploaded files / photos (e.g. /api/files/<collection>/<id>/<name>)
-						urlPattern: /\/api\/files\//,
-						method: 'GET',
-						handler: 'CacheFirst',
-						options: {
-							cacheName: 'pb-api-files',
-							expiration: { maxEntries: 500, maxAgeSeconds: 60 * 60 * 24 * 30 },
-							cacheableResponse: { statuses: [0, 200] },
-						},
-					},
-				],
 			},
 			manifest: {
 				name: 'CheckSquare',
@@ -368,18 +338,6 @@ export default defineConfig({
 			'.app-preview.com',
 			'.app-preview.io',
 		],
-		// Local dev only: proxy the Hostinger path `/hcgi/platform` to a locally
-		// running PocketBase server (default http://127.0.0.1:8090). In production
-		// on Hostinger, the same path is served by their reverse proxy, so the
-		// frontend code (`new Pocketbase('/hcgi/platform')`) needs no changes.
-		proxy: {
-			'/hcgi/platform': {
-				target: process.env.VITE_PB_URL || 'http://127.0.0.1:8090',
-				changeOrigin: true,
-				ws: true,
-				rewrite: (path) => path.replace(/^\/hcgi\/platform/, ''),
-			},
-		},
 		fs: {
 			strict: true,
 			allow: [
@@ -395,6 +353,9 @@ export default defineConfig({
 		},
 	},
 	build: {
+		// The monorepo output is outside apps/web. Clear only that generated
+		// directory so stale hashed chunks never enter the PWA precache.
+		emptyOutDir: true,
 		// Push the warning threshold higher to silence noise — the heavy report
 		// libs are split into separate chunks below and only load on demand.
 		chunkSizeWarningLimit: 1500,

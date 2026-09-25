@@ -27,6 +27,7 @@ import {
   ChevronRight, Users, Filter, X, FileText, Image as ImageIcon, Trash2, Camera,
 } from 'lucide-react';
 import WebcamCaptureModal from '@/components/WebcamCaptureModal.jsx';
+import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient.js';
 
 // ─── Static config ───────────────────────────────────────────────────────
 const EMOJIS = ['😀','😁','😂','🤣','😊','😍','🤔','😎','😴','🙃','👍','👎','🙏','👏','💪','✅','❌','⚠️','📷','📎','🏠','🔧','🚨','💡','🔥','🎉','❤️','✨'];
@@ -49,38 +50,39 @@ const matchAttachment = (msg, filter) => {
   return true;
 };
 
-// ─── Attachment renderer ─────────────────────────────────────────────────
-// PocketBase stores file fields as filename strings; build the URL from
-// the record's collectionId/id/filename triple.
-const fileUrl = (record, filename) => {
-  if (!filename) return null;
-  if (/^https?:\/\//i.test(filename)) return filename;
-  if (record?.collectionId && record?.id) {
-    const pbBase = (import.meta.env?.VITE_PB_URL || 'http://127.0.0.1:8090').replace(/\/$/, '');
-    return `${pbBase}/api/files/${record.collectionId}/${record.id}/${filename}`;
-  }
-  return null;
-};
-
 const Attachment = ({ msg, filename }) => {
-  const url = fileUrl(msg, filename);
-  const isImg = /\.(png|jpe?g|gif|webp)$/i.test(filename);
+  const storageKey = typeof filename === 'object' ? filename?.storageKey : null;
+  const name = typeof filename === 'string' ? filename : filename?.name || 'Attachment';
+  const [url, setUrl] = useState(typeof filename === 'string' && /^https?:\/\//i.test(filename) ? filename : null);
+  useEffect(() => {
+    let active = true;
+    if (!storageKey || !isSupabaseConfigured) {
+      setUrl(typeof filename === 'string' && /^https?:\/\//i.test(filename) ? filename : null);
+      return () => { active = false; };
+    }
+    setUrl(null);
+    supabase.storage.from('chat-attachments').createSignedUrl(storageKey, 3600)
+      .then(({ data, error }) => { if (active) setUrl(error ? null : data?.signedUrl || null); })
+      .catch(() => { if (active) setUrl(null); });
+    return () => { active = false; };
+  }, [filename, storageKey]);
+  const isImg = /\.(png|jpe?g|gif|webp)$/i.test(name);
   if (isImg) {
     return (
-      <a href={url} target="_blank" rel="noreferrer" className="block max-w-[200px] rounded-lg overflow-hidden border bg-background">
-        <img src={url} alt={filename} className="w-full h-auto object-cover" />
+      <a href={url || undefined} target="_blank" rel="noreferrer" className="block max-w-[200px] rounded-lg overflow-hidden border bg-background">
+        {url ? <img src={url} alt={name} className="w-full h-auto object-cover" /> : <span className="block p-3 text-xs text-muted-foreground">{name} unavailable</span>}
       </a>
     );
   }
   return (
     <a
-      href={url}
+      href={url || undefined}
       target="_blank"
       rel="noreferrer"
       className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border bg-background text-xs hover:bg-muted"
     >
       <FileText className="w-4 h-4 text-primary" />
-      <span className="truncate max-w-[160px]">{filename}</span>
+      <span className="truncate max-w-[160px]">{name}</span>
     </a>
   );
 };

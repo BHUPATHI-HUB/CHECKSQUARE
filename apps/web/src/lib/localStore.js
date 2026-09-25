@@ -82,8 +82,29 @@ export async function putPhotoBlob({ path, blob, contentType, inspectionId }) {
 }
 
 export async function getPhotoBlob(path) {
-  try { return await tx(STORES.photos, 'readonly', (s) => reqToPromise(s.get(path))); }
-  catch { return null; }
+  try {
+    const cached = await tx(STORES.photos, 'readonly', (s) => reqToPromise(s.get(path)));
+    if (cached?.blob) return cached;
+  } catch { /* try the native backup below */ }
+  // Android keeps a second copy in app-private storage. Recover it when the
+  // WebView's IndexedDB entry is missing so queued uploads can still retry.
+  try {
+    const { Capacitor } = await import('@capacitor/core');
+    if (!Capacitor?.isNativePlatform?.()) return null;
+    const { Filesystem, Directory } = await import('@capacitor/filesystem');
+    const { data } = await Filesystem.readFile({
+      path: `checksquare-photos/${path}`, directory: Directory.Data,
+    });
+    const bytes = typeof data === 'string'
+      ? Uint8Array.from(atob(data), (char) => char.charCodeAt(0))
+      : data;
+    const ext = path.split('.').pop()?.toLowerCase();
+    const contentType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+    const blob = new Blob([bytes], { type: contentType });
+    try { await putPhotoBlob({ path, blob, contentType, inspectionId: path.split('/')[0] }); }
+    catch { /* native bytes are still usable for this upload */ }
+    return { path, blob, contentType, syncStatus: 'pending' };
+  } catch { return null; }
 }
 
 export async function markPhotoSynced(path) {
@@ -107,6 +128,24 @@ export async function deletePhotoBlob(path) {
 export async function putReportUpload(record) {
   await tx(STORES.reports, 'readwrite', (s) => s.put(record));
   return record;
+}
+
+// A report must never be persisted without its retry request. Both writes
+// commit together, so an app close cannot strand a pending report blob.
+export async function queueReportUpload(record) {
+  const db = await openDB();
+  const now = Date.now();
+  return new Promise((resolve, reject) => {
+    const t = db.transaction([STORES.reports, STORES.outbox], 'readwrite');
+    t.objectStore(STORES.reports).put(record);
+    t.objectStore(STORES.outbox).add({
+      type: 'uploadReport', reportId: record.id, userId: record.userId,
+      tries: 0, nextAttemptAt: now, createdAt: now,
+    });
+    t.oncomplete = () => resolve(record);
+    t.onerror = () => reject(t.error);
+    t.onabort = () => reject(t.error);
+  });
 }
 
 export async function getReportUpload(id) {

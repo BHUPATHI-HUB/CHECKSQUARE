@@ -273,6 +273,7 @@ const InspectionDetailView = ({ inspection, onUpdate }) => {
           open={managerOpen}
           onOpenChange={setManagerOpen}
           room={selectedRoom}
+          inspectionId={localInspection?.id || inspection?.id}
           onSave={handleSaveRoom}
         />
       )}

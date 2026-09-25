@@ -62,7 +62,7 @@ const DownloadsPage = () => {
 
 	const handleDownload = async (rec) => {
 		// Offline build: re-open / share the file already saved on the device.
-		if (USE_LOCAL_INSPECTION_STORAGE && !rec.storage_key && !rec.storageKey) {
+		if (USE_LOCAL_INSPECTION_STORAGE && rec.docPath) {
 			try {
 				const { Capacitor } = await import('@capacitor/core');
 				if (Capacitor?.isNativePlatform?.() && rec.docPath) {
@@ -73,16 +73,20 @@ const DownloadsPage = () => {
 						directory: Directory.Documents,
 					});
 					await Share.share({ title: rec.filename, url: uri, dialogTitle: 'Open or share report' });
+					return;
 				} else {
 					toast.info('The report was saved to your device when you first downloaded it.');
 				}
 			} catch (err) {
 				console.warn('Offline re-open failed:', err);
-				toast.error('Could not open the saved file. It may have been moved or deleted.');
+				if (!rec.storage_key && !rec.storageKey) {
+					toast.error('Could not open the saved file. It may have been moved or deleted.');
+					return;
+				}
 			}
-			return;
+			if (!rec.storage_key && !rec.storageKey) return;
 		}
-		if (!rec.file && !rec.storage_key) {
+		if (!rec.file && !rec.storage_key && !rec.storageKey) {
 			toast.error('This download has no stored file. It may have been generated before sync.');
 			return;
 		}
@@ -188,8 +192,8 @@ const DownloadsPage = () => {
 											size="sm"
 											variant="outline"
 											onClick={() => handleDownload(rec)}
-											disabled={!USE_LOCAL_INSPECTION_STORAGE && !rec.file && !rec.storage_key}
-											title={USE_LOCAL_INSPECTION_STORAGE ? 'Open or share saved report' : ((rec.file || rec.storage_key) ? 'Re-download' : 'No stored file')}
+											disabled={!rec.docPath && !rec.file && !rec.storage_key && !rec.storageKey}
+											title={rec.docPath ? 'Open or share saved report' : ((rec.file || rec.storage_key || rec.storageKey) ? 'Re-download' : 'No stored file')}
 										>
 											<Download className="w-4 h-4" />
 											<span className="hidden sm:inline ml-2">Download</span>

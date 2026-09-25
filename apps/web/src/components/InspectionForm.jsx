@@ -19,6 +19,8 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { computeInspectionScore, gradeFor, PROPCHK_PRIORITY_META } from '@/utils/scoring';
 import WebcamCaptureModal from '@/components/WebcamCaptureModal.jsx';
+import PhotoImg from '@/components/PhotoImg.jsx';
+import { uploadInspectionPhoto } from '@/lib/supabasePhotoStorage.js';
 import { toast } from 'sonner';
 import { ChevronLeft, ChevronRight, Plus, Trash2, AlertCircle, FileImage as ImageIcon, Camera, Upload, Droplets, X, Calendar as CalendarIcon, User as UserIcon, MapPin, Home as HomeIcon } from 'lucide-react';
 
@@ -83,19 +85,12 @@ const DEFAULT_BRAND_CATALOG = {
   Paints:       ['Asian Paints', 'Berger', 'Nerolac', 'Dulux'],
 };
 
-const fileToDataUrl = (file) => new Promise((resolve, reject) => {
-  const reader = new FileReader();
-  reader.onload = () => resolve(reader.result);
-  reader.onerror = reject;
-  reader.readAsDataURL(file);
-});
-
 /**
  * BrandPhotoRow — selected-brand chip with Capture + Upload buttons that map
  * to two separate hidden file inputs so mobile camera & file picker each work
  * deterministically.
  */
-const BrandPhotoRow = ({ brand, onSetPhoto, onRemoveBrand }) => {
+const BrandPhotoRow = ({ brand, inspectionId, onSetPhoto, onRemoveBrand }) => {
   const camRef = useRef(null);
   const fileRef = useRef(null);
   const [camOpen, setCamOpen] = useState(false);
@@ -104,10 +99,15 @@ const BrandPhotoRow = ({ brand, onSetPhoto, onRemoveBrand }) => {
   const consumeFile = async (file) => {
     if (!file) return;
     try {
-      const url = await fileToDataUrl(file);
-      onSetPhoto({ id: `brand_${Date.now()}`, url, capturedAt: new Date().toISOString() });
+      const photo = await uploadInspectionPhoto(file, {
+        inspectionId: inspectionId || 'draft',
+        roomKey: `brand-${brand.name}`,
+        maxEdge: 1600,
+        quality: 0.85,
+      });
+      onSetPhoto(photo);
     } catch {
-      toast.error('Failed to read photo');
+      toast.error('Failed to save brand photo on this device');
     }
   };
 
@@ -122,7 +122,7 @@ const BrandPhotoRow = ({ brand, onSetPhoto, onRemoveBrand }) => {
       <div className="flex-shrink-0">
         {brand.photo ? (
           <div className="relative w-16 h-16 rounded-lg overflow-hidden">
-            <img src={brand.photo.url} alt={brand.name} className="w-full h-full object-cover" />
+            <PhotoImg photo={brand.photo} alt={brand.name} fit="cover" className="w-full h-full" />
             <button
               type="button"
               onClick={() => onSetPhoto(null)}
@@ -165,7 +165,7 @@ const BrandPhotoRow = ({ brand, onSetPhoto, onRemoveBrand }) => {
  * (TDS meter, pH strip, source tap, etc.). Images are stored as data-URLs in
  * `waterQuality.images: [{ id, url, capturedAt }]` and rendered on the PDF.
  */
-const WaterQualityPhotos = ({ images, onChange }) => {
+const WaterQualityPhotos = ({ images, inspectionId, onChange }) => {
   const camRef = useRef(null);
   const fileRef = useRef(null);
   const [camOpen, setCamOpen] = useState(false);
@@ -174,10 +174,15 @@ const WaterQualityPhotos = ({ images, onChange }) => {
   const addImage = async (file) => {
     if (!file) return;
     try {
-      const url = await fileToDataUrl(file);
-      onChange([...(images || []), { id: `water_${Date.now()}`, url, capturedAt: new Date().toISOString() }]);
+      const photo = await uploadInspectionPhoto(file, {
+        inspectionId: inspectionId || 'draft',
+        roomKey: 'water-quality',
+        maxEdge: 1600,
+        quality: 0.85,
+      });
+      onChange([...(images || []), photo]);
     } catch {
-      toast.error('Failed to read photo');
+      toast.error('Failed to save water-test photo on this device');
     }
   };
 
@@ -220,7 +225,7 @@ const WaterQualityPhotos = ({ images, onChange }) => {
         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
           {images.map((img) => (
             <div key={img.id} className="relative aspect-square rounded overflow-hidden border group">
-              <img src={img.url} alt="Water test" className="w-full h-full object-contain bg-muted/30" />
+              <PhotoImg photo={img} alt="Water test" className="w-full h-full" />
               <button
                 type="button"
                 onClick={() => remove(img.id)}
@@ -345,7 +350,7 @@ const InspectionForm = ({ existingInspection = null, isEditing = false }) => {
 
   // ---- Silent auto-save as draft (server-side) -----------------------------
   // Once the user has typed enough to make the row meaningful (an address or
-  // prepared-for name), debounce-save the form to PocketBase as a draft. This
+  // prepared-for name), debounce-save the form to the selected data service as a draft. This
   // ensures that even if they navigate away or close the tab, the work is
   // recoverable from the dashboard's drafts list with an Edit action.
   useEffect(() => {
@@ -993,6 +998,7 @@ const InspectionForm = ({ existingInspection = null, isEditing = false }) => {
 
               <WaterQualityPhotos
                 images={formData.waterQuality.images || []}
+                inspectionId={existingInspection?.id || draftId}
                 onChange={(images) => updateWater('images', images)}
               />
 
@@ -1047,6 +1053,7 @@ const InspectionForm = ({ existingInspection = null, isEditing = false }) => {
                         <BrandPhotoRow
                           key={b.name}
                           brand={b}
+                          inspectionId={existingInspection?.id || draftId}
                           onSetPhoto={(photo) => setBrandPhoto(b.name, photo)}
                           onRemoveBrand={() => toggleBrand(b.name, b.category)}
                         />
@@ -1404,6 +1411,7 @@ const InspectionForm = ({ existingInspection = null, isEditing = false }) => {
           open={managerOpen}
           onOpenChange={setManagerOpen}
           room={formData.roomInspections.find(r => r.id === selectedRoomId)}
+          inspectionId={existingInspection?.id || draftId}
           onSave={handleSaveRoom}
         />
       )}

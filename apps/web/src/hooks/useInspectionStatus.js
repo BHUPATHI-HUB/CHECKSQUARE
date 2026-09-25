@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext.jsx';
-import data, { dataBackend } from '@/services/dataService.js';
+import data from '@/services/dataService.js';
 import { queueInspection, queueInspectionStatus, listPendingInspections, getPendingInspection, markInspectionSynced, putInspectionMirror, putCachedList, getCachedList } from '@/lib/localStore.js';
 import { requestSync, isNetworkError } from '@/services/syncEngine.js';
 import { IS_HYBRID_APK, USE_LOCAL_INSPECTION_STORAGE } from '@/lib/appTarget.js';
@@ -51,7 +51,7 @@ const LIST_FIELDS = [
   'approvedBy', 'approvedAt', 'rejectedBy', 'rejectedAt',
 ].join(',');
 
-// All inspection CRUD now goes through PocketBase. We keep the same hook surface
+// All inspection CRUD goes through the configured data service. Keep the same hook surface
 // so existing callers (AdminDashboard, InspectorDashboard, InspectionForm, etc.)
 // just need to await the returned promises.
 export const useInspectionStatus = () => {
@@ -242,9 +242,9 @@ export const useInspectionStatus = () => {
     // Client-stable id so an offline draft has a permanent identity that the
     // sync engine can upsert later without creating duplicates.
     const clientId = existingId || inspectionData.id
-      || (dataBackend === 'pocketbase' ? Array.from(crypto.getRandomValues(new Uint8Array(15)), (n) => 'abcdefghijklmnopqrstuvwxyz0123456789'[n % 36]).join('') : (typeof crypto !== 'undefined' && crypto.randomUUID
+      || (typeof crypto !== 'undefined' && crypto.randomUUID
         ? crypto.randomUUID()
-        : `local_${Date.now()}_${Math.random().toString(36).slice(2)}`));
+        : `local_${Date.now()}_${Math.random().toString(36).slice(2)}`);
 
     // Persist locally + queue for sync. Used when offline OR when a network
     // write fails, so the inspector never loses a submission with no signal.

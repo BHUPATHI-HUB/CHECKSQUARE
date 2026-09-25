@@ -59,7 +59,7 @@ const automaticSyncAllowed = () => {
 };
 
 async function handleOp(op) {
-  if (isSupabaseConfigured && ['upsertInspection', 'inspectionStatus'].includes(op.type) && op.userId) {
+  if (isSupabaseConfigured && ['uploadPhoto', 'upsertInspection', 'inspectionStatus'].includes(op.type) && op.userId) {
     const { data: { user } = {} } = await supabase.auth.getUser();
     if (!user?.id || user.id !== op.userId) {
       throw new Error('This inspection sync belongs to a different signed-in user.');
@@ -71,8 +71,13 @@ async function handleOp(op) {
     if (!rec?.blob) return; // already cleaned up / nothing to send
     const { error } = await supabase.storage
       .from(SUPABASE_PHOTO_BUCKET)
-      .upload(op.path, rec.blob, { contentType: rec.contentType || 'image/jpeg', upsert: true });
-    if (error) throw error;
+      .upload(op.path, rec.blob, { contentType: rec.contentType || 'image/jpeg', upsert: false });
+    if (error) {
+      if (String(error.statusCode) !== '409') throw error;
+      const { error: readError } = await supabase.storage
+        .from(SUPABASE_PHOTO_BUCKET).createSignedUrl(op.path, 60);
+      if (readError) throw error;
+    }
     await markPhotoSynced(op.path);
   } else if (op.type === 'upsertInspection') {
     const inspectionId = op.inspectionId || op.id;
@@ -97,9 +102,13 @@ async function handleOp(op) {
     const { error: uploadError } = await supabase.storage.from('reports').upload(
       storageKey,
       report.blob,
-      { contentType: report.contentType || 'application/octet-stream', upsert: true },
+      { contentType: report.contentType || 'application/octet-stream', upsert: false },
     );
-    if (uploadError) throw uploadError;
+    if (uploadError) {
+      if (String(uploadError.statusCode) !== '409') throw uploadError;
+      const { error: readError } = await supabase.storage.from('reports').createSignedUrl(storageKey, 60);
+      if (readError) throw uploadError;
+    }
 
     const { error: rowError } = await supabase.from('report_downloads').upsert({
       id: report.id,

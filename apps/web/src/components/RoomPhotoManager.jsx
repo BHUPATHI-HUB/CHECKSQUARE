@@ -27,13 +27,6 @@ const DEFAULT_SEVERITIES = [
   { id: 'cosmetic', name: 'Cosmetic', color: '#eab308', definition: 'Surface / aesthetic only.' },
 ];
 
-const fileToDataUrl = (file) => new Promise((resolve, reject) => {
-  const reader = new FileReader();
-  reader.onload = () => resolve(reader.result);
-  reader.onerror = reject;
-  reader.readAsDataURL(file);
-});
-
 /**
  * DefectPhotoGallery — multi-image grid for a defect. Each image has its own
  * caption field; the defect's `description` acts as the shared note.
@@ -131,7 +124,7 @@ const DefectPhotoGallery = ({ defect, onAdd, onUpdate, onRemove, classifications
   );
 };
 
-const RoomPhotoManager = ({ open, onOpenChange, room, onSave }) => {
+const RoomPhotoManager = ({ open, onOpenChange, room, inspectionId, onSave }) => {
   const { settings } = useSettings();
   const [cornerPhotos, setCornerPhotos] = useState(room?.cornerPhotos || []);
   const [defects, setDefects] = useState(room?.defects || []);
@@ -188,7 +181,7 @@ const RoomPhotoManager = ({ open, onOpenChange, room, onSave }) => {
       for (let i = 0; i < picked.length; i += 1) {
         try {
           const record = await uploadInspectionPhoto(picked[i], {
-            inspectionId: room?.id || 'draft', roomKey,
+            inspectionId: inspectionId || 'draft', roomKey,
             maxEdge: settings?.reportImages?.uploadMaxEdge ?? 1600,
             quality: settings?.reportImages?.uploadQuality ?? 0.85,
           });
@@ -246,13 +239,18 @@ const RoomPhotoManager = ({ open, onOpenChange, room, onSave }) => {
   const addDefectPhoto = async (defectId, file) => {
     if (!file) return;
     try {
-      const url = await fileToDataUrl(file);
+      const photo = await uploadInspectionPhoto(file, {
+        inspectionId: inspectionId || 'draft',
+        roomKey: `${roomKey}-${defectId}`,
+        maxEdge: settings?.reportImages?.uploadMaxEdge ?? 1600,
+        quality: settings?.reportImages?.uploadQuality ?? 0.85,
+      });
       setDefects(prev => prev.map(d => d.id === defectId
-        ? { ...d, photos: [...(d.photos || []), { id: `p_${Date.now()}`, photoNumber: (d.photos || []).reduce((max, p, i) => Math.max(max, Number(p.photoNumber) || i + 1), 0) + 1, url, caption: '' }] }
+        ? { ...d, photos: [...(d.photos || []), { ...photo, photoNumber: (d.photos || []).reduce((max, p, i) => Math.max(max, Number(p.photoNumber) || i + 1), 0) + 1, caption: '' }] }
         : d));
       toast.success('Photo added to defect');
     } catch {
-      toast.error('Failed to read photo');
+      toast.error('Failed to save defect photo on this device');
     }
   };
 

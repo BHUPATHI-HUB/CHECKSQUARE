@@ -16,7 +16,7 @@ const GoogleIcon = () => (
 );
 
 const GoogleSignInButton = ({ className = '' }) => {
-  const { supabaseEnabled, signInWithGoogle, bridging } = useSupabaseAuth();
+  const { supabaseEnabled, signInWithGoogle } = useSupabaseAuth();
   if (!supabaseEnabled) return null;
 
   return (
@@ -24,12 +24,11 @@ const GoogleSignInButton = ({ className = '' }) => {
       type="button"
       variant="outline"
       onClick={signInWithGoogle}
-      disabled={bridging}
       data-testid="google-sign-in-button"
       className={`w-full h-11 gap-3 ${className}`}
     >
       <GoogleIcon />
-      <span>{bridging ? 'Signing you in…' : 'Continue with Google'}</span>
+      <span>Continue with Google</span>
     </Button>
   );
 };

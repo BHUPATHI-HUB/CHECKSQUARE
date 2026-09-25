@@ -55,20 +55,6 @@ export const useAuth = () => {
   return context;
 };
 
-// Shape a PocketBase auth record into the simple `user` object the rest of the
-// app already expects (id, email, name, role, phone, address).
-const toUserSession = (record) => {
-  if (!record) return null;
-  return {
-    id: record.id,
-    email: record.email,
-    name: record.name || record.email,
-    role: record.role,
-    phone: record.phone || '',
-    address: record.address || '',
-  };
-};
-
 const toSupabaseUserSession = (authUser, profile) => {
   if (!authUser) return null;
   const meta = authUser.user_metadata || {};
@@ -97,20 +83,10 @@ const decodeJwtExp = (token) => {
 const CloudAuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [supabaseSession, setSupabaseSession] = useState(null);
-  const [pbToken, setPbToken] = useState(null);
   const [sessionMode, setSessionMode] = useState('none');
   const [loading, setLoading] = useState(true);
   const [sessionWarning, setSessionWarning] = useState(false);
   const warnedRef = useRef(false);
-  const pbRef = useRef(null);
-
-  const getPB = useCallback(async () => {
-    if (pbRef.current) return pbRef.current;
-    const mod = await import('@/lib/pocketbaseClient.js');
-    pbRef.current = mod.default;
-    return pbRef.current;
-  }, []);
-
   const loadSupabaseUser = useCallback(async (authUser) => {
     if (!authUser) return null;
     let profile = null;
@@ -202,7 +178,6 @@ const CloudAuthProvider = ({ children }) => {
     };
 
     setSupabaseSession(null);
-    setPbToken(null);
     setUser(offlineUser);
     setSessionMode('offline-auth');
     writeJSON(OFFLINE_SESSION_KEY, { mode: 'offline-auth', user: offlineUser, at: new Date().toISOString() });
@@ -215,26 +190,25 @@ const CloudAuthProvider = ({ children }) => {
     if (USE_SUPABASE_AUTH) {
       supabase.auth.signOut().catch(() => {});
       setSupabaseSession(null);
-    } else if (pbRef.current) {
-      pbRef.current.authStore.clear();
-    } else {
-      getPB().then((pb) => pb.authStore.clear()).catch(() => {});
     }
-    setPbToken(null);
     setUser(null);
     setSessionMode('none');
     setSessionWarning(false);
     warnedRef.current = false;
     localStorage.removeItem(OFFLINE_SESSION_KEY);
-  }, [getPB, user]);
+  }, [user]);
 
-  // Subscribe to PocketBase auth changes so multiple tabs stay in sync and a
-  // refresh of the auth record automatically propagates.
+  // Restore Supabase sessions and handle offline PIN sessions across reloads.
   useEffect(() => {
-    if (USE_SUPABASE_AUTH) {
-      let mounted = true;
+    if (!USE_SUPABASE_AUTH) {
+      setUser(null);
+      setSessionMode('none');
+      setLoading(false);
+      return undefined;
+    }
+    let mounted = true;
 
-      const init = async () => {
+    const init = async () => {
         const { data } = await supabase.auth.getSession();
         if (!mounted) return;
         setSupabaseSession(data.session || null);
@@ -255,10 +229,10 @@ const CloudAuthProvider = ({ children }) => {
           }
         }
         setLoading(false);
-      };
-      init();
+    };
+    init();
 
-      const { data: sub } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: sub } = supabase.auth.onAuthStateChange(async (_event, session) => {
         setSupabaseSession(session || null);
         if (!session?.user) {
           const offlineSession = readJSON(OFFLINE_SESSION_KEY, null);
@@ -276,53 +250,13 @@ const CloudAuthProvider = ({ children }) => {
           setUser(nextUser);
           setSessionMode('online-auth');
         }
-      });
-
-      return () => {
-        mounted = false;
-        sub.subscription.unsubscribe();
-      };
-    }
-
-    let cancelled = false;
-    let unsubscribe = () => {};
-
-    const initPb = async () => {
-      try {
-        const pb = await getPB();
-        if (cancelled) return;
-
-        unsubscribe = pb.authStore.onChange(() => {
-          setUser(toUserSession(pb.authStore.record));
-          setPbToken(pb.authStore.token || null);
-        }, true);
-
-        // Initial validation: if a token is stored, refresh it once so an expired
-        // session is cleared cleanly on first load.
-        if (pb.authStore.isValid) {
-          try {
-            await pb.collection('users').authRefresh();
-          } catch (e) {
-            pb.authStore.clear();
-          }
-        }
-
-        if (cancelled) return;
-        const nextUser = toUserSession(pb.authStore.record);
-        setUser(nextUser);
-        setPbToken(pb.authStore.token || null);
-        setSessionMode(nextUser ? 'online-auth' : 'none');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-    initPb();
+    });
 
     return () => {
-      cancelled = true;
-      unsubscribe();
+      mounted = false;
+      sub.subscription.unsubscribe();
     };
-  }, [loadSupabaseUser, getPB]);
+  }, [loadSupabaseUser]);
 
   // ---------------------------------------------------------------------------
   // Inactivity guard (Spec §1 / DoD #3)
@@ -365,9 +299,9 @@ const CloudAuthProvider = ({ children }) => {
     };
   }, [user, logout]);
 
-  // Session expiry warning. PocketBase tokens are JWTs; decode the `exp` claim.
+  // Session expiry warning for the current Supabase access token.
   useEffect(() => {
-    const token = USE_SUPABASE_AUTH ? supabaseSession?.access_token : pbToken;
+    const token = supabaseSession?.access_token;
     if (!token) return;
 
     const interval = setInterval(() => {
@@ -385,42 +319,29 @@ const CloudAuthProvider = ({ children }) => {
     }, 30000);
 
     return () => clearInterval(interval);
-  }, [user, logout, supabaseSession, pbToken]);
+  }, [user, logout, supabaseSession]);
 
   const extendSession = useCallback(async () => {
-    if (USE_SUPABASE_AUTH) {
-      const { data, error } = await supabase.auth.refreshSession();
-      if (error) {
-        toast.error('Could not extend session. Please log in again.');
-        logout();
-        return;
-      }
-      setSupabaseSession(data.session || null);
-      if (data.session?.user) {
-        const nextUser = await loadSupabaseUser(data.session.user);
-        setUser(nextUser);
-      }
-      warnedRef.current = false;
-      setSessionWarning(false);
-      lastActivityRef.current = Date.now();
-      toast.success('Session extended successfully.');
+    if (!USE_SUPABASE_AUTH) {
+      toast.error('Supabase is not configured. Connect Supabase to sign in.');
       return;
     }
-
-    try {
-      const pb = await getPB();
-      await pb.collection('users').authRefresh();
-      setUser(toUserSession(pb.authStore.record));
-      setPbToken(pb.authStore.token || null);
-      warnedRef.current = false;
-      setSessionWarning(false);
-      lastActivityRef.current = Date.now();
-      toast.success('Session extended successfully.');
-    } catch (e) {
+    const { data, error } = await supabase.auth.refreshSession();
+    if (error) {
       toast.error('Could not extend session. Please log in again.');
       logout();
+      return;
     }
-  }, [logout, loadSupabaseUser, getPB]);
+    setSupabaseSession(data.session || null);
+    if (data.session?.user) {
+      const nextUser = await loadSupabaseUser(data.session.user);
+      setUser(nextUser);
+    }
+    warnedRef.current = false;
+    setSessionWarning(false);
+    lastActivityRef.current = Date.now();
+    toast.success('Session extended successfully.');
+  }, [logout, loadSupabaseUser]);
 
   // `expectedRole` is accepted for backwards compatibility with the existing
   // login form; the authoritative role lives in the `users.role` field.
@@ -435,65 +356,36 @@ const CloudAuthProvider = ({ children }) => {
       void logActivity(testUser, 'login_success');
       return { success: true, offline: true };
     }
-    if (USE_SUPABASE_AUTH) {
-      try {
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-
-        setSupabaseSession(data.session || null);
-        const nextUser = await loadSupabaseUser(data.user);
-        setUser(nextUser);
-        setSessionMode('online-auth');
-
-        if (expectedRole && nextUser?.role !== expectedRole) {
-          await supabase.auth.signOut();
-          setSupabaseSession(null);
-          setUser(null);
-          setSessionMode('none');
-          return {
-            success: false,
-            error: `This account is not registered as a ${expectedRole}.`,
-          };
-        }
-        await cacheOfflineIdentity(nextUser, password);
-        localStorage.removeItem(OFFLINE_SESSION_KEY);
-        void logActivity(nextUser, 'login_success');
-        return { success: true };
-      } catch (e) {
-        if ((typeof navigator !== 'undefined' && !navigator.onLine) || isNetworkIssue(e)) {
-          return loginOfflineWithPin(email, password, expectedRole);
-        }
-        return {
-          success: false,
-          error: e?.message || 'Invalid email or password.',
-        };
-      }
+    if (!USE_SUPABASE_AUTH) {
+      return { success: false, error: 'Supabase is not configured. Set the Supabase project URL and anon key.' };
     }
-
     try {
-      const pb = await getPB();
-      const authData = await pb
-        .collection('users')
-        .authWithPassword(email, password);
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
 
-      if (expectedRole && authData.record.role !== expectedRole) {
-        pb.authStore.clear();
-        setPbToken(null);
+      setSupabaseSession(data.session || null);
+      const nextUser = await loadSupabaseUser(data.user);
+      setUser(nextUser);
+      setSessionMode('online-auth');
+
+      if (expectedRole && nextUser?.role !== expectedRole) {
+        await supabase.auth.signOut();
+        setSupabaseSession(null);
         setUser(null);
+        setSessionMode('none');
         return {
           success: false,
           error: `This account is not registered as a ${expectedRole}.`,
         };
       }
-
-      setUser(toUserSession(pb.authStore.record));
-      setPbToken(pb.authStore.token || null);
-      setSessionMode('online-auth');
-
-      void logActivity(toUserSession(pb.authStore.record), 'login_success');
-
+      await cacheOfflineIdentity(nextUser, password);
+      localStorage.removeItem(OFFLINE_SESSION_KEY);
+      void logActivity(nextUser, 'login_success');
       return { success: true };
     } catch (e) {
+      if ((typeof navigator !== 'undefined' && !navigator.onLine) || isNetworkIssue(e)) {
+        return loginOfflineWithPin(email, password, expectedRole);
+      }
       return {
         success: false,
         error: e?.message || 'Invalid email or password.',
@@ -502,9 +394,11 @@ const CloudAuthProvider = ({ children }) => {
   };
 
   const signup = async (userData) => {
-    if (USE_SUPABASE_AUTH) {
-      try {
-        const { data, error } = await supabase.auth.signUp({
+    if (!USE_SUPABASE_AUTH) {
+      return { success: false, error: 'Supabase is not configured. Set the Supabase project URL and anon key.' };
+    }
+    try {
+      const { data, error } = await supabase.auth.signUp({
           email: userData.email,
           password: userData.password,
           options: {
@@ -516,11 +410,11 @@ const CloudAuthProvider = ({ children }) => {
             },
           },
         });
-        if (error) throw error;
+      if (error) throw error;
 
-        if (data.user) {
-          try {
-            await supabase.from('profiles').upsert({
+      if (data.user) {
+        try {
+          await supabase.from('profiles').upsert({
               id: data.user.id,
               email: data.user.email,
               name: userData.name,
@@ -528,79 +422,42 @@ const CloudAuthProvider = ({ children }) => {
               phone: userData.phone || '',
               address: userData.address || '',
             }, { onConflict: 'id' });
-          } catch {
-            // Safe to ignore until profiles table exists everywhere.
-          }
+        } catch {
+          // Safe to ignore until profiles table exists everywhere.
         }
+      }
 
-        if (!data.session) {
-          const signedIn = await supabase.auth.signInWithPassword({
+      if (!data.session) {
+        const signedIn = await supabase.auth.signInWithPassword({
             email: userData.email,
             password: userData.password,
           });
-          if (!signedIn.error) {
-            setSupabaseSession(signedIn.data.session || null);
-            const nextUser = await loadSupabaseUser(signedIn.data.user);
-            setUser(nextUser);
-          }
-        } else {
-          setSupabaseSession(data.session);
-          const nextUser = await loadSupabaseUser(data.user);
+        if (!signedIn.error) {
+          setSupabaseSession(signedIn.data.session || null);
+          const nextUser = await loadSupabaseUser(signedIn.data.user);
           setUser(nextUser);
         }
-
-        return { success: true };
-      } catch (e) {
-        return { success: false, error: e?.message || 'Could not create account.' };
+      } else {
+        setSupabaseSession(data.session);
+        const nextUser = await loadSupabaseUser(data.user);
+        setUser(nextUser);
       }
-    }
-
-    try {
-      const pb = await getPB();
-      const payload = {
-        email: userData.email,
-        password: userData.password,
-        passwordConfirm: userData.password,
-        name: userData.name,
-        phone: userData.phone || '',
-        address: userData.address || '',
-        // Public signup is always a customer; admins/inspectors are provisioned
-        // via the PocketBase admin UI.
-        role: 'customer',
-        emailVisibility: true,
-      };
-
-      await pb.collection('users').create(payload);
-      await pb.collection('users').authWithPassword(userData.email, userData.password);
-      setUser(toUserSession(pb.authStore.record));
-      setPbToken(pb.authStore.token || null);
 
       return { success: true };
     } catch (e) {
-      const msg =
-        e?.data?.data?.email?.message ||
-        e?.message ||
-        'Could not create account.';
-      return { success: false, error: msg };
+      return { success: false, error: e?.message || 'Could not create account.' };
     }
   };
 
   const requestPasswordReset = async (email) => {
-    if (USE_SUPABASE_AUTH) {
-      try {
-        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    if (!USE_SUPABASE_AUTH) {
+      return { success: false, error: 'Supabase is not configured. Set the Supabase project URL and anon key.' };
+    }
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
           redirectTo: `${window.location.origin}/login`,
         });
-        if (error) throw error;
-        return { success: true };
-      } catch (e) {
-        return { success: false, error: e?.message || 'Could not send reset email.' };
-      }
-    }
-
-    try {
-      const pb = await getPB();
-      await pb.collection('users').requestPasswordReset(email);
+      if (error) throw error;
       return { success: true };
     } catch (e) {
       return { success: false, error: e?.message || 'Could not send reset email.' };
@@ -627,9 +484,7 @@ const CloudAuthProvider = ({ children }) => {
     extendSession,
     requestPasswordReset,
     hasRole,
-    isAuthenticated: USE_SUPABASE_AUTH
-      ? (!!user && (!!supabaseSession || sessionMode === 'offline-auth'))
-      : (!!user && !!pbToken),
+    isAuthenticated: !!user && (!!supabaseSession || sessionMode === 'offline-auth'),
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

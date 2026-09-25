@@ -4,18 +4,13 @@
 //
 // Behaviour:
 //   • If Supabase is configured  → upload to bucket `inspection-photos`, return key.
-//   • If Supabase is NOT configured → fall back to legacy base64 dataURL so the
-//     existing PocketBase-only flow keeps working.  This lets developers ship
-//     the migration in stages and lets the offline PWA degrade gracefully.
+//   • If Supabase is NOT configured → fall back to legacy base64 dataURL for
+//     local-only development and offline PWA use.
 //
 // Signed-read URLs are generated on demand via getInspectionPhotoUrl() — the
 // bucket is PRIVATE; only the signed URL grants short-lived access.
 //
-// All photo paths follow the convention:
-//     <inspectionId>/<roomKey>/<photoId>.<ext>
-// so that PocketBase row-level rules can authorise reads (`inspectionId` is
-// validated against the inspector's ownership before a signed URL is minted
-// by the `supabase-storage.pb.js` PB hook).
+// Inspection photo paths are protected by Supabase Storage RLS.
 
 import { supabase, isSupabaseConfigured, SUPABASE_PHOTO_BUCKET } from '@/lib/supabaseClient.js';
 import {
@@ -26,8 +21,6 @@ import { IS_OFFLINE_ADMIN } from '@/lib/appTarget.js';
 import offlinePhoto from '@/lib/localPhotoStorage.js';
 
 const SIGNED_URL_TTL_SECONDS = 60 * 60; // 1 h
-const PB_BASE_URL = (import.meta.env?.VITE_PB_URL || 'http://127.0.0.1:8090').replace(/\/$/, '');
-
 // Legacy fallback: read entire file as base64 data-URL (drop-in for the old
 // fileToDataUrl() helper inside RoomPhotoManager.jsx).
 const fileToDataUrl = (file) => new Promise((resolve, reject) => {
@@ -164,7 +157,19 @@ export async function uploadInspectionPhoto(file, { inspectionId = 'draft', room
   // Sanitise — Supabase Storage rejects spaces / unicode in keys.
   const safeRoom = String(roomKey).replace(/[^a-z0-9_-]+/gi, '-').toLowerCase();
   const safeInsp = String(inspectionId || 'draft').replace(/[^a-z0-9_-]+/gi, '-');
-  const path = `${safeInsp}/${safeRoom}/${id}.${ext}`;
+  // The cached session is available during offline capture; getUser() needs a
+  // network round trip and would reject an otherwise recoverable photo.
+  const { data: { session } = {}, error: authError } = await supabase.auth.getSession();
+  const userId = session?.user?.id;
+  if (authError || !userId) throw new Error('Sign in before adding inspection photos.');
+  // Draft uploads follow the authenticated-user namespace enforced by the
+  // inspection-photos RLS policy: draft/<userId>/<room>/<photo>.
+  let path;
+  if (safeInsp === 'draft') {
+    path = `draft/${userId}/${safeRoom}/${id}.${ext}`;
+  } else {
+    path = `${safeInsp}/${safeRoom}/${id}.${ext}`;
+  }
   const contentType = file.type || 'image/jpeg';
   const blob = file instanceof Blob ? file : new Blob([file], { type: contentType });
 
@@ -172,25 +177,30 @@ export async function uploadInspectionPhoto(file, { inspectionId = 'draft', room
   // instantly, survives a reload, and is NEVER lost with no signal.
   await putPhotoBlob({ path, blob, contentType, inspectionId: safeInsp });
   // Extra durability on Android — mirror to native storage (best-effort).
-  mirrorToNativeFilesystem(path, blob);
+  await mirrorToNativeFilesystem(path, blob);
 
   // Upload directly to Supabase Storage (authorised by the user's session via
-  // RLS — no PocketBase hook needed). If offline or the upload fails, queue it
+  // RLS). If offline or the upload fails, queue it
   // for the sync engine; the photo still renders from the local Blob meanwhile.
   const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
   if (!offline) {
     try {
       const { error } = await supabase.storage
         .from(SUPABASE_PHOTO_BUCKET)
-        .upload(path, blob, { contentType, upsert: true });
-      if (error) throw error;
+        .upload(path, blob, { contentType, upsert: false });
+      if (error) {
+        if (String(error.statusCode) !== '409') throw error;
+        const { error: readError } = await supabase.storage
+          .from(SUPABASE_PHOTO_BUCKET).createSignedUrl(path, 60);
+        if (readError) throw error;
+      }
       await markPhotoSynced(path);
       return { id, storageKey: path, capturedAt };
     } catch (e) {
       console.warn('[supabase] direct upload failed, queuing for sync:', e?.message || e);
     }
   }
-  await enqueue({ type: 'uploadPhoto', path, contentType });
+  await enqueue({ type: 'uploadPhoto', path, contentType, userId });
   requestSync();
   return { id, storageKey: path, capturedAt };
 }

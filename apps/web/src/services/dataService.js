@@ -3,10 +3,8 @@
 // individual pages do NOT import either client directly.
 //
 //
-// Each adapter exposes the SAME function signatures.  The PocketBase
-// adapter is the production default; the Supabase adapter exists so a
-// single env-var flip switches the whole app over after the data
-// migration has been run.
+// Each adapter exposes the same function signatures. Supabase is the cloud
+// backend; local builds use the local adapter.
 
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient.js';
 import { IS_OFFLINE_ADMIN, IS_HYBRID_APK, OFFLINE_ADMIN_USER } from '@/lib/appTarget.js';
@@ -15,233 +13,8 @@ import { deleteReportUpload, listOutbox, deleteOutbox } from '@/lib/localStore.j
 
 const USE_SUPABASE = isSupabaseConfigured;
 
-let pbClientPromise = null;
-const getPB = async () => {
-  if (!pbClientPromise) {
-    pbClientPromise = import('@/lib/pocketbaseClient.js').then((m) => m.default);
-  }
-  return pbClientPromise;
-};
-
-// ─── Adapter: PocketBase ─────────────────────────────────────────────────
-const pbAdapter = {
-  // ─── inspections ─────────────────────────────────────────────────────
-  async listInspections({ filter = '', sort = '-created', expand } = {}) {
-    const pb = await getPB();
-    return pb.collection('inspections').getFullList({
-      filter, sort, expand, $autoCancel: false,
-    });
-  },
-  async getInspection(id) {
-    const pb = await getPB();
-    return pb.collection('inspections').getOne(id, { $autoCancel: false });
-  },
-  async createInspection(payload) {
-    const pb = await getPB();
-    return pb.collection('inspections').create(payload, { $autoCancel: false });
-  },
-  async upsertInspection(payload) {
-    const pb = await getPB();
-    if (payload.id) {
-      try {
-        return await pb.collection('inspections').update(payload.id, payload, { $autoCancel: false });
-      } catch (error) {
-        if (error?.status !== 404) throw error;
-      }
-    }
-    return pb.collection('inspections').create(payload, { $autoCancel: false });
-  },
-  async updateInspection(id, payload) {
-    const pb = await getPB();
-    return pb.collection('inspections').update(id, payload, { $autoCancel: false });
-  },
-  async transitionInspectionStatus(id, payload) {
-    const pb = await getPB();
-    const patch = { status: payload.status };
-    if (payload.approvedBy !== undefined) patch.approvedBy = payload.approvedBy;
-    if (payload.approvedAt !== undefined) patch.approvedAt = payload.approvedAt;
-    if (payload.rejectedBy !== undefined) patch.rejectedBy = payload.rejectedBy;
-    if (payload.rejectedAt !== undefined) patch.rejectedAt = payload.rejectedAt;
-    if (payload.rejectionReason !== undefined) patch.rejectionReason = payload.rejectionReason;
-    return pb.collection('inspections').update(id, patch, { $autoCancel: false });
-  },
-  async deleteInspection(id) {
-    const pb = await getPB();
-    return pb.collection('inspections').delete(id, { $autoCancel: false });
-  },
-
-  // ─── appointments ────────────────────────────────────────────────────
-  async listAppointments({ filter = '', sort = '-scheduledAt' } = {}) {
-    const pb = await getPB();
-    return pb.collection('appointments').getFullList({ filter, sort, $autoCancel: false });
-  },
-  async createAppointment(payload) {
-    const pb = await getPB();
-    return pb.collection('appointments').create(payload, { $autoCancel: false });
-  },
-  async updateAppointment(id, payload) {
-    const pb = await getPB();
-    return pb.collection('appointments').update(id, payload, { $autoCancel: false });
-  },
-  async transitionAppointment(id, payload) {
-    const allowed = ['status', 'inspector', 'inspection', 'scheduledAt', 'timeSlot', 'notes', 'cancelReason', 'rescheduleReason'];
-    const patch = Object.fromEntries(Object.entries(payload).filter(([key]) => allowed.includes(key)));
-    return this.updateAppointment(id, patch);
-  },
-  async createNotification(payload) {
-    const pb = await getPB();
-    return pb.collection('notifications').create({
-      userId: payload.userId, type: payload.type, title: payload.title,
-      message: payload.message || payload.body || '', read: false,
-    }, { $autoCancel: false });
-  },
-
-  // ─── users ───────────────────────────────────────────────────────────
-  async listUsers({ filter = '', sort = 'name', fields } = {}) {
-    const pb = await getPB();
-    return pb.collection('users').getFullList({ filter, sort, fields, $autoCancel: false });
-  },
-  async listUsersByRole(role) {
-    const pb = await getPB();
-    return pb.collection('users').getFullList({
-      filter: `role = "${role}"`, sort: 'name', $autoCancel: false,
-    });
-  },
-  async getUser(id) {
-    const pb = await getPB();
-    return pb.collection('users').getOne(id, { $autoCancel: false });
-  },
-  async createUser(payload) {
-    const pb = await getPB();
-    return pb.collection('users').create(payload, { $autoCancel: false });
-  },
-  async updateUser(id, payload) {
-    const pb = await getPB();
-    return pb.collection('users').update(id, payload, { $autoCancel: false });
-  },
-  async deleteUser(id) {
-    const pb = await getPB();
-    return pb.collection('users').delete(id);
-  },
-  async findUserByEmail(email) {
-    const pb = await getPB();
-    return pb.collection('users').getFirstListItem(`email = "${email}"`, { $autoCancel: false });
-  },
-
-  // ─── chats / messages ────────────────────────────────────────────────
-  async listChats(userId) {
-    const pb = await getPB();
-    return pb.collection('chats').getFullList({
-      filter: `participants ~ "${userId}"`,
-      expand: 'participants',
-      sort: '-updated',
-      $autoCancel: false,
-    });
-  },
-  async findChat(filter) {
-    const pb = await getPB();
-    return pb.collection('chats').getFirstListItem(filter, { $autoCancel: false });
-  },
-  async createChat(payload) {
-    const pb = await getPB();
-    return pb.collection('chats').create(payload, { $autoCancel: false });
-  },
-  async deleteChat(id) {
-    const pb = await getPB();
-    return pb.collection('chats').delete(id, { $autoCancel: false });
-  },
-  async listMessages(chatId) {
-    const pb = await getPB();
-    return pb.collection('messages').getFullList({
-      filter: `chatId = "${chatId}"`, sort: 'created', $autoCancel: false,
-    });
-  },
-  async sendMessage(payload) {
-    const pb = await getPB();
-    const form = new FormData();
-    for (const [key, value] of Object.entries(payload)) {
-      if (key === 'attachments') (value || []).forEach((file) => form.append(key, file));
-      else if (value !== undefined) form.append(key, typeof value === 'object' ? JSON.stringify(value) : value);
-    }
-    return pb.collection('messages').create(form, { $autoCancel: false });
-  },
-  async updateMessage(id, payload) {
-    const pb = await getPB();
-    return pb.collection('messages').update(id, payload, { $autoCancel: false });
-  },
-  async deleteMessage(id) {
-    const pb = await getPB();
-    return pb.collection('messages').delete(id, { $autoCancel: false });
-  },
-
-  // ─── report_downloads ────────────────────────────────────────────────
-  async listReportDownloads(userId) {
-    const pb = await getPB();
-    return pb.collection('report_downloads').getFullList({
-      filter: `user = "${userId}"`, sort: '-created', $autoCancel: false,
-    });
-  },
-  async listAllReportDownloads() {
-    const pb = await getPB();
-    return pb.collection('report_downloads').getFullList({ sort: '-created', $autoCancel: false });
-  },
-  getReportDownloadFileUrl: async (rec) => {
-    const pb = await getPB();
-    const token = await pb.files.getToken();
-    return pb.files.getUrl(rec, rec.file, { token });
-  },
-  async deleteReportDownload(id) {
-    const pb = await getPB();
-    return pb.collection('report_downloads').delete(id);
-  },
-
-  // ─── app_settings ────────────────────────────────────────────────────
-  async getAppSettings() {
-    try {
-      const pb = await getPB();
-      const row = await pb.collection('app_settings').getOne('single', { $autoCancel: false });
-      return row?.payload || {};
-    } catch (e) {
-      if (String(e?.status) === '404') return {};
-      throw e;
-    }
-  },
-  async upsertAppSettings(payload) {
-    try {
-      const pb = await getPB();
-      await pb.collection('app_settings').update('single', { payload }, { $autoCancel: false });
-    } catch (e) {
-      if (String(e?.status) === '404') {
-        const pb = await getPB();
-        await pb.collection('app_settings').create({ id: 'single', payload }, { $autoCancel: false });
-      } else throw e;
-    }
-  },
-
-  // ─── realtime ────────────────────────────────────────────────────────
-  // Returns an unsubscribe function.
-  subscribe(collection, callback, topic = '*') {
-    let active = true;
-    let unsub = () => {};
-    getPB()
-      .then((pb) => pb.collection(collection).subscribe(topic, callback))
-      .then((u) => {
-        if (!active) {
-          try { u(); } catch (_) {}
-          return;
-        }
-        unsub = u;
-      })
-      .catch((err) => console.error(`[dataService] subscribe failed for ${collection}:`, err));
-    return () => {
-      active = false;
-      try { unsub(); } catch (_) {}
-    };
-  },
-};
-
 // ─── Adapter: Supabase ───────────────────────────────────────────────────
-// The Supabase adapter mirrors the PB API.  Translates PB-style filter
+// The Supabase adapter translates app filters into PostgREST query-builder
 // strings into PostgREST query-builder calls in the common cases used by
 // the React app.  More complex filters can be added on demand.
 
@@ -489,8 +262,9 @@ const supaAdapter = {
     return data;
   },
   async getReportDownloadFileUrl(rec) {
-    if (!rec?.storage_key) return null;
-    const { data, error } = await supabase.storage.from('reports').createSignedUrl(rec.storage_key, 3600);
+    const storageKey = rec?.storage_key || rec?.storageKey;
+    if (!storageKey) return null;
+    const { data, error } = await supabase.storage.from('reports').createSignedUrl(storageKey, 3600);
     if (error) throw error;
     return data?.signedUrl;
   },
@@ -805,7 +579,13 @@ const localAdapter = {
 // ─── Adapter: Hybrid APK (local core + cloud collaboration) ───────────────
 // Hybrid mode keeps inspection-domain operations local-first for resilience,
 // while identity/collaboration domains stay cloud-backed.
-const cloudAdapter = USE_SUPABASE ? supaAdapter : pbAdapter;
+const cloudAdapter = USE_SUPABASE
+  ? supaAdapter
+  : new Proxy({}, {
+      get: (_target, property) => property === 'subscribe'
+        ? () => () => {}
+        : async () => { throw new Error('Supabase is not configured; cloud operations are unavailable.'); },
+    });
 // Sync workers use this explicitly so hybrid APK operations never recurse
 // back into the local adapter when they are finally sent to the cloud.
 export const cloudData = cloudAdapter;

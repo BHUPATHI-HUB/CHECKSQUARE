@@ -604,11 +604,7 @@ const Avatar = ({ user, role, name, size = 36, onUpload, busy }) => {
     .slice(0, 2)
     .join('')
     .toUpperCase();
-  const avatarUrl = user?.avatar_url
-    || user?.avatarUrl
-    || ((user?.avatar && user?.collectionId && user?.id)
-      ? `${import.meta.env?.VITE_PB_URL || 'http://127.0.0.1:8090'}/api/files/${user.collectionId}/${user.id}/${user.avatar}?thumb=72x72`
-      : null);
+  const avatarUrl = user?.avatar_url || user?.avatarUrl || null;
   return (
     <button
       type="button"
