@@ -19,6 +19,7 @@ import {
 import { requestSync } from '@/services/syncEngine.js';
 import { IS_OFFLINE_ADMIN } from '@/lib/appTarget.js';
 import offlinePhoto from '@/lib/localPhotoStorage.js';
+import { resolvePhotoCaptureOwner } from './photoCaptureOwner.js';
 
 const SIGNED_URL_TTL_SECONDS = 60 * 60; // 1 h
 // Legacy fallback: read entire file as base64 data-URL (drop-in for the old
@@ -157,11 +158,13 @@ export async function uploadInspectionPhoto(file, { inspectionId = 'draft', room
   // Sanitise — Supabase Storage rejects spaces / unicode in keys.
   const safeRoom = String(roomKey).replace(/[^a-z0-9_-]+/gi, '-').toLowerCase();
   const safeInsp = String(inspectionId || 'draft').replace(/[^a-z0-9_-]+/gi, '-');
-  // The cached session is available during offline capture; getUser() needs a
-  // network round trip and would reject an otherwise recoverable photo.
-  const { data: { session } = {}, error: authError } = await supabase.auth.getSession();
-  const userId = session?.user?.id;
-  if (authError || !userId) throw new Error('Sign in before adding inspection photos.');
+  // An offline PIN session has a verified local identity but may have no
+  // refreshable Supabase token. Capture locally and bind its queued upload to
+  // that user; syncEngine verifies the matching cloud user before upload.
+  const userId = await resolvePhotoCaptureOwner(
+    () => supabase.auth.getSession(),
+    typeof localStorage === 'undefined' ? null : localStorage,
+  );
   // Draft uploads follow the authenticated-user namespace enforced by the
   // inspection-photos RLS policy: draft/<userId>/<room>/<photo>.
   let path;

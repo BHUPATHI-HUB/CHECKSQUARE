@@ -9,8 +9,9 @@
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient.js';
 import { IS_OFFLINE_ADMIN, IS_HYBRID_APK, OFFLINE_ADMIN_USER } from '@/lib/appTarget.js';
 import localDb from '@/lib/localDb.js';
-import { deleteReportUpload, listOutbox, deleteOutbox } from '@/lib/localStore.js';
+import { deleteReportUpload, listOutbox, deleteOutbox, getCachedList, putCachedList } from '@/lib/localStore.js';
 import { mergeReportDownloads } from './reportDownloads.js';
+import { createHybridAppointments } from './hybridAppointments.js';
 
 const USE_SUPABASE = isSupabaseConfigured;
 
@@ -596,6 +597,13 @@ const cloudAdapter = USE_SUPABASE
 // Sync workers use this explicitly so hybrid APK operations never recurse
 // back into the local adapter when they are finally sent to the cloud.
 export const cloudData = cloudAdapter;
+const hybridAppointments = createHybridAppointments({
+  cloud: cloudAdapter,
+  getCachedList,
+  putCachedList,
+  isOnline: () => typeof navigator === 'undefined' || navigator.onLine !== false,
+  configured: USE_SUPABASE,
+});
 const hybridAdapter = {
   // Local-first core data
   listInspections: (opts) => localAdapter.listInspections(opts),
@@ -606,10 +614,10 @@ const hybridAdapter = {
   transitionInspectionStatus: (id, payload) => localAdapter.transitionInspectionStatus(id, payload),
   deleteInspection: (id) => localAdapter.deleteInspection(id),
 
-  listAppointments: (opts) => localAdapter.listAppointments(opts),
-  createAppointment: (payload) => localAdapter.createAppointment(payload),
-  updateAppointment: (id, payload) => localAdapter.updateAppointment(id, payload),
-  transitionAppointment: (id, payload) => localAdapter.transitionAppointment(id, payload),
+  listAppointments: (opts) => hybridAppointments.listAppointments(opts),
+  createAppointment: (payload) => hybridAppointments.createAppointment(payload),
+  updateAppointment: (id, payload) => hybridAppointments.updateAppointment(id, payload),
+  transitionAppointment: (id, payload) => hybridAppointments.transitionAppointment(id, payload),
   createNotification: (...args) => cloudAdapter.createNotification(...args),
 
   listReportDownloads: async (userId) => {
@@ -657,18 +665,15 @@ const hybridAdapter = {
   sendMessage: (...args) => cloudAdapter.sendMessage(...args),
   updateMessage: (...args) => cloudAdapter.updateMessage(...args),
   deleteMessage: (...args) => cloudAdapter.deleteMessage(...args),
-  transitionAppointment: (...args) => cloudAdapter.transitionAppointment(...args),
-  createNotification: (...args) => cloudAdapter.createNotification(...args),
-
   subscribe: (...args) => cloudAdapter.subscribe(...args),
 };
 
 export const dataBackend = IS_OFFLINE_ADMIN
   ? 'local'
-  : (IS_HYBRID_APK ? 'hybrid' : (USE_SUPABASE ? 'supabase' : 'local'));
+  : (IS_HYBRID_APK ? 'hybrid' : (USE_SUPABASE ? 'supabase' : 'unconfigured'));
 
 const adapter = IS_OFFLINE_ADMIN
   ? localAdapter
-  : (IS_HYBRID_APK ? hybridAdapter : (USE_SUPABASE ? supaAdapter : localAdapter));
+  : (IS_HYBRID_APK ? hybridAdapter : cloudAdapter);
 
 export default adapter;

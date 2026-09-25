@@ -12,6 +12,7 @@ import { supabase, isSupabaseConfigured, SUPABASE_PHOTO_BUCKET } from '@/lib/sup
 import { cloudData } from '@/services/dataService.js';
 import localDb from '@/lib/localDb.js';
 import { IS_OFFLINE_ADMIN } from '@/lib/appTarget.js';
+import { requireSyncSource } from './syncSource.js';
 import {
   listOutbox, updateOutbox, deleteOutbox,
   getPhotoBlob, markPhotoSynced, markInspectionSynced,
@@ -68,7 +69,7 @@ async function handleOp(op) {
   if (op.type === 'uploadPhoto') {
     if (!isSupabaseConfigured) throw new Error('Photo storage is not configured.');
     const rec = await getPhotoBlob(op.path);
-    if (!rec?.blob) return; // already cleaned up / nothing to send
+    requireSyncSource(rec?.blob, `Photo ${op.path}`);
     const { error } = await supabase.storage
       .from(SUPABASE_PHOTO_BUCKET)
       .upload(op.path, rec.blob, { contentType: rec.contentType || 'image/jpeg', upsert: false });
@@ -81,8 +82,7 @@ async function handleOp(op) {
     await markPhotoSynced(op.path);
   } else if (op.type === 'upsertInspection') {
     const inspectionId = op.inspectionId || op.id;
-    const insp = await getPendingInspection(inspectionId);
-    if (!insp) return;
+    const insp = requireSyncSource(await getPendingInspection(inspectionId), `Inspection ${inspectionId}`);
     await cloudData.upsertInspection(insp);
     // Keep the local submitted copy for offline viewing and audit.
     await markInspectionSynced(inspectionId);
@@ -92,7 +92,7 @@ async function handleOp(op) {
   } else if (op.type === 'uploadReport') {
     if (!isSupabaseConfigured) throw new Error('Report storage is not configured.');
     const report = await getReportUpload(op.reportId);
-    if (!report?.blob) return;
+    requireSyncSource(report?.blob, `Report ${op.reportId}`);
     const { data: { user } = {} } = await supabase.auth.getUser();
     if (!user?.id || user.id !== report.userId) {
       throw new Error('The report is queued for a different signed-in user.');

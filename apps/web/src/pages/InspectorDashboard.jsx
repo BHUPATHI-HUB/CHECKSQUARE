@@ -40,6 +40,7 @@ const InspectorDashboard = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [appointments, setAppointments] = useState([]);
+  const [appointmentError, setAppointmentError] = useState('');
 
   const reload = async () => {
     const records = await getInspectionsForInspector(user.id);
@@ -58,10 +59,20 @@ const InspectorDashboard = () => {
 
   useEffect(() => {
     let cancelled = false;
-    data.listAppointments({ filter: `inspector = "${user.id}"`, sort: 'scheduledAt' })
-      .then((rows) => { if (!cancelled) setAppointments(rows); })
-      .catch((error) => console.warn('Could not load appointments', error));
-    return () => { cancelled = true; };
+    const loadAppointments = () => {
+      data.listAppointments({ filter: `inspector = "${user.id}"`, sort: 'scheduledAt', cacheUserId: user.id })
+        .then((rows) => { if (!cancelled) { setAppointments(rows); setAppointmentError(''); } })
+        .catch((error) => { if (!cancelled) setAppointmentError(error?.message || 'Could not load appointments.'); });
+    };
+    loadAppointments();
+    const refreshWhenVisible = () => { if (document.visibilityState === 'visible') loadAppointments(); };
+    window.addEventListener('online', loadAppointments);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('online', loadAppointments);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
   }, [user.id]);
 
   const updateAppointmentStatus = async (appointment, status) => {
@@ -333,7 +344,8 @@ const InspectorDashboard = () => {
           <section className="container mx-auto px-4 sm:px-6 lg:px-12 py-6 sm:py-8">
             <div className="border bg-card">
               <div className="px-4 sm:px-6 py-4 border-b bg-muted/30"><p className="editorial-eyebrow">Schedule</p><h2 className="font-display text-2xl mt-2">Assigned appointments</h2></div>
-              {appointments.length === 0 ? <p className="p-6 text-muted-foreground">No appointments assigned.</p> : <div className="divide-y">{appointments.map((appointment) => <div key={appointment.id} className="px-4 sm:px-6 py-4 flex flex-wrap items-center justify-between gap-4"><div><p className="font-medium">{appointment.propertyAddress}</p><p className="text-sm text-muted-foreground">{new Date(appointment.scheduledAt).toLocaleString()} · {appointment.status}</p></div><div className="flex gap-2">{appointment.status === 'scheduled' && <Button size="sm" onClick={() => updateAppointmentStatus(appointment, 'in_progress')}>Start</Button>}{appointment.status === 'in_progress' && <Button size="sm" onClick={() => updateAppointmentStatus(appointment, 'completed')}>Complete</Button>}</div></div>)}</div>}
+              {appointmentError && <p className="px-6 pt-4 text-sm text-destructive">{appointmentError}</p>}
+              {appointments.length === 0 ? <p className="p-6 text-muted-foreground">{appointmentError ? 'Schedule not available.' : 'No appointments assigned.'}</p> : <div className="divide-y">{appointments.map((appointment) => <div key={appointment.id} className="px-4 sm:px-6 py-4 flex flex-wrap items-center justify-between gap-4"><div><p className="font-medium">{appointment.propertyAddress}</p><p className="text-sm text-muted-foreground">{new Date(appointment.scheduledAt).toLocaleString()} · {appointment.status}</p></div><div className="flex gap-2">{appointment.status === 'scheduled' && <Button size="sm" onClick={() => updateAppointmentStatus(appointment, 'in_progress')}>Start</Button>}{appointment.status === 'in_progress' && <Button size="sm" onClick={() => updateAppointmentStatus(appointment, 'completed')}>Complete</Button>}</div></div>)}</div>}
             </div>
           </section>
 

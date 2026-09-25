@@ -74,6 +74,7 @@ const CustomerDashboard = () => {
           data.listAppointments({
             filter: `customer = "${user.id}"`,
             sort: 'scheduledAt',
+            cacheUserId: user.id,
           }),
           data.listInspections({
             filter: `customer = "${user.id}" && deletedAt = null`,
