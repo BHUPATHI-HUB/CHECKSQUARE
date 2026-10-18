@@ -7,7 +7,7 @@ import Footer from '@/components/Footer.jsx';
 import { useSettings } from '@/contexts/SettingsContext.jsx';
 import { Button } from '@/components/ui/button';
 import FloorplanHero from '@/components/FloorplanHero.jsx';
-import { Spotlight, TiltCard, SplitText, Particles } from '@/components/HomeInteractions.jsx';
+import { Spotlight, TiltCard, SplitText, Particles, RotatingWord } from '@/components/HomeInteractions.jsx';
 import './home.css';
 import {
   ArrowRight, ArrowUpRight, CheckCircle2, ShieldCheck, ClipboardList,
@@ -35,24 +35,31 @@ const Counter = ({ to, suffix = '', duration = 1400 }) => {
   const [val, setVal] = useState(0);
   useEffect(() => {
     if (!ref.current) return undefined;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setVal(to);
+      return undefined;
+    }
     const el = ref.current;
+    let frame = 0;
+    let cancelled = false;
     const obs = new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
         if (!entry.isIntersecting) return;
         const start = performance.now();
         const ease = (t) => 1 - Math.pow(1 - t, 3);
         const step = (now) => {
+          if (cancelled) return;
           const t = Math.min(1, (now - start) / duration);
           setVal(to * ease(t));
-          if (t < 1) requestAnimationFrame(step);
+          if (t < 1) frame = requestAnimationFrame(step);
           else setVal(to);
         };
-        requestAnimationFrame(step);
+        frame = requestAnimationFrame(step);
         obs.disconnect();
       });
     }, { threshold: 0.4 });
     obs.observe(el);
-    return () => obs.disconnect();
+    return () => { cancelled = true; cancelAnimationFrame(frame); obs.disconnect(); };
   }, [to, duration]);
   const display = Number.isInteger(to) ? Math.round(val).toLocaleString() : val.toFixed(2);
   return <span ref={ref} className="home-counter-value">{display}{suffix}</span>;
@@ -170,14 +177,10 @@ const HomePage = () => {
                 <h1 className="editorial-headline mt-8 text-4xl sm:text-6xl md:text-7xl lg:text-[5.5rem] leading-[0.95]">
                   <SplitText as="span" text={`${brand}.`} className="text-primary block" step={0.035} />
                   <span className="block mt-2">We are</span>
-                  <span className="home-rotate-mask text-secondary italic mt-1">
-                    <span className="home-rotate-track">
-                      <span>inspecting.</span>
-                      <span>photographing.</span>
-                      <span>documenting.</span>
-                      <span>certifying.</span>
-                    </span>
-                  </span>
+                  <RotatingWord
+                    words={['inspecting.', 'photographing.', 'documenting.', 'certifying.']}
+                    className="text-secondary italic mt-1"
+                  />
                 </h1>
                 <p className="editorial-deck mt-8 text-lg md:text-xl max-w-xl">
                   A modern inspection studio for the people who take the structural truth of a property

@@ -41,6 +41,7 @@ const EditorialCalendar = ({ selected, onSelect }) => {
   for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(view.getFullYear(), view.getMonth(), d));
 
   const monthLabel = view.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  const isCurrentMonth = view.getFullYear() === today.getFullYear() && view.getMonth() === today.getMonth();
 
   return (
     <div>
@@ -48,7 +49,9 @@ const EditorialCalendar = ({ selected, onSelect }) => {
         <button
           type="button"
           onClick={() => setView(new Date(view.getFullYear(), view.getMonth() - 1, 1))}
-          className="w-9 h-9 rounded-full border flex items-center justify-center hover:bg-muted transition-colors"
+          disabled={isCurrentMonth}
+          aria-label="Previous month"
+          className="w-9 h-9 rounded-full border flex items-center justify-center hover:bg-muted transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <ChevronLeft className="w-4 h-4" />
         </button>
@@ -56,6 +59,7 @@ const EditorialCalendar = ({ selected, onSelect }) => {
         <button
           type="button"
           onClick={() => setView(new Date(view.getFullYear(), view.getMonth() + 1, 1))}
+          aria-label="Next month"
           className="w-9 h-9 rounded-full border flex items-center justify-center hover:bg-muted transition-colors"
         >
           <ChevronRight className="w-4 h-4" />
@@ -215,11 +219,10 @@ const AppointmentBookingPage = () => {
                 <p className="editorial-eyebrow text-[10px]">Step {completion}/3</p>
                 <div className="flex-1 h-px bg-border relative">
                   <motion.div
-                    className="absolute inset-y-0 left-0 bg-secondary"
-                    style={{ height: 1 }}
-                    initial={{ width: 0 }}
-                    animate={{ width: `${(completion / 3) * 100}%` }}
-                    transition={{ duration: 0.5 }}
+                    className="absolute inset-0 bg-secondary origin-left"
+                    initial={{ scaleX: 0 }}
+                    animate={{ scaleX: completion / 3 }}
+                    transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
                   />
                 </div>
                 <p className="text-xs text-muted-foreground">{completion === 3 ? 'Ready to confirm' : 'Continue'}</p>

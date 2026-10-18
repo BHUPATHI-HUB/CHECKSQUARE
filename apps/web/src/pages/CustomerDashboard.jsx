@@ -37,7 +37,7 @@ const customerDashCache = {};
 
 const CustomerDashboard = () => {
   const { user } = useAuth();
-  const { unreadCount, chats, createChat } = useChatContext();
+  const { unreadCount, chats, getChats } = useChatContext();
   const { settings } = useSettings();
   const brand = settings?.appName || 'CheckSquare';
   const [upcomingAppointments, setUpcomingAppointments] = useState(() => customerDashCache[user?.id]?.appts || []);
@@ -51,12 +51,13 @@ const CustomerDashboard = () => {
     (async () => {
       try {
         await data.ensureSupportChat();
+        if (!cancelled) await getChats();
       } catch (err) {
         console.warn('Could not auto-create support chat:', err?.message || err);
       }
     })();
     return () => { cancelled = true; };
-  }, [user?.id, chats.length, createChat]);
+  }, [user?.id, chats.length, getChats]);
 
   useEffect(() => {
     if (!user?.id) return;

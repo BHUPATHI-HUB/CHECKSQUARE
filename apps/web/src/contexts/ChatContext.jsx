@@ -99,29 +99,27 @@ export const ChatProvider = ({ children }) => {
     if (!user || !chatId) return;
     if (!content?.trim() && (!attachments || attachments.length === 0)) return;
     try {
-      const form = new FormData();
-      form.append('chatId', chatId);
-      form.append('senderId', user.id);
-      form.append('senderName', user.name || user.email);
       // schema enum: Admin / Inspector / Customer (capitalized)
       const role = (user.role || 'customer').charAt(0).toUpperCase() + (user.role || 'customer').slice(1);
-      form.append('senderRole', ['Admin', 'Inspector', 'Customer'].includes(role) ? role : 'Customer');
-      form.append('content', content?.trim() || '📎 Attachment');
-      form.append('readBy', JSON.stringify([user.id]));
-      (attachments || []).forEach((f) => form.append('attachments', f));
-
-      await data.sendMessage({
+      const sent = await data.sendMessage({
         chatId, senderId: user.id,
         senderName: user.name || user.email,
         senderRole: ['Admin', 'Inspector', 'Customer'].includes(role) ? role : 'Customer',
         content: content?.trim() || '📎 Attachment',
         readBy: [user.id],
+      }, attachments);
+      setMessages((prev) => {
+        const list = prev[chatId] || [];
+        return list.some((message) => message.id === sent.id)
+          ? prev
+          : { ...prev, [chatId]: [...list, sent] };
       });
+      getChats();
     } catch (error) {
       console.error('Error sending message:', error);
       throw error;
     }
-  }, [user]);
+  }, [user, getChats]);
 
   // ─── Mark a chat's messages as read (single bulk update) ──────────────
   // Stable identity — reads messages via setState callback so this callback
@@ -255,7 +253,8 @@ export const ChatProvider = ({ children }) => {
       if (e.record.chatId !== chatId) return;
       setMessages((prev) => {
         const list = prev[chatId] || [];
-        if (e.action === 'create') return { ...prev, [chatId]: [...list, e.record] };
+        if (e.action === 'create') return list.some((message) => message.id === e.record.id)
+          ? prev : { ...prev, [chatId]: [...list, e.record] };
         if (e.action === 'update') return { ...prev, [chatId]: list.map((m) => (m.id === e.record.id ? e.record : m)) };
         if (e.action === 'delete') return { ...prev, [chatId]: list.filter((m) => m.id !== e.record.id) };
         return prev;

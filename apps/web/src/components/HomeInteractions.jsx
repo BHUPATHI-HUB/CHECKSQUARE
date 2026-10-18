@@ -105,8 +105,10 @@ export const SplitText = ({ text, className = '', delayBase = 0, step = 0.02, as
 export const RotatingWord = ({ words = [], interval = 3000, className = '' }) => {
   const [idx, setIdx] = React.useState(0);
   React.useEffect(() => {
-    if (prefersReducedMotion()) return undefined;
-    const id = setInterval(() => setIdx((v) => (v + 1) % words.length), interval);
+    if (prefersReducedMotion() || words.length < 2) return undefined;
+    const id = setInterval(() => {
+      if (!document.hidden) setIdx((v) => (v + 1) % words.length);
+    }, interval);
     return () => clearInterval(id);
   }, [interval, words.length]);
   return (

@@ -53,10 +53,10 @@ jobs:
           from pathlib import Path
           file=Path('apps/web/android/app/build.gradle')
           source=file.read_text().replace('applicationId "com.bhupathi.checksquare"', 'applicationId "com.bhupathi.checksquare.connected"')
-          source=source.replace('versionCode 1', 'versionCode 4').replace('versionName "1.0"', 'versionName "1.3"')
+          source=source.replace('versionCode 1', 'versionCode 5').replace('versionName "1.0"', 'versionName "1.4"')
           file.write_text(source)
-          if 'versionCode 4' not in source or 'versionName "1.3"' not in source:
-              raise SystemExit('Could not set connected APK version 1.3 (version code 4).')
+          if 'versionCode 5' not in source or 'versionName "1.4"' not in source:
+              raise SystemExit('Could not set connected APK version 1.4 (version code 5).')
           PYCODE
       - run: node apps/web/scripts/make-icon.mjs
       - run: cd apps/web && npx cap sync android

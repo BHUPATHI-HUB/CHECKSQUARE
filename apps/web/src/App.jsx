@@ -1,5 +1,6 @@
 
 import React, { Suspense, lazy, useEffect } from 'react';
+import { MotionConfig } from 'framer-motion';
 import { Route, Routes, BrowserRouter as Router, Navigate } from 'react-router-dom';
 import { AuthProvider } from '@/contexts/AuthContext.jsx';
 import { SettingsProvider } from '@/contexts/SettingsContext.jsx';
@@ -51,6 +52,7 @@ function App() {
 
   return (
     <SettingsProvider>
+      <MotionConfig reducedMotion="user">
       <AuthProvider>
         <SupabaseAuthProvider>
         <FeedbackProvider>
@@ -227,6 +229,7 @@ function App() {
         </FeedbackProvider>
         </SupabaseAuthProvider>
       </AuthProvider>
+      </MotionConfig>
     </SettingsProvider>
   );
 }

@@ -258,6 +258,14 @@
  * FLOORPLAN SVG MOTION
  * ════════════════════════════════════════════════════════════════════ */
 @keyframes draw-on { to { stroke-dashoffset: 0; } }
+@keyframes floorplan-label-in { to { opacity: 1; transform: translateY(0); } }
+.home-floorplan-labels,
+.home-floorplan-callout {
+  opacity: 0;
+  animation: floorplan-label-in 500ms ease-out forwards;
+}
+.home-floorplan-labels { animation-delay: 1.55s; }
+.home-floorplan-callout { animation-delay: 4.15s; }
 
 .home-floorplan path,
 .home-floorplan line,
@@ -354,4 +362,15 @@
   .home-floorplan rect,
   .home-floorplan polyline { animation: none !important; stroke-dashoffset: 0 !important; }
   .home-letter { animation: none !important; opacity: 1 !important; }
+  .home-floorplan-labels, .home-floorplan-callout { animation: none !important; opacity: 1 !important; }
+  .home-marquee-track { animation: none !important; }
+  .home-word { transition: none !important; }
+}
+
+/* Avoid animating large blurred layers on mobile WebViews. */
+@media (hover: none), (max-width: 640px) {
+  .home-aurora { filter: blur(42px); }
+  .home-aurora::before, .home-aurora::after, .home-aurora > i { animation: none; }
+  .home-particles { display: none; }
+  .home-glass { backdrop-filter: none; -webkit-backdrop-filter: none; }
 }

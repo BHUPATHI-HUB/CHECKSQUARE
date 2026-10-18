@@ -7,7 +7,7 @@
     "build": "npm run build --workspace apps/web",
     "start": "npm run start --workspace apps/web",
     "lint": "npm run lint --workspace apps/web",
-    "test": "node --experimental-vm-modules --test scripts/test-appointment-record.mjs scripts/test-offline-storage.mjs scripts/test-sync-engine.mjs"
+    "test": "node --experimental-vm-modules --test scripts/test-appointment-record.mjs scripts/test-chat-attachments.mjs scripts/test-offline-storage.mjs scripts/test-sync-engine.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

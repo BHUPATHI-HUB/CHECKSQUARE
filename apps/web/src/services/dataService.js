@@ -2,6 +2,7 @@
 import { supabase, requireSupabase } from '@/lib/supabaseClient.js';
 import { isDemoMode } from '@/lib/previewMode.js';
 import { rowToAppointment } from './appointmentRecord.js';
+import { persistChatMessage, chatAttachmentBucket } from './chatAttachments.js';
 
 // Supabase is deliberately selected unconditionally. A missing configuration
 // must surface as a clear runtime error instead of silently writing to a
@@ -186,10 +187,14 @@ const supaAdapter = {
     if (error) throw error;
     return (data || []).map(rowToMessage);
   },
-  async sendMessage(payload) {
-    const { data, error } = await supabase.from('messages').insert(messageToRow(payload)).select().single();
+  async sendMessage(payload, files = []) {
+    const record = await persistChatMessage(requireSupabase(), messageToRow(payload), files);
+    return rowToMessage(record);
+  },
+  async getChatAttachmentUrl(path) {
+    const { data, error } = await requireSupabase().storage.from(chatAttachmentBucket).createSignedUrl(path, 3600);
     if (error) throw error;
-    return rowToMessage(data);
+    return data?.signedUrl;
   },
   async updateMessage(id, payload) {
     if (!payload.readBy || Object.keys(payload).some((key) => key !== 'readBy')) {

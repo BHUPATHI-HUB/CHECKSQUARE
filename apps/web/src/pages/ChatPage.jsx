@@ -27,6 +27,7 @@ import {
   ChevronRight, Users, Filter, X, FileText, Image as ImageIcon, Trash2, Camera,
 } from 'lucide-react';
 import WebcamCaptureModal from '@/components/WebcamCaptureModal.jsx';
+import data from '@/services/dataService.js';
 
 // ─── Static config ───────────────────────────────────────────────────────
 const EMOJIS = ['😀','😁','😂','🤣','😊','😍','🤔','😎','😴','🙃','👍','👎','🙏','👏','💪','✅','❌','⚠️','📷','📎','🏠','🔧','🚨','💡','🔥','🎉','❤️','✨'];
@@ -50,25 +51,32 @@ const matchAttachment = (msg, filter) => {
 };
 
 // ─── Attachment renderer ─────────────────────────────────────────────────
-// PocketBase stores file fields as filename strings; build the URL from
-// the record's collectionId/id/filename triple.
-const fileUrl = (record, filename) => {
-  if (!filename) return null;
-  if (/^https?:\/\//i.test(filename)) return filename;
-  if (record?.collectionId && record?.id) {
-    const pbBase = (import.meta.env?.VITE_PB_URL || 'http://127.0.0.1:8090').replace(/\/$/, '');
-    return `${pbBase}/api/files/${record.collectionId}/${record.id}/${filename}`;
-  }
-  return null;
-};
+const Attachment = ({ attachment }) => {
+  const name = typeof attachment === 'string' ? attachment : attachment?.name || 'Attachment';
+  const path = typeof attachment === 'object' ? attachment?.path : null;
+  const [url, setUrl] = useState(() => typeof attachment === 'string' && /^https?:\/\//i.test(attachment) ? attachment : null);
+  const [error, setError] = useState(() => !path && !(typeof attachment === 'string' && /^https?:\/\//i.test(attachment)));
 
-const Attachment = ({ msg, filename }) => {
-  const url = fileUrl(msg, filename);
-  const isImg = /\.(png|jpe?g|gif|webp)$/i.test(filename);
+  useEffect(() => {
+    if (!path) return undefined;
+    let cancelled = false;
+    setUrl(null);
+    setError(false);
+    data.getChatAttachmentUrl(path).then((signedUrl) => {
+      if (!cancelled) { setUrl(signedUrl); setError(!signedUrl); }
+    }).catch(() => { if (!cancelled) setError(true); });
+    return () => { cancelled = true; };
+  }, [path]);
+
+  if (!url) return <span className="inline-flex items-center rounded-lg border bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+    {error ? `File unavailable: ${name}` : `Preparing ${name}…`}
+  </span>;
+
+  const isImg = (typeof attachment === 'object' && attachment?.type?.startsWith('image/')) || /\.(png|jpe?g|gif|webp)$/i.test(name);
   if (isImg) {
     return (
       <a href={url} target="_blank" rel="noreferrer" className="block max-w-[200px] rounded-lg overflow-hidden border bg-background">
-        <img src={url} alt={filename} className="w-full h-auto object-cover" />
+        <img src={url} alt={name} className="w-full h-auto object-cover" />
       </a>
     );
   }
@@ -80,7 +88,7 @@ const Attachment = ({ msg, filename }) => {
       className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border bg-background text-xs hover:bg-muted"
     >
       <FileText className="w-4 h-4 text-primary" />
-      <span className="truncate max-w-[160px]">{filename}</span>
+      <span className="truncate max-w-[160px]">{name}</span>
     </a>
   );
 };
@@ -172,7 +180,7 @@ const ChatPage = () => {
       setPendingFiles([]);
       toast.success('Message sent');
     } catch (err) {
-      toast.error('Failed to send message');
+      toast.error('Failed to send message', { description: err?.message || 'Your message and attachments are still in the composer.' });
     } finally {
       setSending(false);
     }
@@ -182,7 +190,8 @@ const ChatPage = () => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
     // PB schema: max 5 attachments per message, 20MB each
-    const accepted = files.slice(0, 5).filter((f) => {
+    if (files.length + pendingFiles.length > 5) toast.warning('You can attach up to five files per message.');
+    const accepted = files.slice(0, Math.max(0, 5 - pendingFiles.length)).filter((f) => {
       if (f.size > 20 * 1024 * 1024) {
         toast.error(`${f.name} exceeds 20 MB`);
         return false;
@@ -537,8 +546,8 @@ const ChatPage = () => {
                           </div>
                           {attachments.length > 0 && (
                             <div className={`mt-1 flex flex-wrap gap-2 ${isOwn ? 'justify-end' : 'justify-start'}`}>
-                              {attachments.map((fname, i) => (
-                                <Attachment key={`${msg.id}_${i}`} msg={msg} filename={fname} />
+                              {attachments.map((attachment, i) => (
+                                <Attachment key={`${msg.id}_${i}`} attachment={attachment} />
                               ))}
                             </div>
                           )}

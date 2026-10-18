@@ -59,8 +59,7 @@ const FloorplanHero = () => (
       fontFamily="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto"
       fontSize="11"
       letterSpacing="0.18em"
-      style={{ animation: 'draw-on 1ms forwards', animationDelay: '1.6s', opacity: 0 }}
-      // Inline keyframe to fade-in once walls finish.
+      className="home-floorplan-labels"
     >
       <text x="195" y="180" textAnchor="middle">LIVING</text>
       <text x="195" y="195" textAnchor="middle" fontSize="9" fillOpacity="0.5">14′ × 18′</text>
@@ -114,7 +113,7 @@ const FloorplanHero = () => (
           <circle r="5"  fill="hsl(var(--secondary))"/>
           {i === 0 && (
             <g
-              style={{ animation: 'draw-on 1ms forwards', animationDelay: '4.2s', opacity: 0 }}
+              className="home-floorplan-callout"
               fill="currentColor" fontFamily="ui-sans-serif" fontSize="10"
             >
               <line x1="14" y1="0" x2="34" y2="-22" stroke="currentColor" strokeOpacity="0.4" strokeWidth="0.8"/>

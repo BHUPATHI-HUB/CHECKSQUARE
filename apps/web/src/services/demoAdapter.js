@@ -67,7 +67,7 @@ const adapter = {
   async createChat(payload) {const row={...payload,id:crypto.randomUUID()};state.chats.push(row);commit();return copy(row);},
   async deleteChat(id) {state.chats=state.chats.filter((x)=>x.id!==id);commit();},
   async listMessages(chatId) {return copy(state.messages.filter((x)=>x.chatId===chatId));},
-  async sendMessage(payload) {const row={...payload,id:crypto.randomUUID(),created:stamp};state.messages.push(row);commit();return copy(row);},
+  async sendMessage(payload, files=[]) {if(files.length)throw new Error('File attachments require the connected app.');const row={...payload,id:crypto.randomUUID(),created:stamp};state.messages.push(row);commit();return copy(row);},
   async updateMessage() {}, async deleteMessage(id) {state.messages=state.messages.filter((x)=>x.id!==id);commit();},
   async getAppSettings() {return copy(state.settings);},
   async upsertAppSettings(payload) {state.settings=copy(payload);commit();},
