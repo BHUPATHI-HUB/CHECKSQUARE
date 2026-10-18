@@ -1,0 +1,56 @@
+name: Build connected CheckSquare APK
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/android-connected.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  preview-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Build connected app
+        run: npm run build
+        env:
+          # Publishable key is intentionally public; no privileged key is used.
+          VITE_SUPABASE_URL: https://jcnvcyocatcovtdedokf.supabase.co
+          VITE_SUPABASE_ANON_KEY: sb_publishable_p3Xm4a8y2kX3pS3fGUU9PA_f6T-FDFw
+      - name: Keep the connected debug app separate from existing installs
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          const path='apps/web/capacitor.config.json';
+          const config=JSON.parse(fs.readFileSync(path));
+          config.appName='CheckSquare Connected';
+          fs.writeFileSync(path,JSON.stringify(config,null,2));
+          JS
+      - run: node scripts/prepare-android.mjs
+      - name: Separate Android installation ID
+        run: |
+          python3 - <<'PYCODE'
+          from pathlib import Path
+          file=Path('apps/web/android/app/build.gradle')
+          source=file.read_text().replace('applicationId "com.bhupathi.checksquare"', 'applicationId "com.bhupathi.checksquare.connected"')
+          file.write_text(source)
+          PYCODE
+      - run: node apps/web/scripts/make-icon.mjs
+      - run: cd apps/web && npx cap sync android
+      - run: cd apps/web/android && chmod +x gradlew && ./gradlew assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CheckSquare-Connected-APK
+          path: apps/web/android/app/build/outputs/apk/debug/app-debug.apk
