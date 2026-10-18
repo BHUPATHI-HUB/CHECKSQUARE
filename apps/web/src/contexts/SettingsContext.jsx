@@ -3,7 +3,7 @@ import { DEFAULT_WEIGHTS, DEFAULT_SCORE_EXPLANATION_HTML, PROPCHK_WEIGHTS, PROPC
 import { STARTER_COMMENT_LIBRARY } from '@/utils/commentLibrary';
 import data from '@/services/dataService.js';
 import { supabase } from '@/lib/supabaseClient.js';
-import { getPendingSettings, savePendingSettingsAndQueue, completePendingSettings } from '@/lib/localStore.js';
+import { getPendingSettings, savePendingSettingsAndQueue } from '@/lib/localStore.js';
 import { isNetworkError, requestSync } from '@/services/syncEngine.js';
 
 const SettingsContext = createContext(null);
@@ -273,11 +273,12 @@ export const SettingsProvider = ({ children }) => {
         requestSync();
         return { success: true, syncStatus: 'pending' };
       };
-      if (typeof navigator !== 'undefined' && navigator.onLine === false) return await saveOnDevice();
+      // Keep successive offline edits in queue order. A direct write here
+      // could race an older queued payload and restore stale settings.
+      if ((typeof navigator !== 'undefined' && navigator.onLine === false)
+          || await getPendingSettings(session.user.id)) return await saveOnDevice();
       try {
         await data.upsertAppSettings(payload);
-        const pending = await getPendingSettings(session.user.id);
-        if (pending) await completePendingSettings(session.user.id, pending.localRevision);
         setSettings(updated);
         cacheSettings(updated);
         return { success: true, syncStatus: 'synced' };
