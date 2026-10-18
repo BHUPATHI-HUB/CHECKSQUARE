@@ -13,6 +13,7 @@ import { useSettings } from '@/contexts/SettingsContext.jsx';
 import { useInspectionStatus } from '@/hooks/useInspectionStatus.js';
 import { useAuth } from '@/contexts/AuthContext.jsx';
 import { useFeedback } from '@/contexts/FeedbackContext.jsx';
+import { materializeInspectionPhotos } from '@/lib/supabasePhotoStorage.js';
 
 /**
  * In-browser document preview with a small set of business-critical
@@ -30,6 +31,7 @@ const ReportPreviewModal = ({ open, onOpenChange, inspection, onSaved }) => {
   const { showSuccess } = useFeedback();
 
   const [draft, setDraft] = useState(inspection);
+  const [resolvedDraft, setResolvedDraft] = useState(null);
   const [previewKey, setPreviewKey] = useState(0); // bump to force iframe refresh
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(null); // 'pdf' | 'docx' | null
@@ -98,12 +100,19 @@ const ReportPreviewModal = ({ open, onOpenChange, inspection, onSaved }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, previewMode, draft, settings, previewKey]);
 
+  useEffect(() => {
+    if (!open || !draft) { setResolvedDraft(null); return; }
+    let cancelled = false;
+    setResolvedDraft(null);
+    materializeInspectionPhotos(draft)
+      .then((snapshot) => { if (!cancelled) setResolvedDraft(snapshot); })
+      .catch((error) => { if (!cancelled) console.error('Could not render report photos', error); });
+    return () => { cancelled = true; };
+  }, [open, draft, previewKey]);
+
   const html = useMemo(
-    () => (draft ? buildReportHTML(draft, settings) : ''),
-    // previewKey forces recomputation even if draft reference is the same
-    // (e.g. after a save where we mutated nested objects in place).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [draft, settings, previewKey],
+    () => (resolvedDraft ? buildReportHTML(resolvedDraft, settings) : ''),
+    [resolvedDraft, settings],
   );
 
   const patchMetadata = (field, value) => {

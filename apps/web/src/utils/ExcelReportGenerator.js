@@ -71,7 +71,7 @@ export async function buildXLSXBlob(inspection, settings) {
 
   // Resolve Supabase storageKey-only photos to inline base64 dataURLs first —
   // exceljs needs the actual bytes, and signed URLs can expire mid-build.
-  await materializeInspectionPhotos(inspection);
+  inspection = await materializeInspectionPhotos(inspection);
 
   const ri = settings?.reportImages || {};
   const boxW = Number(ri.boxWidthCm) || 8.45;

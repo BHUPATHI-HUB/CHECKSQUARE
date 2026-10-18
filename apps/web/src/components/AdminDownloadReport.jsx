@@ -11,6 +11,7 @@ import {
 import { generateXLSX } from '@/utils/ExcelReportGenerator.js';
 import { useSettings } from '@/contexts/SettingsContext.jsx';
 import dataService from '@/services/dataService.js';
+import { materializeInspectionPhotos } from '@/lib/supabasePhotoStorage.js';
 
 /**
  * Admin "download report" dialog.
@@ -36,6 +37,7 @@ const AdminDownloadReport = ({ inspection, variant = 'icon' }) => {
   // to keep the dashboards fast. The report renderer NEEDS them, so we fetch
   // the full record on open and use that local copy from here on.
   const [fullInspection, setFullInspection] = useState(inspection);
+  const [resolvedInspection, setResolvedInspection] = useState(null);
   const [hydrating, setHydrating] = useState(false);
 
   // Reset preview mode every time the dialog opens so reviewers always
@@ -74,9 +76,19 @@ const AdminDownloadReport = ({ inspection, variant = 'icon' }) => {
 
   // Build the PDF-facing HTML once per (inspection, settings) pair so
   // the iframe doesn't reflow on unrelated re-renders.
+  useEffect(() => {
+    if (!open || hydrating || !fullInspection) { setResolvedInspection(null); return; }
+    let cancelled = false;
+    setResolvedInspection(null);
+    materializeInspectionPhotos(fullInspection)
+      .then((snapshot) => { if (!cancelled) setResolvedInspection(snapshot); })
+      .catch((error) => { if (!cancelled) console.error('Could not render report photos', error); });
+    return () => { cancelled = true; };
+  }, [open, fullInspection, hydrating]);
+
   const html = useMemo(
-    () => (fullInspection && !hydrating ? buildReportHTML(fullInspection, settings) : ''),
-    [fullInspection, hydrating, settings],
+    () => (resolvedInspection ? buildReportHTML(resolvedInspection, settings) : ''),
+    [resolvedInspection, settings],
   );
 
   // Render the DOCX into the right-hand pane when (and only when) the
