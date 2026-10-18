@@ -3,38 +3,25 @@
 // inside `roomInspections` JSON instead of the old base64 data-URL.
 //
 // Behaviour:
-//   • If Supabase is configured  → upload to bucket `inspection-photos`, return key.
-//   • If Supabase is NOT configured → fall back to legacy base64 dataURL so the
-//     existing PocketBase-only flow keeps working.  This lets developers ship
-//     the migration in stages and lets the offline PWA degrade gracefully.
+//   • Upload to bucket `inspection-photos`, return a stable storage key.
+//   • If Supabase is not configured, fail clearly so a release build cannot
+//     silently embed large base64 payloads or write to a retired backend.
 //
 // Signed-read URLs are generated on demand via getInspectionPhotoUrl() — the
 // bucket is PRIVATE; only the signed URL grants short-lived access.
 //
 // All photo paths follow the convention:
 //     <inspectionId>/<roomKey>/<photoId>.<ext>
-// so that PocketBase row-level rules can authorise reads (`inspectionId` is
-// validated against the inspector's ownership before a signed URL is minted
-// by the `supabase-storage.pb.js` PB hook).
+// Storage policies validate ownership using the parent inspection and user.
 
+import { isDemoMode } from '@/lib/previewMode.js';
 import { supabase, isSupabaseConfigured, SUPABASE_PHOTO_BUCKET } from '@/lib/supabaseClient.js';
 import {
-  putPhotoBlob, getPhotoBlob, markPhotoSynced, deletePhotoBlob, enqueue,
+  savePhotoAndQueue, getPhotoBlob, markPhotoSynced,
 } from '@/lib/localStore.js';
 import { requestSync } from '@/services/syncEngine.js';
 
 const SIGNED_URL_TTL_SECONDS = 60 * 60; // 1 h
-const PB_BASE_URL = (import.meta.env?.VITE_PB_URL || 'http://127.0.0.1:8090').replace(/\/$/, '');
-
-// Legacy fallback: read entire file as base64 data-URL (drop-in for the old
-// fileToDataUrl() helper inside RoomPhotoManager.jsx).
-const fileToDataUrl = (file) => new Promise((resolve, reject) => {
-  const reader = new FileReader();
-  reader.onload = () => resolve(reader.result);
-  reader.onerror = reject;
-  reader.readAsDataURL(file);
-});
-
 const guessExtension = (file) => {
   const fromName = (file.name || '').split('.').pop()?.toLowerCase();
   if (fromName && fromName.length <= 4) return fromName;
@@ -139,8 +126,7 @@ async function resizeImageFile(file, maxEdge, quality) {
  * @param {string}    ctx.roomKey      — slug of the room (e.g. "kitchen", "bathroom_01")
  * @param {number}    [ctx.maxEdge]    — resize so the longest edge <= this many px (0 = keep original)
  * @param {number}    [ctx.quality]    — JPEG quality (0-1) applied when resizing
- * @returns {Promise<{id, storageKey?, url?, capturedAt}>}
- *           — storageKey when Supabase succeeded; url when falling back to base64.
+ * @returns {Promise<{id, storageKey, capturedAt}>}
  */
 export async function uploadInspectionPhoto(file, { inspectionId = 'draft', roomKey = 'misc', maxEdge = 0, quality = 0.85 } = {}) {
   const id = makePhotoId();
@@ -148,23 +134,28 @@ export async function uploadInspectionPhoto(file, { inspectionId = 'draft', room
   file = await resizeImageFile(file, maxEdge, quality);
   const capturedAt = new Date().toISOString();
 
-  // Fallback path keeps the old behaviour alive when Supabase isn't set up yet.
+  if (isDemoMode) {
+    const url = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(file); });
+    return { id, url, capturedAt };
+  }
   if (!isSupabaseConfigured) {
-    const url = await fileToDataUrl(file);
-    return { id, url, capturedAt, _legacy: true };
+    throw new Error('Supabase storage is not configured; photo upload cannot continue.');
   }
 
   const ext = guessExtension(file);
   // Sanitise — Supabase Storage rejects spaces / unicode in keys.
   const safeRoom = String(roomKey).replace(/[^a-z0-9_-]+/gi, '-').toLowerCase();
   const safeInsp = String(inspectionId || 'draft').replace(/[^a-z0-9_-]+/gi, '-');
-  const path = `${safeInsp}/${safeRoom}/${id}.${ext}`;
+
   const contentType = file.type || 'image/jpeg';
   const blob = file instanceof Blob ? file : new Blob([file], { type: contentType });
 
-  // Local-first: keep the resized Blob on-device so the photo renders
-  // instantly, survives a reload, and is NEVER lost with no signal.
-  await putPhotoBlob({ path, blob, contentType, inspectionId: safeInsp });
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError || !session?.user?.id) throw new Error('Sign in before saving a photo.');
+  const path = `${session.user.id}/${safeInsp}/${safeRoom}/${id}.${ext}`;
+
+  // Commit both the local photo and its retry entry before showing success.
+  await savePhotoAndQueue({ path, blob, contentType, inspectionId: safeInsp, ownerId: session.user.id });
   // Extra durability on Android — mirror to native storage (best-effort).
   mirrorToNativeFilesystem(path, blob);
 
@@ -179,13 +170,14 @@ export async function uploadInspectionPhoto(file, { inspectionId = 'draft', room
         .upload(path, blob, { contentType, upsert: true });
       if (error) throw error;
       await markPhotoSynced(path);
-      await deletePhotoBlob(path); // synced — signed URLs serve it from now on
+      // Keep the local Blob until the queued operation is drained. This also
+      // survives a crash between the remote upload and queue cleanup.
+      requestSync();
       return { id, storageKey: path, capturedAt };
     } catch (e) {
       console.warn('[supabase] direct upload failed, queuing for sync:', e?.message || e);
     }
   }
-  await enqueue({ type: 'uploadPhoto', path, contentType });
   requestSync();
   return { id, storageKey: path, capturedAt };
 }
@@ -204,7 +196,8 @@ export async function getInspectionPhotoUrl(photo) {
   // Local-first: if we still hold the Blob (not yet synced), render it directly.
   try {
     const local = await getPhotoBlob(photo.storageKey);
-    if (local?.blob) return URL.createObjectURL(local.blob);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (local?.blob && local.ownerId === session?.user?.id) return URL.createObjectURL(local.blob);
   } catch { /* ignore */ }
   const { data, error } = await supabase
     .storage
@@ -235,7 +228,8 @@ export async function getInspectionPhotoDataUrl(photo) {
   try {
     if (photo.storageKey) {
       const local = await getPhotoBlob(photo.storageKey);
-      if (local?.blob) {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (local?.blob && local.ownerId === session?.user?.id) {
         return await new Promise((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => resolve(reader.result);

@@ -1,0 +1,37 @@
+name: Build Android staging APK
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v3
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Require staging configuration
+        env:
+          SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.STAGING_SUPABASE_ANON_KEY }}
+        run: test -n "$SUPABASE_URL" && test -n "$SUPABASE_ANON_KEY"
+      - run: npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.STAGING_SUPABASE_ANON_KEY }}
+      - run: node scripts/prepare-android.mjs
+      - run: node apps/web/scripts/make-icon.mjs
+      - run: cd apps/web && npx cap sync android
+      - run: cd apps/web/android && chmod +x gradlew && ./gradlew assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: checksquare-staging-apk-${{ github.sha }}
+          path: apps/web/android/app/build/outputs/apk/debug/app-debug.apk

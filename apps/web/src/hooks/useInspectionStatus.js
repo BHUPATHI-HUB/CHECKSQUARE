@@ -1,18 +1,19 @@
 import { useCallback } from 'react';
+import { useAuth } from '@/contexts/AuthContext.jsx';
 import { toast } from 'sonner';
 import data from '@/services/dataService.js';
-import { putPendingInspection, enqueue, listPendingInspections, getPendingInspection, putCachedList, getCachedList } from '@/lib/localStore.js';
+import { savePendingInspectionAndQueue, listPendingInspections, getPendingInspection, putCachedList, getCachedList } from '@/lib/localStore.js';
 import { requestSync, isNetworkError } from '@/services/syncEngine.js';
 
 // Stale-while-revalidate cache so navigating away from a dashboard and back
 // shows the last known list INSTANTLY instead of a blank screen plus a full
 // re-fetch every time. Dashboards seed their initial state from here and then
 // refresh in the background. Mutations clear it so stale rows don't linger.
-const inspectionListCache = { all: null, byInspector: {}, deleted: null };
-export const getCachedAllInspections = () => inspectionListCache.all;
+const inspectionListCache = { all: {}, byInspector: {}, deleted: null };
+export const getCachedAllInspections = (id) => inspectionListCache.all[id] || null;
 export const getCachedInspectorInspections = (id) => inspectionListCache.byInspector[id] || null;
 const clearInspectionListCache = () => {
-  inspectionListCache.all = null;
+  inspectionListCache.all = {};
   inspectionListCache.byInspector = {};
   inspectionListCache.deleted = null;
 };
@@ -21,9 +22,8 @@ const clearInspectionListCache = () => {
 // doesn't have yet, so offline work stays visible on the dashboards.
 const mergePending = (serverRows, pending) => {
   if (!pending || pending.length === 0) return serverRows;
-  const ids = new Set((serverRows || []).map((r) => r.id));
-  const extra = pending.filter((p) => !ids.has(p.id));
-  return [...extra, ...(serverRows || [])];
+  const ids = new Set(pending.map((row) => row.id));
+  return [...pending, ...(serverRows || []).filter((row) => !ids.has(row.id))];
 };
 
 // Fields needed to render the dashboard list rows + drive sort/search/filter
@@ -49,10 +49,12 @@ const LIST_FIELDS = [
   'approvedBy', 'approvedAt', 'rejectedBy', 'rejectedAt',
 ].join(',');
 
-// All inspection CRUD now goes through PocketBase. We keep the same hook surface
+// All inspection CRUD now goes through the Supabase data boundary. We keep the same hook surface
 // so existing callers (AdminDashboard, InspectorDashboard, InspectionForm, etc.)
 // just need to await the returned promises.
 export const useInspectionStatus = () => {
+  const { user } = useAuth();
+  const accountId = user?.id;
   // List ACTIVE (non-deleted) inspections. Server-side filtering by role is
   // enforced by the collection rules, so admins get everything and inspectors
   // only get their own.
@@ -60,14 +62,14 @@ export const useInspectionStatus = () => {
     let records;
     try {
       records = await data.listInspections({ filter: 'deletedAt = null', sort: '-created', ...options });
-      inspectionListCache.all = records;
-      putCachedList('inspections:all', records);
+      inspectionListCache.all[accountId] = records;
+      putCachedList(`inspections:all:${accountId}`, records);
     } catch (error) {
       if (!error?.isAbort) console.error('Failed to fetch inspections', error);
-      records = inspectionListCache.all || (await getCachedList('inspections:all')) || [];
+      records = isNetworkError(error) ? inspectionListCache.all[accountId] || (await getCachedList(`inspections:all:${accountId}`)) || [] : [];
     }
-    return mergePending(records, await listPendingInspections());
-  }, []);
+    return mergePending(records, (await listPendingInspections()).filter((p) => (p.ownerId || p.inspector) === accountId));
+  }, [accountId]);
 
   const getInspectionsForInspector = useCallback(async (inspectorId) => {
     if (!inspectorId) return [];
@@ -100,6 +102,8 @@ export const useInspectionStatus = () => {
 
   const getInspectionById = useCallback(async (inspectionId) => {
     if (!inspectionId) return null;
+    const pending = await getPendingInspection(inspectionId);
+    if (pending && (pending.ownerId || pending.inspector) === accountId) return pending;
     try {
       return await data.getInspection(inspectionId);
     } catch (error) {
@@ -107,30 +111,23 @@ export const useInspectionStatus = () => {
       // the full local copy so it can still be viewed/edited.
       if (error?.status === 404 || error?.code === 'PGRST116' || isNetworkError(error)) {
         const local = await getPendingInspection(inspectionId);
-        if (local) return local;
+        if (local && (local.ownerId || local.inspector) === accountId) return local;
         if (error?.status === 404 || error?.code === 'PGRST116') return null;
       }
       console.error('Failed to fetch inspection', error);
       return null;
     }
-  }, []);
+  }, [accountId]);
 
   const updateInspectionStatus = useCallback(async (inspectionId, newStatus, user, extra = {}) => {
     try {
       const payload = { status: newStatus, ...extra };
-      if (newStatus === 'approved') {
-        payload.approvedBy = user?.name || user?.email || 'Admin';
-        payload.approvedAt = new Date().toISOString();
-      } else if (newStatus === 'rejected') {
-        payload.rejectedBy = user?.name || user?.email || 'Admin';
-        payload.rejectedAt = new Date().toISOString();
-      }
       await data.updateInspection(inspectionId, payload);
       clearInspectionListCache();
       return true;
     } catch (error) {
       console.error('Failed to update inspection status', error);
-      toast.error('Failed to update status');
+      toast.error(error?.message || 'Failed to update status');
       return false;
     }
   }, []);
@@ -139,7 +136,7 @@ export const useInspectionStatus = () => {
     try {
       await data.updateInspection(inspectionId, {
         deletedAt: new Date().toISOString(),
-        deletedBy: user?.name || user?.email || 'Admin',
+        deletedBy: user?.id,
         deletionReason: reason,
       });
       clearInspectionListCache();
@@ -181,6 +178,7 @@ export const useInspectionStatus = () => {
 
   const saveInspection = useCallback(async (inspectionData, existingId = null) => {
     const payload = {
+      version: inspectionData.version,
       metadata: inspectionData.metadata || {},
       areaCalculations: inspectionData.areaCalculations || [],
       // Phase 2 free-form metrics (door height, ceiling height, wall height, …).
@@ -216,10 +214,15 @@ export const useInspectionStatus = () => {
     const queueLocally = async () => {
       const now = new Date().toISOString();
       const localRecord = {
-        id: clientId, ...payload, created: now, updated: now, syncStatus: 'pending',
+        id: clientId, ...payload, ownerId: accountId, created: now, updated: now, syncStatus: 'pending',
       };
-      await putPendingInspection(localRecord);
-      await enqueue({ type: 'upsertInspection', id: clientId });
+      try {
+        await savePendingInspectionAndQueue(localRecord);
+      } catch (error) {
+        console.error('Offline save failed', error);
+        toast.error('Could not save on this device. Keep this form open and free storage or reconnect before trying again.');
+        return null;
+      }
       requestSync();
       clearInspectionListCache();
       toast.success("Saved on device — it'll sync automatically when you're back online.");
@@ -234,21 +237,9 @@ export const useInspectionStatus = () => {
       if (existingId) {
         record = await data.updateInspection(existingId, payload);
       } else {
-        record = await data.createInspection(payload);
+        record = await data.upsertInspection({ id: clientId, ...payload });
 
-        // Every new inspection auto-provisions a group chat thread (inspector +
-        // customer + admins). Best-effort — a failure must NOT block the save.
-        try {
-          const adminIds = await data.listUsersByRole('admin').then((rows) => rows.map((r) => r.id));
-          const participants = Array.from(new Set([
-            ...adminIds, record.inspector, record.customer,
-          ].filter(Boolean)));
-          if (participants.length >= 2) {
-            await data.createChat({ type: 'group', participants, inspectionId: record.id });
-          }
-        } catch (chatErr) {
-          console.warn('Auto-create chat thread skipped:', chatErr?.message || chatErr);
-        }
+
       }
       clearInspectionListCache();
       return record;
@@ -256,10 +247,10 @@ export const useInspectionStatus = () => {
       // Lost connectivity mid-save → don't fail, queue it instead.
       if (isNetworkError(error)) return queueLocally();
       console.error('Failed to save inspection', error);
-      toast.error('Failed to save inspection');
+      toast.error(error?.message || 'Failed to save inspection');
       return null;
     }
-  }, []);
+  }, [accountId]);
 
   return {
     getAllInspections,

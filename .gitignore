@@ -70,3 +70,6 @@ credentials.json
 *.pem
 *.key
 .credentials
+
+# Generated web metadata
+apps/web/public/llms.txt

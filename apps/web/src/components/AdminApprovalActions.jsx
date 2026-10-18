@@ -15,7 +15,9 @@ const AdminApprovalActions = ({ inspection, onStatusChanged }) => {
 
   const handleStatusChange = async (newStatus) => {
     setIsUpdating(true);
-    const success = await updateInspectionStatus(inspection.id, newStatus, user);
+    const rejectionReason = newStatus === 'rejected' ? window.prompt('What should the inspector correct?')?.trim() : undefined;
+    if (newStatus === 'rejected' && !rejectionReason) { setIsUpdating(false); return; }
+    const success = await updateInspectionStatus(inspection.id, newStatus, user, { version: inspection.version, ...(rejectionReason && { rejectionReason }) });
     if (success) {
       const addr = inspection.metadata?.propertyAddress || 'The inspection';
       if (newStatus === 'approved') {

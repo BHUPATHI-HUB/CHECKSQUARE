@@ -1,3 +1,4 @@
+import { useAuth } from '@/contexts/AuthContext.jsx';
 import { useState, useEffect } from 'react';
 import { outboxStats, getStorageEstimate } from '@/lib/localStore.js';
 import { onSyncChange, requestSync, retryFailed } from '@/services/syncEngine.js';
@@ -8,21 +9,22 @@ import { onSyncChange, requestSync, retryFailed } from '@/services/syncEngine.js
 //   • storage  — { usage, quota, ratio } on-device storage pressure
 //   • syncNow / retryFailed — manual triggers
 export function useSyncStatus() {
+  const { user } = useAuth();
   const [stats, setStats] = useState({ total: 0, failed: 0 });
   const [storage, setStorage] = useState({ usage: 0, quota: 0, ratio: 0 });
 
   useEffect(() => {
     let mounted = true;
     const refreshStorage = () => getStorageEstimate().then((s) => { if (mounted) setStorage(s); });
-    outboxStats().then((s) => { if (mounted) setStats(s); }).catch(() => {});
+    outboxStats(user?.id).then((s) => { if (mounted) setStats(s); }).catch(() => {});
     refreshStorage();
     const off = onSyncChange((s) => {
       if (!mounted) return;
-      setStats(s || { total: 0, failed: 0 });
+      outboxStats(user?.id).then((next) => { if (mounted) setStats(next); });
       refreshStorage();
     });
     return () => { mounted = false; off(); };
-  }, []);
+  }, [user?.id]);
 
   return {
     pending: stats.total,

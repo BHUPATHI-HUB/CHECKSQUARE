@@ -9,8 +9,8 @@
 //   • inspections — inspections saved while offline (syncStatus = 'pending'),
 //                   so they still appear in dashboards until they sync.
 //
-// Everything degrades gracefully: if IndexedDB is unavailable the helpers
-// resolve to no-ops / nulls so the online flow is never blocked.
+// Cached reads are best-effort. Durable writes must reject on failure so
+// callers never report an offline save that did not reach device storage.
 
 const DB_NAME = 'checksquare-offline';
 const DB_VERSION = 2;
@@ -44,13 +44,18 @@ function openDB() {
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
+    req.onblocked = () => reject(new Error("Offline storage is blocked by another app tab."));
   });
+  dbPromise.catch(() => { dbPromise = null; });
   return dbPromise;
 }
 
 async function tx(storeName, mode, fn) {
   let db;
-  try { db = await openDB(); } catch { return undefined; }
+  try { db = await openDB(); } catch (error) {
+    if (mode === 'readwrite') throw error;
+    return undefined;
+  }
   return new Promise((resolve, reject) => {
     const t = db.transaction(storeName, mode);
     const store = t.objectStore(storeName);
@@ -70,14 +75,31 @@ const reqToPromise = (req) => new Promise((resolve, reject) => {
 export const isOfflineStoreAvailable = () => typeof indexedDB !== 'undefined';
 
 // ─── photos ───────────────────────────────────────────────────────────────
-export async function putPhotoBlob({ path, blob, contentType, inspectionId }) {
-  try {
-    await tx(STORES.photos, 'readwrite', (s) => s.put({
-      path, blob, contentType: contentType || 'image/jpeg',
-      inspectionId: inspectionId || null,
-      syncStatus: 'pending', createdAt: Date.now(),
-    }));
-  } catch { /* non-fatal */ }
+// Keep the photo and its retry operation in one transaction. A quota or
+// IndexedDB failure rolls back both so the UI can report that it was not saved.
+export async function savePhotoAndQueue({ path, blob, contentType, inspectionId, ownerId }) {
+  if (!path || !blob || !ownerId) throw new Error('Photo, path and account are required.');
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([STORES.photos, STORES.outbox], 'readwrite');
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error || new Error('Offline photo save failed.'));
+    transaction.onabort = () => reject(transaction.error || new Error('Offline photo save was cancelled.'));
+    const now = Date.now();
+    try {
+      transaction.objectStore(STORES.photos).put({
+        path, blob, ownerId, contentType: contentType || 'image/jpeg',
+        inspectionId: inspectionId || null, syncStatus: 'pending', createdAt: now,
+      });
+      transaction.objectStore(STORES.outbox).add({
+        type: 'uploadPhoto', path, ownerId, contentType,
+        tries: 0, nextAttemptAt: now, createdAt: now,
+      });
+    } catch (error) {
+      transaction.abort();
+      reject(error);
+    }
+  });
 }
 
 export async function getPhotoBlob(path) {
@@ -101,11 +123,9 @@ export async function deletePhotoBlob(path) {
 
 // ─── outbox ─────────────────────────────────────────────────────────────
 export async function enqueue(op) {
-  try {
-    return await tx(STORES.outbox, 'readwrite', (s) => reqToPromise(s.add({
+  return tx(STORES.outbox, 'readwrite', (s) => reqToPromise(s.add({
       ...op, tries: 0, nextAttemptAt: Date.now(), createdAt: Date.now(),
     })));
-  } catch { return null; }
 }
 
 export async function listOutbox() {
@@ -130,9 +150,9 @@ export async function outboxCount() {
 
 // Aggregate queue stats: total pending + how many have already failed at least
 // one attempt (so the UI can flag "waiting" vs "needs attention").
-export async function outboxStats() {
+export async function outboxStats(ownerId) {
   try {
-    const all = await listOutbox();
+    const all = (await listOutbox()).filter((op) => ownerId && op.ownerId === ownerId);
     return { total: all.length, failed: all.filter((o) => (o.tries || 0) > 0).length };
   } catch { return { total: 0, failed: 0 }; }
 }
@@ -170,11 +190,35 @@ export async function getStorageEstimate() {
 
 // ─── inspections (offline-saved) ─────────────────────────────────────────
 export async function putPendingInspection(inspection) {
-  try {
     await tx(STORES.inspections, 'readwrite', (s) => s.put({
       ...inspection, syncStatus: 'pending', updatedAt: Date.now(),
     }));
-  } catch { /* non-fatal */ }
+}
+
+// Commit the report and its retry operation together. A failed queue write
+// rolls back the report too; success means both records reached IndexedDB.
+export async function savePendingInspectionAndQueue(inspection) {
+  if (!inspection?.id) throw new Error('An inspection ID is required.');
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([STORES.inspections, STORES.outbox], 'readwrite');
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error || new Error('Offline save failed.'));
+    transaction.onabort = () => reject(transaction.error || new Error('Offline save was cancelled.'));
+    const now = Date.now();
+    try {
+      transaction.objectStore(STORES.inspections).put({
+        ...inspection, localRevision: crypto.randomUUID(), syncStatus: 'pending', updatedAt: now,
+      });
+      transaction.objectStore(STORES.outbox).add({
+        type: 'upsertInspection', inspectionId: inspection.id, ownerId: inspection.ownerId || inspection.inspector,
+        tries: 0, nextAttemptAt: now, createdAt: now,
+      });
+    } catch (error) {
+      transaction.abort();
+      reject(error);
+    }
+  });
 }
 
 export async function getPendingInspection(id) {
@@ -187,6 +231,15 @@ export async function listPendingInspections() {
     const all = (await tx(STORES.inspections, 'readonly', (s) => reqToPromise(s.getAll()))) || [];
     return all.filter((i) => i.syncStatus !== 'synced');
   } catch { return []; }
+}
+
+export async function completePendingInspection(id, localRevision, version) {
+  return tx(STORES.inspections, 'readwrite', async (store) => {
+    const current = await reqToPromise(store.get(id));
+    if (!current) return;
+    if (current.localRevision === localRevision) store.delete(id);
+    else store.put({ ...current, version });
+  });
 }
 
 export async function deletePendingInspection(id) {

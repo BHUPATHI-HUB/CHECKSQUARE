@@ -1,9 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
-import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient.js';
+import { isDemoMode, getDemoUser } from '@/lib/previewMode.js';
+import { supabase } from '@/lib/supabaseClient.js';
 
 const AuthContext = createContext(null);
-const USE_SUPABASE_AUTH = isSupabaseConfigured && (import.meta.env?.VITE_USE_SUPABASE_AUTH === 'true');
+// Supabase Auth is the only supported production identity provider.
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
@@ -13,20 +14,6 @@ export const useAuth = () => {
   return context;
 };
 
-// Shape a PocketBase auth record into the simple `user` object the rest of the
-// app already expects (id, email, name, role, phone, address).
-const toUserSession = (record) => {
-  if (!record) return null;
-  return {
-    id: record.id,
-    email: record.email,
-    name: record.name || record.email,
-    role: record.role,
-    phone: record.phone || '',
-    address: record.address || '',
-  };
-};
-
 const toSupabaseUserSession = (authUser, profile) => {
   if (!authUser) return null;
   const meta = authUser.user_metadata || {};
@@ -34,7 +21,7 @@ const toSupabaseUserSession = (authUser, profile) => {
     id: authUser.id,
     email: profile?.email || authUser.email,
     name: profile?.name || meta.full_name || meta.name || authUser.email,
-    role: profile?.role || meta.role || 'customer',
+    role: profile?.role || 'customer',
     phone: profile?.phone || meta.phone || '',
     address: profile?.address || meta.address || '',
   };
@@ -55,124 +42,78 @@ const decodeJwtExp = (token) => {
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [supabaseSession, setSupabaseSession] = useState(null);
-  const [pbToken, setPbToken] = useState(null);
   const [loading, setLoading] = useState(true);
   const [sessionWarning, setSessionWarning] = useState(false);
   const warnedRef = useRef(false);
-  const pbRef = useRef(null);
-
-  const getPB = useCallback(async () => {
-    if (pbRef.current) return pbRef.current;
-    const mod = await import('@/lib/pocketbaseClient.js');
-    pbRef.current = mod.default;
-    return pbRef.current;
-  }, []);
 
   const loadSupabaseUser = useCallback(async (authUser) => {
     if (!authUser) return null;
-    let profile = null;
-    // During early migration the profiles table may not exist yet.
     try {
+      if (navigator.onLine === false) {
+        const cached = JSON.parse(localStorage.getItem(`profile:${authUser.id}`) || 'null');
+        return cached?.id === authUser.id ? cached : null;
+      }
       const { data, error } = await supabase
         .from('profiles')
         .select('id,email,name,role,phone,address')
         .eq('id', authUser.id)
         .maybeSingle();
-      if (!error) profile = data;
+      if (error || !data) {
+        console.error('Supabase profile unavailable; refusing to create a role-less session.', error || 'profile not found');
+        return null;
+      }
+      const profile = toSupabaseUserSession(authUser, data);
+      try { localStorage.setItem(`profile:${authUser.id}`, JSON.stringify(profile)); } catch { /* optional cache */ }
+      return profile;
     } catch {
-      // Ignore and fall back to auth metadata.
+      return null;
     }
-    return toSupabaseUserSession(authUser, profile);
   }, []);
 
   const logout = useCallback(() => {
-    if (USE_SUPABASE_AUTH) {
-      supabase.auth.signOut().catch(() => {});
-      setSupabaseSession(null);
-    } else if (pbRef.current) {
-      pbRef.current.authStore.clear();
-    } else {
-      getPB().then((pb) => pb.authStore.clear()).catch(() => {});
-    }
-    setPbToken(null);
+    supabase?.auth.signOut().catch(() => {});
+    setSupabaseSession(null);
     setUser(null);
     setSessionWarning(false);
     warnedRef.current = false;
-  }, [getPB]);
+  }, []);
 
-  // Subscribe to PocketBase auth changes so multiple tabs stay in sync and a
-  // refresh of the auth record automatically propagates.
   useEffect(() => {
-    if (USE_SUPABASE_AUTH) {
-      let mounted = true;
+    let mounted = true;
 
-      const init = async () => {
-        const { data } = await supabase.auth.getSession();
-        if (!mounted) return;
-        setSupabaseSession(data.session || null);
-        if (data.session?.user) {
-          const nextUser = await loadSupabaseUser(data.session.user);
-          if (mounted) setUser(nextUser);
-        } else {
-          setUser(null);
-        }
-        setLoading(false);
-      };
-      init();
-
-      const { data: sub } = supabase.auth.onAuthStateChange(async (_event, session) => {
-        setSupabaseSession(session || null);
-        if (!session?.user) {
-          setUser(null);
-          return;
-        }
-        const nextUser = await loadSupabaseUser(session.user);
-        if (mounted) setUser(nextUser);
-      });
-
-      return () => {
-        mounted = false;
-        sub.subscription.unsubscribe();
-      };
+    if (isDemoMode) {
+      setUser(getDemoUser());
+      setSupabaseSession({ user: getDemoUser() });
+      setLoading(false);
+      return () => { mounted = false; };
+    }
+    if (!supabase) {
+      setLoading(false);
+      return () => { mounted = false; };
     }
 
-    let cancelled = false;
-    let unsubscribe = () => {};
-
-    const initPb = async () => {
-      try {
-        const pb = await getPB();
-        if (cancelled) return;
-
-        unsubscribe = pb.authStore.onChange(() => {
-          setUser(toUserSession(pb.authStore.record));
-          setPbToken(pb.authStore.token || null);
-        }, true);
-
-        // Initial validation: if a token is stored, refresh it once so an expired
-        // session is cleared cleanly on first load.
-        if (pb.authStore.isValid) {
-          try {
-            await pb.collection('users').authRefresh();
-          } catch (e) {
-            pb.authStore.clear();
-          }
-        }
-
-        if (cancelled) return;
-        setUser(toUserSession(pb.authStore.record));
-        setPbToken(pb.authStore.token || null);
-      } finally {
-        if (!cancelled) setLoading(false);
+    let authRevision = 0;
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      const revision = ++authRevision;
+      setSupabaseSession(session || null);
+      if (!session?.user) {
+        setUser(null);
+        setLoading(false);
+        return;
       }
-    };
-    initPb();
+      setUser((previous) => previous?.id === session.user.id ? previous : null);
+      // Supabase auth holds a lock in this callback. Defer SDK calls.
+      setTimeout(async () => {
+        const nextUser = await loadSupabaseUser(session.user);
+        if (mounted && revision === authRevision) { setUser(nextUser); setLoading(false); }
+      }, 0);
+    });
 
     return () => {
-      cancelled = true;
-      unsubscribe();
+      mounted = false;
+      sub.subscription.unsubscribe();
     };
-  }, [loadSupabaseUser, getPB]);
+  }, [loadSupabaseUser]);
 
   // ---------------------------------------------------------------------------
   // Inactivity guard (Spec §1 / DoD #3)
@@ -215,9 +156,8 @@ export const AuthProvider = ({ children }) => {
     };
   }, [user, logout]);
 
-  // Session expiry warning. PocketBase tokens are JWTs; decode the `exp` claim.
   useEffect(() => {
-    const token = USE_SUPABASE_AUTH ? supabaseSession?.access_token : pbToken;
+    const token = supabaseSession?.access_token;
     if (!token) return;
 
     const interval = setInterval(() => {
@@ -235,10 +175,14 @@ export const AuthProvider = ({ children }) => {
     }, 30000);
 
     return () => clearInterval(interval);
-  }, [user, logout, supabaseSession, pbToken]);
+  }, [user, logout, supabaseSession]);
 
   const extendSession = useCallback(async () => {
-    if (USE_SUPABASE_AUTH) {
+    if (!supabase) {
+      toast.error('Supabase is not configured.');
+      return;
+    }
+    {
       const { data, error } = await supabase.auth.refreshSession();
       if (error) {
         toast.error('Could not extend session. Please log in again.');
@@ -256,26 +200,12 @@ export const AuthProvider = ({ children }) => {
       toast.success('Session extended successfully.');
       return;
     }
-
-    try {
-      const pb = await getPB();
-      await pb.collection('users').authRefresh();
-      setUser(toUserSession(pb.authStore.record));
-      setPbToken(pb.authStore.token || null);
-      warnedRef.current = false;
-      setSessionWarning(false);
-      lastActivityRef.current = Date.now();
-      toast.success('Session extended successfully.');
-    } catch (e) {
-      toast.error('Could not extend session. Please log in again.');
-      logout();
-    }
-  }, [logout, loadSupabaseUser, getPB]);
+  }, [logout, loadSupabaseUser]);
 
   // `expectedRole` is accepted for backwards compatibility with the existing
   // login form; the authoritative role lives in the `users.role` field.
   const login = async (email, password, expectedRole) => {
-    if (USE_SUPABASE_AUTH) {
+    if (supabase) {
       try {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
@@ -284,6 +214,7 @@ export const AuthProvider = ({ children }) => {
         const nextUser = await loadSupabaseUser(data.user);
         setUser(nextUser);
 
+        if (!nextUser) throw new Error('Your profile could not be loaded. Please reconnect and try again.');
         if (expectedRole && nextUser?.role !== expectedRole) {
           await supabase.auth.signOut();
           setSupabaseSession(null);
@@ -301,37 +232,11 @@ export const AuthProvider = ({ children }) => {
         };
       }
     }
-
-    try {
-      const pb = await getPB();
-      const authData = await pb
-        .collection('users')
-        .authWithPassword(email, password);
-
-      if (expectedRole && authData.record.role !== expectedRole) {
-        pb.authStore.clear();
-        setPbToken(null);
-        setUser(null);
-        return {
-          success: false,
-          error: `This account is not registered as a ${expectedRole}.`,
-        };
-      }
-
-      setUser(toUserSession(pb.authStore.record));
-      setPbToken(pb.authStore.token || null);
-
-      return { success: true };
-    } catch (e) {
-      return {
-        success: false,
-        error: e?.message || 'Invalid email or password.',
-      };
-    }
+    return { success: false, error: 'Supabase is not configured.' };
   };
 
   const signup = async (userData) => {
-    if (USE_SUPABASE_AUTH) {
+    if (supabase) {
       try {
         const { data, error } = await supabase.auth.signUp({
           email: userData.email,
@@ -347,19 +252,11 @@ export const AuthProvider = ({ children }) => {
         });
         if (error) throw error;
 
-        if (data.user) {
-          try {
-            await supabase.from('profiles').upsert({
-              id: data.user.id,
-              email: data.user.email,
-              name: userData.name,
-              role: 'customer',
-              phone: userData.phone || '',
-              address: userData.address || '',
-            }, { onConflict: 'id' });
-          } catch {
-            // Safe to ignore until profiles table exists everywhere.
-          }
+        if (data.session && data.user) {
+          const { error: profileError } = await supabase.from('profiles').update({
+            phone: userData.phone || '', address: userData.address || '',
+          }).eq('id', data.user.id);
+          if (profileError) throw new Error('Account created, but contact details could not be saved.');
         }
 
         if (!data.session) {
@@ -383,39 +280,11 @@ export const AuthProvider = ({ children }) => {
         return { success: false, error: e?.message || 'Could not create account.' };
       }
     }
-
-    try {
-      const pb = await getPB();
-      const payload = {
-        email: userData.email,
-        password: userData.password,
-        passwordConfirm: userData.password,
-        name: userData.name,
-        phone: userData.phone || '',
-        address: userData.address || '',
-        // Public signup is always a customer; admins/inspectors are provisioned
-        // via the PocketBase admin UI.
-        role: 'customer',
-        emailVisibility: true,
-      };
-
-      await pb.collection('users').create(payload);
-      await pb.collection('users').authWithPassword(userData.email, userData.password);
-      setUser(toUserSession(pb.authStore.record));
-      setPbToken(pb.authStore.token || null);
-
-      return { success: true };
-    } catch (e) {
-      const msg =
-        e?.data?.data?.email?.message ||
-        e?.message ||
-        'Could not create account.';
-      return { success: false, error: msg };
-    }
+    return { success: false, error: 'Supabase is not configured.' };
   };
 
   const requestPasswordReset = async (email) => {
-    if (USE_SUPABASE_AUTH) {
+    if (supabase) {
       try {
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
           redirectTo: `${window.location.origin}/login`,
@@ -426,14 +295,7 @@ export const AuthProvider = ({ children }) => {
         return { success: false, error: e?.message || 'Could not send reset email.' };
       }
     }
-
-    try {
-      const pb = await getPB();
-      await pb.collection('users').requestPasswordReset(email);
-      return { success: true };
-    } catch (e) {
-      return { success: false, error: e?.message || 'Could not send reset email.' };
-    }
+    return { success: false, error: 'Supabase is not configured.' };
   };
 
   const hasRole = (requiredRole) => {
@@ -453,7 +315,7 @@ export const AuthProvider = ({ children }) => {
     extendSession,
     requestPasswordReset,
     hasRole,
-    isAuthenticated: USE_SUPABASE_AUTH ? (!!user && !!supabaseSession) : (!!user && !!pbToken),
+    isAuthenticated: !!user && !!supabaseSession,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

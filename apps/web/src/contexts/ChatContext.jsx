@@ -185,7 +185,7 @@ export const ChatProvider = ({ children }) => {
   }, [user, getChats]);
 
   // ─── Delete (for everyone) — admin / inspector / sender ───────────────
-  // Hard delete from PocketBase. PB rules (migration 1779600001) gate this
+  // Hard delete from Supabase. Row-level policies gate this
   // server-side; the UI just calls and reacts. Realtime subscribers receive
   // a 'delete' event and the row vanishes from every participant's view.
   const canDeleteMessage = useCallback((msg) => {
@@ -219,7 +219,7 @@ export const ChatProvider = ({ children }) => {
     if (!chatId) return false;
     try {
       // messages.chatId has cascadeDelete=true (migration 1779600003), so
-      // PocketBase atomically removes every message when the chat row is
+      // The database removes every message when the chat row is
       // deleted. No need to delete each message client-side, which would
       // also fail for messages the actor doesn't own.
       await data.deleteChat(chatId);

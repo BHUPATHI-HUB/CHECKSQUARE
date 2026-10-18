@@ -237,7 +237,7 @@ const WaterQualityPhotos = ({ images, onChange }) => {
   );
 };
 
-const InspectionForm = ({ existingInspection = null, isEditing = false }) => {
+const InspectionForm = ({ existingInspection = null, initialData = null, isEditing = false, onSaved = null }) => {
   const { user } = useAuth();
   const { settings } = useSettings();
   const { saveInspection } = useInspectionStatus();
@@ -247,7 +247,7 @@ const InspectionForm = ({ existingInspection = null, isEditing = false }) => {
   const [submitting, setSubmitting] = useState(false);
   const [missingDialog, setMissingDialog] = useState({ open: false, issues: [] });
 
-  const [formData, setFormData] = useState(existingInspection || {
+  const [formData, setFormData] = useState(existingInspection || initialData || {
     metadata: { preparedFor: '', propertyAddress: '', inspectionDate: new Date().toISOString().split('T')[0] },
     areaCalculations: [],
     propertyMetrics: [
@@ -269,7 +269,13 @@ const InspectionForm = ({ existingInspection = null, isEditing = false }) => {
   // Server-side auto-draft id. Once auto-save creates a row in the
   // `inspections` collection we reuse it for every subsequent update so the
   // draft is discoverable from the dashboard's drafts list and editable later.
-  const [draftId, setDraftId] = useState(existingInspection?.id || null);
+  const draftKey = `inspection-draft:${user?.id}:${initialData?.metadata?.appointmentId || existingInspection?.id || 'new'}`;
+  const [draftId, setDraftId] = useState(() => {
+    if (existingInspection?.id) return existingInspection.id;
+    try { const draft = JSON.parse(localStorage.getItem(draftKey)); if (draft?.id) return draft.id; } catch { /* use a fresh id */ }
+    return crypto.randomUUID();
+  });
+  const versionRef = useRef(existingInspection?.version ?? null);
   const autoSavingRef = useRef(false);
 
   // Warn the user before they accidentally lose work via browser back, tab
@@ -286,7 +292,7 @@ const InspectionForm = ({ existingInspection = null, isEditing = false }) => {
 
   useEffect(() => {
     if (!existingInspection) {
-      const saved = localStorage.getItem('inspection-draft');
+      const saved = localStorage.getItem(draftKey);
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
@@ -295,17 +301,18 @@ const InspectionForm = ({ existingInspection = null, isEditing = false }) => {
           // minimum required shape and discard anything we can't trust.
           if (parsed && typeof parsed === 'object' && parsed.metadata && typeof parsed.metadata === 'object') {
             setFormData(parsed);
+            versionRef.current = parsed.version ?? null;
           } else {
             console.warn('Discarding malformed inspection-draft from localStorage');
-            localStorage.removeItem('inspection-draft');
+            localStorage.removeItem(draftKey);
           }
         } catch (e) {
           console.warn('Failed to parse inspection-draft from localStorage; clearing it.', e);
-          try { localStorage.removeItem('inspection-draft'); } catch (_) {}
+          try { localStorage.removeItem(draftKey); } catch (_) {}
         }
       }
     }
-  }, [existingInspection]);
+  }, [existingInspection, draftKey]);
 
   useEffect(() => {
     if (existingInspection) return;
@@ -316,15 +323,16 @@ const InspectionForm = ({ existingInspection = null, isEditing = false }) => {
     // sentence behind, long enough to coalesce typing bursts.
     const handle = setTimeout(() => {
       try {
-        localStorage.setItem('inspection-draft', JSON.stringify(formData));
+        localStorage.setItem(draftKey, JSON.stringify({ ...formData, id: draftId, version: versionRef.current }));
       } catch (e) {
         // QuotaExceededError (very large drafts with embedded data-URL photos)
         // — fail silently. Server-side auto-draft is the authoritative store.
         console.warn('Could not persist draft to localStorage:', e?.message || e);
+        toast.error('Device draft storage is full. Save your report before leaving this page.', { id: 'draft-storage' });
       }
     }, 600);
     return () => clearTimeout(handle);
-  }, [formData, existingInspection]);
+  }, [formData, existingInspection, draftKey, draftId]);
 
   // ---- Silent auto-save as draft (server-side) -----------------------------
   // Once the user has typed enough to make the row meaningful (an address or
@@ -354,8 +362,8 @@ const InspectionForm = ({ existingInspection = null, isEditing = false }) => {
           inspectorName: user.name,
           status: 'draft',
         };
-        const saved = await saveInspection(payload, draftId);
-        if (saved && !draftId) setDraftId(saved.id);
+        const saved = await saveInspection({ ...payload, id: draftId, version: versionRef.current }, versionRef.current == null ? null : draftId);
+        if (saved) { setDraftId(saved.id); versionRef.current = saved.version ?? null; }
       } catch (_) {
         // Network or validation failures are silent — the user can still hit
         // the explicit "Save as Draft" button which surfaces errors.
@@ -623,11 +631,13 @@ const InspectionForm = ({ existingInspection = null, isEditing = false }) => {
 
     const inspectionPayload = {
       ...formData,
-      inspector: user.id,
-      inspectorName: user.name,
+      id: draftId,
+      version: versionRef.current,
+      inspector: existingInspection?.inspector || user.id,
+      inspectorName: existingInspection?.inspectorName || user.name,
       status: nextStatus,
       ...(isAdminSelfCreate && {
-        approvedBy: user.name || user.email || 'Admin',
+        approvedBy: user.id,
         approvedAt: new Date().toISOString(),
       }),
       // Resubmitting from a rejected state clears the prior rejection so the
@@ -645,18 +655,32 @@ const InspectionForm = ({ existingInspection = null, isEditing = false }) => {
       }),
     };
 
-    const saved = await saveInspection(inspectionPayload, existingInspection?.id || draftId || null);
+    if (autoSavingRef.current) { setSubmitting(false); toast.error('Autosave is finishing. Please try again in a moment.'); return; }
+    autoSavingRef.current = true;
+    const saved = await saveInspection(inspectionPayload, versionRef.current == null ? null : draftId);
+    autoSavingRef.current = false;
+    if (saved) versionRef.current = saved.version ?? null;
     setSubmitting(false);
 
     if (!saved) return; // hook already toasted the error
 
-    localStorage.removeItem('inspection-draft');
-    const successTitle =
+    if (onSaved) {
+      try {
+        await onSaved(saved);
+      } catch (error) {
+        // The report is already durable. Surface the linkage failure so the
+        // operator can retry instead of silently losing the handoff.
+        toast.error(error?.message || 'Report saved, but appointment linkage needs a retry.');
+      }
+    }
+
+    localStorage.removeItem(draftKey);
+    const successTitle = saved.syncStatus === 'pending' ? 'Saved on this device' :
       saveMode === 'draft' ? 'Draft saved' :
       isAdminSelfCreate    ? 'Inspection approved' :
       isEditing            ? 'Inspection updated' :
                              'Submitted for approval';
-    const successDesc =
+    const successDesc = saved.syncStatus === 'pending' ? 'Your report will be sent when you reconnect. Keep this account signed in to sync.' :
       saveMode === 'draft'
         ? 'Your progress is stored. You can keep editing anytime from your dashboard.'
         : isAdminSelfCreate
@@ -1340,6 +1364,7 @@ const InspectionForm = ({ existingInspection = null, isEditing = false }) => {
         <RoomPhotoManager
           open={managerOpen}
           onOpenChange={setManagerOpen}
+          inspectionId={draftId}
           room={formData.roomInspections.find(r => r.id === selectedRoomId)}
           onSave={handleSaveRoom}
         />

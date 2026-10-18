@@ -1,15 +1,14 @@
 import React from 'react';
 import { Helmet } from 'react-helmet';
-import { Link } from 'react-router-dom';
+import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import Header from '@/components/Header.jsx';
 import Footer from '@/components/Footer.jsx';
 import InspectionForm from '@/components/InspectionForm.jsx';
-import { useChatContext } from '@/contexts/ChatContext.jsx';
 import { useAuth } from '@/contexts/AuthContext.jsx';
 import { useSettings } from '@/contexts/SettingsContext.jsx';
-import { toast } from 'sonner';
 import { Shield, Users, ArrowLeft } from 'lucide-react';
+import data from '@/services/dataService.js';
 
 const fadeUp = {
   initial: { opacity: 0, y: 18 },
@@ -18,40 +17,40 @@ const fadeUp = {
 };
 
 const NewInspectionPage = () => {
-  const { createChat } = useChatContext();
   const { user } = useAuth();
   const { settings } = useSettings();
   const brand = settings?.appName || 'CheckSquare';
-
-  // Each visit to "New Inspection" should start clean. Clear any stale
-  // in-browser draft cache so prior data doesn't pre-populate the form.
-  // (Drafts saved via the "Save as Draft" button are persisted server-side
-  // and remain editable from the dashboard.)
-  React.useEffect(() => {
-    try { localStorage.removeItem('inspection-draft'); } catch (_) {}
-  }, []);
-
-  // Auto-create chat after inspection submission (form dispatches a custom event).
-  const handleInspectionCreated = async (inspectionId, customerId) => {
-    if (!user) return;
-    const participants = ['admin-1', user.id];
-    if (customerId) participants.push(customerId);
-    const chat = await createChat(participants, 'group', inspectionId);
-    if (chat) toast.success('Group chat created for this inspection.');
-  };
+  const [searchParams] = useSearchParams();
+  const appointmentId = searchParams.get('appointmentId');
+  const [appointment, setAppointment] = React.useState(null);
+  const [appointmentError, setAppointmentError] = React.useState('');
+  const [appointmentLoading, setAppointmentLoading] = React.useState(Boolean(appointmentId));
 
   React.useEffect(() => {
-    const handleCustomEvent = (e) => {
-      if (e.detail && e.detail.id) {
-        handleInspectionCreated(e.detail.id, e.detail.customerId);
-      }
-    };
-    window.addEventListener('inspection-created', handleCustomEvent);
-    return () => window.removeEventListener('inspection-created', handleCustomEvent);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+    if (!appointmentId) return undefined;
+    let cancelled = false;
+    setAppointmentLoading(true);
+    setAppointment(null);
+    setAppointmentError('');
+    data.listAppointments({ filter: `id = "${appointmentId}"` })
+      .then((rows) => {
+        if (cancelled) return;
+        if (!rows[0]) setAppointmentError('This appointment is unavailable or you do not have access.');
+        else setAppointment(rows[0]);
+      })
+      .catch(() => { if (!cancelled) setAppointmentError('Could not load the appointment. Please return to the dashboard and try again.'); })
+      .finally(() => { if (!cancelled) setAppointmentLoading(false); });
+    return () => { cancelled = true; };
+  }, [appointmentId]);
 
   const dashboardPath = user?.role === 'admin' ? '/admin/dashboard' : '/inspector/dashboard';
+
+  if (appointment?.inspection) {
+    const prefix = user?.role === 'admin' ? '/admin/inspection' : '/inspector/inspection';
+    return <Navigate to={`${prefix}/${encodeURIComponent(appointment.inspection)}`} replace />;
+  }
+  const appointmentBlocked = appointmentId && (appointmentError
+    || (!appointmentLoading && (!appointment || appointment.status !== 'scheduled')));
 
   return (
     <>
@@ -113,7 +112,23 @@ const NewInspectionPage = () => {
 
           <section className="container mx-auto px-4 sm:px-6 lg:px-12 py-12 lg:py-16">
             <motion.div {...fadeUp}>
-              <InspectionForm />
+              {appointmentLoading && <p role="status">Loading appointment…</p>}
+              {appointmentBlocked && <p role="alert">{appointmentError || 'This appointment is no longer available to start.'}</p>}
+              {!appointmentLoading && !appointmentBlocked && (
+                <InspectionForm
+                  initialData={appointment ? {
+                    metadata: {
+                      preparedFor: '',
+                      propertyAddress: appointment.propertyAddress || '',
+                      inspectionDate: appointment.scheduledAt ? new Date(appointment.scheduledAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+                      appointmentId: appointment.id,
+                    },
+                    customer: appointment.customer || null,
+                    propertyType: 'Residential',
+                  } : null}
+
+                />
+              )}
             </motion.div>
           </section>
         </main>

@@ -19,6 +19,7 @@ import {
 import AdminDownloadReport from '@/components/AdminDownloadReport.jsx';
 import { useFeedback } from '@/contexts/FeedbackContext.jsx';
 import { toast } from 'sonner';
+import data from '@/services/dataService.js';
 
 const fadeUp = {
   initial: { opacity: 0, y: 18 },
@@ -37,6 +38,8 @@ const InspectorDashboard = () => {
   const [loading, setLoading] = useState(() => !getCachedInspectorInspections(user.id));
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [appointments, setAppointments] = useState([]);
+  const [appointmentsLoading, setAppointmentsLoading] = useState(true);
 
   const reload = async () => {
     const records = await getInspectionsForInspector(user.id);
@@ -53,34 +56,38 @@ const InspectorDashboard = () => {
     return () => { cancelled = true; };
   }, [user.id, getInspectionsForInspector]);
 
-  // Inspector can pull a previously-submitted, approved, or rejected
-  // inspection back into draft state so they can keep editing without
-  // anyone reviewing it. Approved reports also clear the approval trail
-  // when recalled so a subsequent re-submit goes through review again.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await data.listAppointments({
+          filter: `inspector = "${user.id}" && status != "cancelled"`,
+          sort: 'scheduledAt',
+        });
+        if (!cancelled) setAppointments(rows);
+      } catch (error) {
+        if (!cancelled) toast.error(error?.message || 'Could not load assigned appointments.');
+      } finally {
+        if (!cancelled) setAppointmentsLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user.id]);
+
+  // Inspector can pull a rejected or pending inspection back into draft state.
+  // Approved reports remain immutable and require an admin correction path.
   const handleRecallToDraft = async (inspection) => {
-    const wasApproved = inspection.status === 'approved';
+    if (!['pending', 'rejected'].includes(inspection.status)) return;
     const ok = window.confirm(
-      wasApproved
-        ? `"${inspection.metadata?.propertyAddress || 'This inspection'}" is already approved. Moving it to Draft will remove the approval and require it to be re-submitted and re-approved. Continue?`
-        : `Move "${inspection.metadata?.propertyAddress || 'this inspection'}" back to Draft? You can keep editing and re-submit it whenever you're ready.`,
+      `Move "${inspection.metadata?.propertyAddress || 'this inspection'}" back to Draft? You can keep editing and re-submit it when ready.`,
     );
     if (!ok) return;
-    const success = await updateInspectionStatus(inspection.id, 'draft', user, {
-      // Clear any prior approval / rejection trail so the inspector's draft starts clean.
-      rejectedBy: null,
-      rejectedAt: null,
-      approvedBy: null,
-      approvedAt: null,
-    });
+    // Review metadata stays intact until the database clears it on resubmission.
+    const success = await updateInspectionStatus(inspection.id, 'draft', user, { version: inspection.version });
     if (success) {
       const addr = inspection.metadata?.propertyAddress || 'The inspection';
       reload();
-      showSuccess(
-        'Moved to Draft',
-        wasApproved
-          ? `Approval cleared on "${addr}". Make your edits and re-submit it for review.`
-          : `"${addr}" is back in your drafts. Keep editing it whenever you're ready.`,
-      );
+      showSuccess('Moved to Draft', `"${addr}" is back in your drafts.`);
     }
   };
 
@@ -171,6 +178,36 @@ const InspectorDashboard = () => {
                   </Button>
                 </div>
               </motion.div>
+            </div>
+          </section>
+
+          <section className="border-b bg-muted/20">
+            <div className="container mx-auto px-4 sm:px-6 lg:px-12 py-10">
+              <p className="editorial-eyebrow">Assignments</p>
+              <h2 className="font-display text-2xl mt-2 mb-6">Assigned appointments</h2>
+              {appointmentsLoading ? (
+                <p className="text-sm text-muted-foreground" role="status">Loading assignments…</p>
+              ) : appointments.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No assigned appointments.</p>
+              ) : (
+                <div className="space-y-3">
+                  {appointments.map((appointment) => (
+                    <article key={appointment.id} className="rounded-xl border bg-background p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                      <div>
+                        <p className="font-medium">{appointment.propertyAddress || 'Property address unavailable'}</p>
+                        <p className="text-sm text-muted-foreground mt-1">{appointment.scheduledAt ? new Date(appointment.scheduledAt).toLocaleString() : 'Date unavailable'} · {appointment.timeSlot || 'Flexible time'}</p>
+                      </div>
+                      {(appointment.inspection || appointment.status === 'scheduled') && <Button asChild className="rounded-full">
+                        <Link to={appointment.inspection
+                          ? `/inspector/inspection/${encodeURIComponent(appointment.inspection)}`
+                          : `/inspector/new-inspection?appointmentId=${encodeURIComponent(appointment.id)}`}>
+                          {appointment.inspection ? 'Open inspection' : 'Start inspection'}
+                        </Link>
+                      </Button>}
+                    </article>
+                  ))}
+                </div>
+              )}
             </div>
           </section>
 
@@ -281,16 +318,12 @@ const InspectorDashboard = () => {
                               </Link>
                             </Button>
                           )}
-                          {inspection.status !== 'draft' && (
+                          {inspection.status !== 'draft' && inspection.status !== 'approved' && (
                             <Button
                               variant="ghost"
                               size="icon"
                               className="rounded-full text-muted-foreground hover:text-foreground"
-                              title={
-                                inspection.status === 'approved'
-                                  ? 'Recall to Draft — will remove approval and require re-review'
-                                  : 'Recall to Draft — keep editing before re-submitting'
-                              }
+                              title="Recall to Draft — keep editing before re-submitting"
                               onClick={() => handleRecallToDraft(inspection)}
                             >
                               <Undo2 className="w-4 h-4" />

@@ -1,0 +1,51 @@
+name: Build installable preview APK
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  preview-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v3
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Build explicit sample-data app
+        run: npm run build
+        env:
+          VITE_DEMO_MODE: 'true'
+      - name: Isolate preview from the production app
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          const path='apps/web/capacitor.config.json';
+          const config=JSON.parse(fs.readFileSync(path));
+          config.appName='CheckSquare Preview';
+          fs.writeFileSync(path,JSON.stringify(config,null,2));
+          JS
+      - run: node scripts/prepare-android.mjs
+      - name: Separate Android installation ID
+        run: |
+          python3 - <<'PYCODE'
+          from pathlib import Path
+          file=Path('apps/web/android/app/build.gradle')
+          source=file.read_text().replace('applicationId "com.bhupathi.checksquare"', 'applicationId "com.bhupathi.checksquare.preview"')
+          file.write_text(source)
+          PYCODE
+      - run: node apps/web/scripts/make-icon.mjs
+      - run: cd apps/web && npx cap sync android
+      - run: cd apps/web/android && chmod +x gradlew && ./gradlew assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CheckSquare-Preview-APK
+          path: apps/web/android/app/build/outputs/apk/debug/app-debug.apk

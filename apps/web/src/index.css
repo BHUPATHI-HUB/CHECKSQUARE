@@ -380,3 +380,20 @@ html { scroll-behavior: smooth; }
 /* Hide on phones / show on phones helpers (in addition to Tailwind) */
 .mobile-only { @apply block sm:hidden; }
 .desktop-only { @apply hidden sm:block; }
+/* Full-reload identity cue; routes remain free of blocking transitions. */
+.checksquare-intro {
+  position: fixed; inset: 0; z-index: 1000;
+  display: grid; place-items: center; background: #f8faf9;
+  pointer-events: none;
+  animation: checksquare-intro-out .35s ease 1.1s both;
+}
+.checksquare-intro-mark {
+  display: flex; flex-direction: column; align-items: center; gap: 1rem;
+  animation: checksquare-intro-in .65s cubic-bezier(.2,.75,.25,1) both;
+}
+.checksquare-intro-mark img { width: 180px; height: auto; }
+.checksquare-intro-line { width: 100px; height: 2px; background: #2ba4b4; transform-origin: left; animation: checksquare-intro-progress .9s ease .1s both; }
+@keyframes checksquare-intro-in { from { opacity: 0; transform: translateY(12px) scale(.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes checksquare-intro-progress { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes checksquare-intro-out { to { opacity: 0; visibility: hidden; } }
+@media (prefers-reduced-motion: reduce) { .checksquare-intro { display: none; animation: none; } }

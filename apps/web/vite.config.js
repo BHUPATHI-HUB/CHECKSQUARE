@@ -395,6 +395,10 @@ export default defineConfig({
 		},
 	},
 	build: {
+		target: 'es2022',
+		// The output directory is outside the app root; clear old hashed assets
+		// so repeated builds do not add stale bundles to the PWA precache.
+		emptyOutDir: true,
 		// Push the warning threshold higher to silence noise — the heavy report
 		// libs are split into separate chunks below and only load on demand.
 		chunkSizeWarningLimit: 1500,
@@ -413,7 +417,6 @@ export default defineConfig({
 					'vendor-react':    ['react', 'react-dom', 'react-router-dom'],
 					'vendor-docx':     ['docx', 'docx-preview'],
 					'vendor-pdf':      ['html2pdf.js'],
-					'vendor-xlsx':     ['xlsx'],
 					'vendor-charts':   ['recharts'],
 					'vendor-motion':   ['framer-motion'],
 					'vendor-radix':    [

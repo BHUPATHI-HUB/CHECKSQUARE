@@ -26,6 +26,7 @@ import AdminDownloadReport from '@/components/AdminDownloadReport.jsx';
 import DeletedReportsArchive from '@/components/DeletedReportsArchive.jsx';
 import data from '@/services/dataService.js';
 import { toast } from 'sonner';
+import AdminAppointmentsPanel from '@/components/AdminAppointmentsPanel.jsx';
 
 const fadeUp = {
   initial: { opacity: 0, y: 18 },
@@ -41,8 +42,8 @@ const AdminDashboard = () => {
   const { getAllInspections, softDeleteInspection } = useInspectionStatus();
   const { settings } = useSettings();
   const brand = settings?.appName || 'CheckSquare';
-  const [inspections, setInspections] = useState(() => getCachedAllInspections() || []);
-  const [loading, setLoading] = useState(() => !getCachedAllInspections());
+  const [inspections, setInspections] = useState(() => getCachedAllInspections(user?.id) || []);
+  const [loading, setLoading] = useState(() => !getCachedAllInspections(user?.id));
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [sortConfig, setSortConfig] = useState({ key: 'date', direction: 'desc' });
@@ -173,6 +174,7 @@ const AdminDashboard = () => {
         <Header />
 
         <main className="flex-1">
+          <AdminAppointmentsPanel />
           {/* Editorial header */}
           <section className="border-b">
             <div className="container mx-auto px-4 sm:px-6 lg:px-12 py-10 sm:py-14 lg:py-20">

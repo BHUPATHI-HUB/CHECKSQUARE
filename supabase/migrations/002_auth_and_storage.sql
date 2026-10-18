@@ -20,7 +20,8 @@ begin
     coalesce(new.raw_user_meta_data->>'full_name',
              new.raw_user_meta_data->>'name',
              split_part(new.email, '@', 1)),
-    coalesce((new.raw_user_meta_data->>'role')::user_role, 'customer')
+    -- Only the trusted Admin API can set app metadata. Signup data is untrusted.
+    coalesce((new.raw_app_meta_data->>'role')::user_role, 'customer')
   )
   on conflict (id) do update
     set email = excluded.email,

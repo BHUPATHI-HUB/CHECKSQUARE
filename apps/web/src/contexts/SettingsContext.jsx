@@ -132,15 +132,14 @@ export const SettingsProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   // ─── Server-backed settings ────────────────────────────────────────────
-  // Fix for gap A2: settings now live in the PocketBase `app_settings`
-  // collection (single-row id="single") instead of per-browser localStorage.
+  // Settings live in the Supabase `app_settings` table instead of only in
+  // per-browser localStorage.
   // We still keep a localStorage write-through as an OFFLINE cache so the
   // header/logo render instantly on cold-start without a network round-trip
   // and so an offline inspector still sees the brand.
   //
-  // Realtime: a `pb.collection('app_settings').subscribe('single', ...)`
-  // hook means every open tab/device re-renders within ~100 ms of an admin
-  // saving a change — no F5 needed.
+  // Realtime subscriptions mean every open tab/device re-renders after an
+  // admin saves a change — no F5 needed.
 
   const APP_SETTINGS_ID = 'single';
 

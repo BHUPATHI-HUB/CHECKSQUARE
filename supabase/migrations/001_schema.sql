@@ -1,10 +1,8 @@
 -- =============================================================================
 -- CheckSquare — Phase-3 Postgres schema (Supabase)
 -- =============================================================================
--- This SQL is informational for the FUTURE migration of CheckSquare's seven
--- PocketBase collections to Supabase Postgres.  It is NOT executed by the
--- Phase-1 side-car PoC (Storage + Auth) — apply it only when you decide to
--- move the system of record off PocketBase.
+-- This is the production Supabase schema for CheckSquare. Apply it before
+-- the RLS policies and auth/storage glue.
 --
 -- Apply with:   psql "$SUPABASE_DB_URL" < supabase/migrations/001_schema.sql
 -- =============================================================================

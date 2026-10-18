@@ -143,7 +143,7 @@ const LoginPage = () => {
               <div>
                 <div className="flex justify-between items-baseline">
                   <Label htmlFor="password" className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Password</Label>
-                  <button onClick={handleForgotPassword} className="text-xs text-muted-foreground hover:text-foreground link-underline">Forgot?</button>
+                  <button type="button" onClick={handleForgotPassword} className="text-xs text-muted-foreground hover:text-foreground link-underline">Forgot?</button>
                 </div>
                 <div className="relative mt-2">
                   <Lock className="absolute left-0 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60 pointer-events-none" />
@@ -181,9 +181,9 @@ const LoginPage = () => {
 
             <p className="mt-10 text-sm text-muted-foreground">
               First time?{' '}
-              <Link to="/customer-signup" className="text-foreground font-semibold link-underline">Become a client</Link>
+              <Link to="/signup" className="text-foreground font-semibold link-underline">Become a client</Link>
               {' · '}
-              <Link to="/signup" className="text-muted-foreground link-underline">Inspector / Admin signup</Link>
+              <span>Staff accounts are created by your administrator.</span>
             </p>
           </motion.div>
 

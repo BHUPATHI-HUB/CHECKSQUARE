@@ -12,8 +12,8 @@ import { supabase, isSupabaseConfigured, SUPABASE_PHOTO_BUCKET } from '@/lib/sup
 import data from '@/services/dataService.js';
 import {
   listOutbox, updateOutbox, deleteOutbox,
-  getPhotoBlob, markPhotoSynced, deletePhotoBlob,
-  getPendingInspection, deletePendingInspection, outboxStats,
+  getPhotoBlob, markPhotoSynced,
+  getPendingInspection, completePendingInspection, outboxStats,
   resetOutboxBackoff, requestPersistentStorage,
 } from '@/lib/localStore.js';
 
@@ -28,7 +28,8 @@ export const isNetworkError = (e) => {
 const listeners = new Set();
 export const onSyncChange = (fn) => { listeners.add(fn); return () => listeners.delete(fn); };
 const notify = async () => {
-  const stats = await outboxStats();
+  const { data: { session } } = await supabase.auth.getSession();
+  const stats = await outboxStats(session?.user?.id);
   listeners.forEach((l) => { try { l(stats); } catch { /* ignore */ } });
 };
 
@@ -37,18 +38,21 @@ let running = false;
 async function handleOp(op) {
   if (op.type === 'uploadPhoto') {
     const rec = await getPhotoBlob(op.path);
-    if (!rec?.blob) return; // already cleaned up / nothing to send
+    if (!rec?.blob) throw new Error('Queued photo is missing from device storage.');
+    if (rec.syncStatus === 'synced') {
+      return;
+    }
     const { error } = await supabase.storage
       .from(SUPABASE_PHOTO_BUCKET)
       .upload(op.path, rec.blob, { contentType: rec.contentType || 'image/jpeg', upsert: true });
     if (error) throw error;
     await markPhotoSynced(op.path);
-    await deletePhotoBlob(op.path); // signed URLs serve it from now on
+    // Keep the synced local blob so a reopened report still renders offline.
   } else if (op.type === 'upsertInspection') {
-    const insp = await getPendingInspection(op.id);
+    const insp = await getPendingInspection(op.inspectionId || op.id);
     if (!insp) return;
-    await data.upsertInspection(insp);
-    await deletePendingInspection(op.id);
+    const saved = await data.upsertInspection(insp);
+    await completePendingInspection(insp.id, insp.localRevision, saved.version);
   }
 }
 
@@ -59,10 +63,23 @@ export async function drainOutbox() {
   running = true;
   try {
     // Make sure the access token is fresh (it can expire while offline).
-    try { await supabase.auth.getSession(); } catch { /* ignore */ }
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError || !session?.user?.id) return;
+    const activeUserId = session.user.id;
 
     const ops = (await listOutbox()).sort((a, b) => a.id - b.id);
     for (const op of ops) {
+      // Auth may change while a previous network operation is in flight.
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      if (currentSession?.user?.id !== activeUserId) break;
+      // Never send work from a shared device through another user's session.
+      if (op.ownerId && op.ownerId !== activeUserId) continue;
+      if (op.type === 'uploadPhoto' && !op.ownerId) continue;
+      if (op.type === 'upsertInspection') {
+        // eslint-disable-next-line no-await-in-loop
+        const pending = await getPendingInspection(op.inspectionId || op.id);
+        if (pending && (pending.ownerId || pending.inspector) !== activeUserId) continue;
+      }
       if (op.nextAttemptAt && op.nextAttemptAt > Date.now()) continue;
       try {
         // eslint-disable-next-line no-await-in-loop

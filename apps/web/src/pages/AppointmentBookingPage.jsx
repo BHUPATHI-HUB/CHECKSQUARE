@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Helmet } from 'react-helmet';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
@@ -112,36 +111,20 @@ const AppointmentBookingPage = () => {
   const brand = settings?.appName || 'CheckSquare';
   const [date, setDate] = useState(null);
   const [time, setTime] = useState('');
-  const [inspector, setInspector] = useState('');
   const [address, setAddress] = useState('');
   const [notes, setNotes] = useState('');
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [inspectors, setInspectors] = useState([]);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const records = await data.listUsersByRole('inspector');
-        if (!cancelled) setInspectors(records);
-      } catch (e) {
-        console.error('Failed to load inspectors', e);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
-
-  const canProceed = date && time && inspector && address;
-  const completion = [date, time, inspector, address].filter(Boolean).length;
+  const canProceed = date && time && address.trim().length >= 5;
+  const completion = [date, time, address.trim().length >= 5].filter(Boolean).length;
 
   const handleBook = async () => {
     if (!user) { toast.error('You must be signed in to book an appointment.'); return; }
     // Defensive validation: the calendar already disables past dates and
     // weekends, but a determined user could call this handler with stale
-    // state, so we re-validate before hitting PocketBase.
-    if (!date || !time || !inspector) {
-      toast.error('Please choose a date, time, and inspector before confirming.');
+    // state, so we re-validate before hitting the API.
+    if (!date || !time) {
+      toast.error('Please choose a date and time before confirming.');
       return;
     }
     if (!address || address.trim().length < 5) {
@@ -168,7 +151,7 @@ const AppointmentBookingPage = () => {
 
       const appt = await data.createAppointment({
         customer: user.id,
-        inspector: inspector === 'any' ? null : inspector,
+        inspector: null,
         scheduledAt: scheduled.toISOString(),
         timeSlot: time,
         propertyAddress: address,
@@ -178,14 +161,7 @@ const AppointmentBookingPage = () => {
 
       // Auto-provision a group chat. Best effort — never block the booking.
       try {
-        const adminIds = await data.listUsers({ filter: 'role = "admin"', fields: 'id' })
-          .then((rows) => rows.map((r) => r.id));
-        const participants = [
-          ...new Set([user.id, ...(inspector !== 'any' ? [inspector] : []), ...adminIds].filter(Boolean)),
-        ];
-        if (participants.length >= 2) {
-          await data.createChat({ type: 'group', participants, inspectionId: '' });
-        }
+        await data.ensureSupportChat();
       } catch (chatErr) {
         console.warn('Auto-create chat after booking failed:', chatErr?.message || chatErr);
       }
@@ -194,7 +170,7 @@ const AppointmentBookingPage = () => {
       navigate('/thank-you', {
         state: {
           headline: 'Booked.',
-          subhead: `Your inspection at ${address} is scheduled for ${date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}, ${time}. A confirmation is on its way.`,
+          subhead: `Your inspection at ${address} is scheduled for ${date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}, ${time}. You can track this booking in your dashboard.`,
           inspectionId: appt?.id,
           primaryCta: { to: '/customer', label: 'Open dashboard' },
           secondaryCta: { to: '/chat', label: 'Open chat' },
@@ -236,17 +212,17 @@ const AppointmentBookingPage = () => {
           <section className="border-b bg-muted/30">
             <div className="container mx-auto px-4 sm:px-6 lg:px-12 py-4">
               <div className="flex items-center justify-between gap-4">
-                <p className="editorial-eyebrow text-[10px]">Step {completion}/4</p>
+                <p className="editorial-eyebrow text-[10px]">Step {completion}/3</p>
                 <div className="flex-1 h-px bg-border relative">
                   <motion.div
                     className="absolute inset-y-0 left-0 bg-secondary"
                     style={{ height: 1 }}
                     initial={{ width: 0 }}
-                    animate={{ width: `${(completion / 4) * 100}%` }}
+                    animate={{ width: `${(completion / 3) * 100}%` }}
                     transition={{ duration: 0.5 }}
                   />
                 </div>
-                <p className="text-xs text-muted-foreground">{completion === 4 ? 'Ready to confirm' : 'Continue'}</p>
+                <p className="text-xs text-muted-foreground">{completion === 3 ? 'Ready to confirm' : 'Continue'}</p>
               </div>
             </div>
           </section>
@@ -301,7 +277,7 @@ const AppointmentBookingPage = () => {
                 <motion.section {...fadeUp} className="border bg-card p-5 sm:p-8 lg:p-10">
                   <div className="flex items-baseline gap-3 mb-2">
                     <span className="num-marker text-2xl">03</span>
-                    <p className="editorial-eyebrow">Property & inspector</p>
+                    <p className="editorial-eyebrow">Property details</p>
                   </div>
                   <h2 className="font-display text-xl sm:text-2xl md:text-3xl mb-6 sm:mb-8">A few last details.</h2>
                   <div className="space-y-7">
@@ -318,20 +294,9 @@ const AppointmentBookingPage = () => {
                         className="mt-2 h-12 rounded-none border-0 border-b-2 bg-transparent px-0 focus-visible:ring-0 focus-visible:border-primary text-base"
                       />
                     </div>
-                    <div>
-                      <Label className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Preferred inspector</Label>
-                      <Select value={inspector} onValueChange={setInspector}>
-                        <SelectTrigger className="mt-2 h-12 rounded-none border-0 border-b-2 bg-transparent px-0 focus:ring-0 focus:border-primary text-base">
-                          <SelectValue placeholder="Choose an inspector or let us assign one" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="any">Any available inspector</SelectItem>
-                          {inspectors.map((i) => (
-                            <SelectItem key={i.id} value={i.id}>{i.name || i.email}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Our team will assign an inspector after reviewing your booking.
+                    </p>
                     <div>
                       <Label htmlFor="notes" className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Access notes <span className="opacity-50">(optional)</span></Label>
                       <Textarea

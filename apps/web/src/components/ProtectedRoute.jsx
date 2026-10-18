@@ -1,5 +1,5 @@
 
-import React, { useEffect } from 'react';
+import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext.jsx';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -9,20 +9,6 @@ import { AlertCircle } from 'lucide-react';
 const ProtectedRoute = ({ children, requiredRole }) => {
   const { user, loading, sessionWarning, extendSession, logout } = useAuth();
   const location = useLocation();
-
-  // Spec §1 Navigation Isolation: re-push our own state on every browser
-  // back-button press inside an authenticated dashboard so the user can never
-  // navigate "back" into a stale form or pre-login screen by mistake. Sign-out
-  // remains the only way to leave the protected area.
-  useEffect(() => {
-    if (!user) return;
-    window.history.pushState(null, '', window.location.href);
-    const handler = () => {
-      window.history.pushState(null, '', window.location.href);
-    };
-    window.addEventListener('popstate', handler);
-    return () => window.removeEventListener('popstate', handler);
-  }, [user, location.pathname]);
 
   if (loading) {
     return (

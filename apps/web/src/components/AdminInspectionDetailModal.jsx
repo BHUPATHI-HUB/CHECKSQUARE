@@ -73,7 +73,7 @@ const AdminInspectionDetailModal = ({ inspection, open, onOpenChange, onInspecti
   if (!localData) return null;
 
   const handleStatusChange = (newStatus) => {
-    setLocalData(prev => ({ ...prev, status: newStatus }));
+    setLocalData(prev => ({ ...prev, status: newStatus, version: prev.version + 1 }));
     if (onInspectionUpdated) onInspectionUpdated();
   };
 
@@ -86,8 +86,8 @@ const AdminInspectionDetailModal = ({ inspection, open, onOpenChange, onInspecti
         preparedFor: editForm.preparedFor,
         propertyAddress: editForm.propertyAddress,
       };
-      await data.updateInspection(localData.id, { metadata: updatedMetadata });
-      setLocalData(prev => ({ ...prev, metadata: updatedMetadata }));
+      await data.updateInspection(localData.id, { metadata: updatedMetadata, version: localData.version });
+      setLocalData(prev => ({ ...prev, metadata: updatedMetadata, version: prev.version + 1 }));
       setIsEditing(false);
       toast.success('Inspection details updated');
       if (onInspectionUpdated) onInspectionUpdated();

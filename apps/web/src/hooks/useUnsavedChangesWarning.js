@@ -31,6 +31,19 @@ export default function useUnsavedChangesWarning(
 		return () => window.removeEventListener('beforeunload', handler);
 	}, [when, message]);
 
+	// Intercept same-tab link navigation before React Router changes the route.
+	useEffect(() => {
+		if (!when) return undefined;
+		const guard = (event) => {
+			const link = event.target.closest?.('a[href]');
+			if (!link || link.target === '_blank' || link.hasAttribute('download') || event.metaKey || event.ctrlKey) return;
+			if (link.href === window.location.href) return;
+			if (!window.confirm(message)) { event.preventDefault(); event.stopPropagation(); }
+		};
+		document.addEventListener('click', guard, true);
+		return () => document.removeEventListener('click', guard, true);
+	}, [when, message]);
+
 	// Capacitor (Android) hardware Back button.
 	const subRef = useRef(null);
 	useEffect(() => {

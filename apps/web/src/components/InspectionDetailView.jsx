@@ -28,13 +28,13 @@ const InspectionDetailView = ({ inspection, onUpdate }) => {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   const isAdmin = role === 'admin';
-  const canEdit = isAdmin || (user?.id === inspection.inspectorId && inspection.status !== 'approved');
+  const canEdit = isAdmin || (user?.id === inspection.inspector && inspection.status !== 'approved');
   const canDownload = inspection.status === 'approved' || isAdmin;
 
   const handleApprove = () => updateStatus('approved');
   const handleReject = () => updateStatus('rejected');
 
-  // Persist status via PocketBase (previously wrote to a non-existent
+  // Persist status via the Supabase data boundary (previously wrote to a non-existent
   // `inspections` localStorage key, so approvals silently disappeared on
   // reload). The hook handles audit fields (approvedBy/approvedAt etc.)
   // and customer notifications server-side.
@@ -42,9 +42,11 @@ const InspectionDetailView = ({ inspection, onUpdate }) => {
     if (busy) return;
     setBusy(true);
     try {
-      const ok = await updateInspectionStatus(inspection.id, status, user);
+      const rejectionReason = status === 'rejected' ? window.prompt('What should the inspector correct?')?.trim() : undefined;
+      if (status === 'rejected' && !rejectionReason) return;
+      const ok = await updateInspectionStatus(inspection.id, status, user, { version: localInspection.version, ...(rejectionReason && { rejectionReason }) });
       if (ok) {
-        setLocalInspection((prev) => ({ ...prev, status }));
+        setLocalInspection((prev) => ({ ...prev, status, version: prev.version + 1 }));
         toast.success(`Inspection ${status}`);
         if (onUpdate) onUpdate();
       }
@@ -58,7 +60,7 @@ const InspectionDetailView = ({ inspection, onUpdate }) => {
     setManagerOpen(true);
   };
 
-  // Persist room photo edits to PB via saveInspection (same path the wizard
+  // Persist room photo edits via saveInspection (same path the wizard
   // uses). Previously written only to localStorage which the dashboards
   // never read from.
   const handleSaveRoom = async (updatedRoom) => {
@@ -269,7 +271,7 @@ const InspectionDetailView = ({ inspection, onUpdate }) => {
       )}
 
       {selectedRoom && (
-        <RoomPhotoManager
+        <RoomPhotoManager inspectionId={localInspection.id}
           open={managerOpen}
           onOpenChange={setManagerOpen}
           room={selectedRoom}

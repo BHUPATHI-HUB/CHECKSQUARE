@@ -1,214 +1,12 @@
-// dataService — single entry point for every CRUD / realtime operation in
-// the React app.  Encapsulates the "PocketBase OR Supabase" decision so
-// individual pages do NOT import either client directly.
-//
-// Toggle: set VITE_USE_SUPABASE_DB=true to route reads/writes through
-// Supabase Postgres.  Default (false) keeps PocketBase.  This lets us cut
-// over one collection at a time during Phase 3 without touching the UI.
-//
-// Each adapter exposes the SAME function signatures.  The PocketBase
-// adapter is the production default; the Supabase adapter exists so a
-// single env-var flip switches the whole app over after the data
-// migration has been run.
+// dataService — the single Supabase data boundary for the React app.
+import { supabase, requireSupabase } from '@/lib/supabaseClient.js';
+import { isDemoMode } from '@/lib/previewMode.js';
+import { rowToAppointment } from './appointmentRecord.js';
 
-import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient.js';
-
-const USE_SUPABASE = isSupabaseConfigured
-  && (import.meta.env?.VITE_USE_SUPABASE_DB === 'true');
-
-export const dataBackend = USE_SUPABASE ? 'supabase' : 'pocketbase';
-
-let pbClientPromise = null;
-const getPB = async () => {
-  if (!pbClientPromise) {
-    pbClientPromise = import('@/lib/pocketbaseClient.js').then((m) => m.default);
-  }
-  return pbClientPromise;
-};
-
-// ─── Adapter: PocketBase ─────────────────────────────────────────────────
-const pbAdapter = {
-  // ─── inspections ─────────────────────────────────────────────────────
-  async listInspections({ filter = '', sort = '-created', expand } = {}) {
-    const pb = await getPB();
-    return pb.collection('inspections').getFullList({
-      filter, sort, expand, $autoCancel: false,
-    });
-  },
-  async getInspection(id) {
-    const pb = await getPB();
-    return pb.collection('inspections').getOne(id, { $autoCancel: false });
-  },
-  async createInspection(payload) {
-    const pb = await getPB();
-    return pb.collection('inspections').create(payload, { $autoCancel: false });
-  },
-  async upsertInspection(payload) {
-    const pb = await getPB();
-    if (payload.id) {
-      try {
-        return await pb.collection('inspections').update(payload.id, payload, { $autoCancel: false });
-      } catch (_) { /* not found → create below */ }
-    }
-    return pb.collection('inspections').create(payload, { $autoCancel: false });
-  },
-  async updateInspection(id, payload) {
-    const pb = await getPB();
-    return pb.collection('inspections').update(id, payload, { $autoCancel: false });
-  },
-  async deleteInspection(id) {
-    const pb = await getPB();
-    return pb.collection('inspections').delete(id, { $autoCancel: false });
-  },
-
-  // ─── appointments ────────────────────────────────────────────────────
-  async listAppointments({ filter = '', sort = '-scheduledAt' } = {}) {
-    const pb = await getPB();
-    return pb.collection('appointments').getFullList({ filter, sort, $autoCancel: false });
-  },
-  async createAppointment(payload) {
-    const pb = await getPB();
-    return pb.collection('appointments').create(payload, { $autoCancel: false });
-  },
-  async updateAppointment(id, payload) {
-    const pb = await getPB();
-    return pb.collection('appointments').update(id, payload, { $autoCancel: false });
-  },
-
-  // ─── users ───────────────────────────────────────────────────────────
-  async listUsers({ filter = '', sort = 'name', fields } = {}) {
-    const pb = await getPB();
-    return pb.collection('users').getFullList({ filter, sort, fields, $autoCancel: false });
-  },
-  async listUsersByRole(role) {
-    const pb = await getPB();
-    return pb.collection('users').getFullList({
-      filter: `role = "${role}"`, sort: 'name', $autoCancel: false,
-    });
-  },
-  async getUser(id) {
-    const pb = await getPB();
-    return pb.collection('users').getOne(id, { $autoCancel: false });
-  },
-  async createUser(payload) {
-    const pb = await getPB();
-    return pb.collection('users').create(payload, { $autoCancel: false });
-  },
-  async updateUser(id, payload) {
-    const pb = await getPB();
-    return pb.collection('users').update(id, payload, { $autoCancel: false });
-  },
-  async deleteUser(id) {
-    const pb = await getPB();
-    return pb.collection('users').delete(id);
-  },
-  async findUserByEmail(email) {
-    const pb = await getPB();
-    return pb.collection('users').getFirstListItem(`email = "${email}"`, { $autoCancel: false });
-  },
-
-  // ─── chats / messages ────────────────────────────────────────────────
-  async listChats(userId) {
-    const pb = await getPB();
-    return pb.collection('chats').getFullList({
-      filter: `participants ~ "${userId}"`,
-      expand: 'participants',
-      sort: '-updated',
-      $autoCancel: false,
-    });
-  },
-  async findChat(filter) {
-    const pb = await getPB();
-    return pb.collection('chats').getFirstListItem(filter, { $autoCancel: false });
-  },
-  async createChat(payload) {
-    const pb = await getPB();
-    return pb.collection('chats').create(payload, { $autoCancel: false });
-  },
-  async deleteChat(id) {
-    const pb = await getPB();
-    return pb.collection('chats').delete(id, { $autoCancel: false });
-  },
-  async listMessages(chatId) {
-    const pb = await getPB();
-    return pb.collection('messages').getFullList({
-      filter: `chatId = "${chatId}"`, sort: 'created', $autoCancel: false,
-    });
-  },
-  async sendMessage(payload) {
-    const pb = await getPB();
-    return pb.collection('messages').create(payload, { $autoCancel: false });
-  },
-  async updateMessage(id, payload) {
-    const pb = await getPB();
-    return pb.collection('messages').update(id, payload, { $autoCancel: false });
-  },
-  async deleteMessage(id) {
-    const pb = await getPB();
-    return pb.collection('messages').delete(id, { $autoCancel: false });
-  },
-
-  // ─── report_downloads ────────────────────────────────────────────────
-  async listReportDownloads(userId) {
-    const pb = await getPB();
-    return pb.collection('report_downloads').getFullList({
-      filter: `user = "${userId}"`, sort: '-created', $autoCancel: false,
-    });
-  },
-  getReportDownloadFileUrl: async (rec) => {
-    const pb = await getPB();
-    const token = await pb.files.getToken();
-    return pb.files.getUrl(rec, rec.file, { token });
-  },
-  async deleteReportDownload(id) {
-    const pb = await getPB();
-    return pb.collection('report_downloads').delete(id);
-  },
-
-  // ─── app_settings ────────────────────────────────────────────────────
-  async getAppSettings() {
-    try {
-      const pb = await getPB();
-      const row = await pb.collection('app_settings').getOne('single', { $autoCancel: false });
-      return row?.payload || {};
-    } catch (e) {
-      if (String(e?.status) === '404') return {};
-      throw e;
-    }
-  },
-  async upsertAppSettings(payload) {
-    try {
-      const pb = await getPB();
-      await pb.collection('app_settings').update('single', { payload }, { $autoCancel: false });
-    } catch (e) {
-      if (String(e?.status) === '404') {
-        const pb = await getPB();
-        await pb.collection('app_settings').create({ id: 'single', payload }, { $autoCancel: false });
-      } else throw e;
-    }
-  },
-
-  // ─── realtime ────────────────────────────────────────────────────────
-  // Returns an unsubscribe function.
-  subscribe(collection, callback, topic = '*') {
-    let active = true;
-    let unsub = () => {};
-    getPB()
-      .then((pb) => pb.collection(collection).subscribe(topic, callback))
-      .then((u) => {
-        if (!active) {
-          try { u(); } catch (_) {}
-          return;
-        }
-        unsub = u;
-      })
-      .catch((err) => console.error(`[dataService] subscribe failed for ${collection}:`, err));
-    return () => {
-      active = false;
-      try { unsub(); } catch (_) {}
-    };
-  },
-};
+// Supabase is deliberately selected unconditionally. A missing configuration
+// must surface as a clear runtime error instead of silently writing to a
+// different backend or pretending that local-only data is synced.
+export const dataBackend = 'supabase';
 
 // ─── Adapter: Supabase ───────────────────────────────────────────────────
 // The Supabase adapter mirrors the PB API.  Translates PB-style filter
@@ -221,12 +19,21 @@ const pbAdapter = {
 // dashboard load pull megabytes it never renders. The full record is fetched
 // on demand by getInspection() when a row is opened / downloaded.
 const INSPECTION_LIST_COLUMNS = [
-  'id', 'inspector_id', 'inspector_name', 'customer_id', 'status',
+  'id', 'version', 'inspector_id', 'inspector_name', 'customer_id', 'status',
   'property_type', 'metadata', 'score', 'score_breakdown', 'include_score',
   'property_metrics', 'approved_by', 'approved_at', 'rejected_by',
   'rejected_at', 'rejection_reason', 'deleted_at', 'deleted_by',
   'deletion_reason', 'created_at', 'updated_at',
 ].join(',');
+
+async function invokeAdminUserFunction(action, payload) {
+  const client = requireSupabase();
+  const { data, error } = await client.functions.invoke('admin-user-management', {
+    body: { action, ...payload },
+  });
+  if (error) throw error;
+  return data;
+}
 
 const supaAdapter = {
   // ─── inspections ─────────────────────────────────────────────────────
@@ -249,14 +56,21 @@ const supaAdapter = {
     return rowToInspection(data);
   },
   async upsertInspection(payload) {
-    const row = inspectionToRow(payload);
-    if (payload.id) row.id = payload.id;
-    const { data, error } = await supabase.from('inspections').upsert(row, { onConflict: 'id' }).select().single();
+    const { data, error } = await requireSupabase().rpc('persist_inspection', {
+      p_id: payload.id,
+      p_payload: inspectionToRow(payload),
+      p_expected_version: payload.version ?? null,
+    });
     if (error) throw error;
     return rowToInspection(data);
   },
   async updateInspection(id, payload) {
-    const { data, error } = await supabase.from('inspections').update(inspectionToRow(payload)).eq('id', id).select().single();
+    const current = payload.version == null ? await this.getInspection(id) : payload;
+    const { data, error } = await requireSupabase().rpc('persist_inspection', {
+      p_id: id,
+      p_payload: inspectionToRow(payload),
+      p_expected_version: current.version,
+    });
     if (error) throw error;
     return rowToInspection(data);
   },
@@ -272,17 +86,17 @@ const supaAdapter = {
     q = applyPbSort(q, sort, 'scheduled_at');
     const { data, error } = await q;
     if (error) throw error;
-    return data || [];
+    return (data || []).map(rowToAppointment);
   },
   async createAppointment(payload) {
     const { data, error } = await supabase.from('appointments').insert(snake(payload)).select().single();
     if (error) throw error;
-    return data;
+    return rowToAppointment(data);
   },
   async updateAppointment(id, payload) {
     const { data, error } = await supabase.from('appointments').update(snake(payload)).eq('id', id).select().single();
     if (error) throw error;
-    return data;
+    return rowToAppointment(data);
   },
 
   // ─── users (mapped to public.profiles) ──────────────────────────────
@@ -292,32 +106,37 @@ const supaAdapter = {
     q = applyPbSort(q, sort, 'name');
     const { data, error } = await q;
     if (error) throw error;
-    return data || [];
+    return Promise.all((data || []).map(resolveProfile));
   },
   async listUsersByRole(role) {
     const { data, error } = await supabase.from('profiles').select('*').eq('role', role).order('name');
     if (error) throw error;
-    return data || [];
+    return Promise.all((data || []).map(resolveProfile));
   },
   async getUser(id) {
     const { data, error } = await supabase.from('profiles').select('*').eq('id', id).single();
     if (error) throw error;
-    return data;
+    return resolveProfile(data);
   },
   async createUser(payload) {
-    // Supabase Auth must mint the auth.users row first; the profiles trigger
-    // fills the rest.  Direct profile inserts will fail FK against auth.users.
-    throw new Error('createUser is admin-only and must go through supabase.auth.admin.createUser; route via a server function.');
+    return invokeAdminUserFunction('create', payload);
   },
   async updateUser(id, payload) {
+    if (payload.password) return invokeAdminUserFunction('reset_password', { id, password: payload.password });
+    if (payload instanceof FormData) {
+      const file = payload.get('avatar');
+      if (!(file instanceof Blob) || file.size > 5 * 1024 * 1024 || !/^image\/(jpeg|png|webp|gif)$/.test(file.type)) throw new Error('Choose an image under 5 MB.');
+      const key = `${id}/avatar-${crypto.randomUUID()}`;
+      const { error } = await requireSupabase().storage.from('avatars').upload(key, file);
+      if (error) throw error;
+      payload = { avatar_url: `storage:${key}` };
+    }
     const { data, error } = await supabase.from('profiles').update(snake(payload)).eq('id', id).select().single();
     if (error) throw error;
     return data;
   },
   async deleteUser(id) {
-    // Cascades from auth.users → profiles.  Must be called via the admin client
-    // on the server.  Frontend cannot delete users directly.
-    throw new Error('deleteUser must be called from a server function with the service-role key.');
+    return invokeAdminUserFunction('delete', { id });
   },
   async findUserByEmail(email) {
     const { data, error } = await supabase.from('profiles').select('*').eq('email', email).maybeSingle();
@@ -339,8 +158,18 @@ const supaAdapter = {
     if (error) throw error;
     return (data || []).map(rowToChat);
   },
-  async findChat() {
-    throw new Error('findChat with arbitrary filter is not yet implemented for Supabase.');
+  async findChat(filter = '') {
+    const match = /(?:inspectionId|inspection)\s*=\s*"([^"]+)"/.exec(filter);
+    if (!match) throw new Error(`Unsupported chat filter: ${filter || '(empty)'}`);
+    const { data, error } = await supabase.from('chats').select('*')
+      .eq('inspection_id', match[1]).maybeSingle();
+    if (error) throw error;
+    return data ? rowToChat(data) : null;
+  },
+  async ensureSupportChat() {
+    const { data, error } = await requireSupabase().rpc('ensure_support_chat');
+    if (error) throw error;
+    return rowToChat(data);
   },
   async createChat(payload) {
     const { data, error } = await supabase.from('chats').insert(snake(payload)).select().single();
@@ -363,9 +192,11 @@ const supaAdapter = {
     return rowToMessage(data);
   },
   async updateMessage(id, payload) {
-    const { data, error } = await supabase.from('messages').update(messageToRow(payload)).eq('id', id).select().single();
+    if (!payload.readBy || Object.keys(payload).some((key) => key !== 'readBy')) {
+      throw new Error('Only read receipts can be updated.');
+    }
+    const { error } = await requireSupabase().rpc('mark_message_read', { p_id: id });
     if (error) throw error;
-    return rowToMessage(data);
   },
   async deleteMessage(id) {
     const { error } = await supabase.from('messages').delete().eq('id', id);
@@ -424,6 +255,12 @@ const supaAdapter = {
   },
 };
 
+async function resolveProfile(profile) {
+  if (!profile?.avatar_url?.startsWith('storage:')) return profile;
+  const { data, error } = await requireSupabase().storage.from('avatars').createSignedUrl(profile.avatar_url.slice(8), 3600);
+  return { ...profile, avatar_url: error ? null : data.signedUrl };
+}
+
 // ─── Helpers: PB filter / sort → Supabase ────────────────────────────────
 // Covers the limited PB filter dialect actually used in this codebase:
 //   • field = "value"       → .eq(field, value)
@@ -444,8 +281,10 @@ function applyPbFilter(query, filter) {
     else if ((m = /^(\w+)\s*>\s*"([^"]*)"$/.exec(part)))  query = query.gt(snakeKey(m[1]), m[2]);
     else if ((m = /^(\w+)\s*<\s*"([^"]*)"$/.exec(part)))  query = query.lt(snakeKey(m[1]), m[2]);
     else if ((m = /^(\w+)\s*=\s*"([^"]*)"$/.exec(part)))  query = query.eq(snakeKey(m[1]), m[2]);
+    else if ((m = /^(\w+)\s*=\s*null$/i.exec(part)))          query = query.is(snakeKey(m[1]), null);
+    else if ((m = /^(\w+)\s*!=\s*null$/i.exec(part)))         query = query.not(snakeKey(m[1]), 'is', null);
     else if ((m = /^(\w+)\s*~\s*"([^"]*)"$/.exec(part)))  query = query.ilike(snakeKey(m[1]), `%${m[2]}%`);
-    // Unsupported tokens: silently skip (caller can fall back to client-side filter).
+    else throw new Error(`Unsupported Supabase filter expression: ${part}`);
   }
   return query;
 }
@@ -511,9 +350,11 @@ function inspectionToRow(p) {
   };
 }
 function rowToInspection(r) {
+  if (Array.isArray(r)) r = r[0];
   if (!r) return r;
   return {
     id:                r.id,
+    version:           r.version,
     inspector:         r.inspector_id,
     inspectorName:     r.inspector_name,
     customer:          r.customer_id,
@@ -542,6 +383,7 @@ function rowToInspection(r) {
 }
 
 function rowToChat(r) {
+  if (Array.isArray(r)) r = r[0];
   if (!r) return r;
   return {
     ...r,
@@ -587,6 +429,6 @@ function rowToAppSettings(r) {
   };
 }
 
-const adapter = USE_SUPABASE ? supaAdapter : pbAdapter;
+const adapter = isDemoMode ? (await import('./demoAdapter.js')).default : supaAdapter;
 
 export default adapter;

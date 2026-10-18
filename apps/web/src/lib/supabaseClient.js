@@ -1,14 +1,7 @@
-// Supabase client — additive to PocketBase.
+// Supabase is the only supported production backend.
 //
-// PocketBase remains the system of record. Supabase is used (so far) for:
-//   1. Storage      → room / property photos (replaces base64-in-JSON)
-//   2. Auth         → optional Google OAuth & email magic-link
-//   3. Postgres     → reserved for the Phase-3 analytics warehouse
-//
-// If the env vars are absent the helpers fall back to PocketBase-only
-// behaviour so the app keeps building locally without a Supabase project.
-//
-// Read SUPABASE_SETUP.md at the repo root for the one-time provisioning steps.
+// The app may still compile without deployment variables, but runtime data
+// access must fail clearly instead of silently switching to another backend.
 
 import { createClient } from '@supabase/supabase-js';
 
@@ -20,9 +13,8 @@ export const isSupabaseConfigured = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 export const supabase = isSupabaseConfigured
   ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       auth: {
-        // After the Phase-3 cutover Supabase Auth is the primary identity
-        // store, so persist the session in localStorage — this keeps the
-        // user logged in across tabs and browser restarts.
+        // Persist the Supabase session so users remain logged in across tabs
+        // and browser restarts.
         storage: typeof window !== 'undefined' ? window.localStorage : undefined,
         autoRefreshToken: true,
         persistSession: true,
@@ -31,5 +23,12 @@ export const supabase = isSupabaseConfigured
       global: { headers: { 'x-client': 'checksquare-web' } },
     })
   : null;
+
+export const requireSupabase = () => {
+  if (!supabase) {
+    throw new Error('Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
+  }
+  return supabase;
+};
 
 export const SUPABASE_PHOTO_BUCKET = 'inspection-photos';

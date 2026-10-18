@@ -221,7 +221,7 @@ const DefectPhotoGallery = ({ defect, onAdd, onUpdate, onRemove }) => {
   );
 };
 
-const RoomPhotoManager = ({ open, onOpenChange, room, onSave }) => {
+const RoomPhotoManager = ({ open, onOpenChange, room, onSave, inspectionId }) => {
   const { settings } = useSettings();
   const [cornerPhotos, setCornerPhotos] = useState(room?.cornerPhotos || []);
   const [defects, setDefects] = useState(room?.defects || []);
@@ -388,6 +388,7 @@ const RoomPhotoManager = ({ open, onOpenChange, room, onSave }) => {
                   <div key={cornerLabel} className="border rounded-xl p-4 bg-muted/30">
                     <p className="font-medium text-sm mb-2">{cornerLabel}</p>
                     <PhotoSlot
+                      inspectionId={inspectionId}
                       label={null}
                       photo={existing}
                       onChange={(photo) => setCornerPhoto(cornerLabel, photo)}

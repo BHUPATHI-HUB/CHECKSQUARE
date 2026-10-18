@@ -61,3 +61,21 @@ for (const f of ['icon.png', 'icon-background.png', 'icon-foreground.png']) {
   const s = await fs.stat(path.join(outDir, f));
   console.log(`  resources/${f}  (${s.size} bytes)`);
 }
+
+// Write launcher resources directly, avoiding the retired asset generator.
+const nativeRes = path.join(root, 'android/app/src/main/res');
+try {
+  await fs.access(path.join(root, 'android/gradlew'));
+  for (const [density, size] of Object.entries({ mdpi:48, hdpi:72, xhdpi:96, xxhdpi:144, xxxhdpi:192 })) {
+    const dir = path.join(nativeRes, `mipmap-${density}`);
+    await fs.mkdir(dir, { recursive:true });
+    for (const filename of ['ic_launcher.png','ic_launcher_round.png']) {
+      await sharp(path.join(outDir,'icon.png')).resize(size,size).png().toFile(path.join(dir,filename));
+    }
+    await sharp(path.join(outDir,'icon-foreground.png')).resize(Math.round(size*2.25),Math.round(size*2.25)).png().toFile(path.join(dir,'ic_launcher_foreground.png'));
+  }
+  console.log('Android launcher icons updated.');
+} catch (error) {
+  if (error.code !== 'ENOENT') throw error;
+  console.log('Android project not generated yet; source icons are ready.');
+}

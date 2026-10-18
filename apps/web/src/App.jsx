@@ -11,6 +11,8 @@ import ProtectedRoute from '@/components/ProtectedRoute.jsx';
 import OfflineBanner from '@/components/OfflineBanner.jsx';
 import SyncStatusBadge from '@/components/SyncStatusBadge.jsx';
 import { startSyncEngine } from '@/services/syncEngine.js';
+import ReloadIntro from '@/components/ReloadIntro.jsx';
+import PreviewBanner from '@/components/PreviewBanner.jsx';
 import { Toaster } from 'sonner';
 
 // Public pages stay eager-loaded — they're tiny and needed on first paint.
@@ -54,6 +56,8 @@ function App() {
         <FeedbackProvider>
           <ChatProvider>
             <Router>
+              <ReloadIntro />
+              <PreviewBanner />
               <ScrollToTop />
               <OfflineBanner />
               <SyncStatusBadge />

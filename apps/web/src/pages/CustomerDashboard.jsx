@@ -50,9 +50,7 @@ const CustomerDashboard = () => {
     let cancelled = false;
     (async () => {
       try {
-        const admins = await data.listUsers({ filter: 'role = "admin"', fields: 'id' });
-        if (cancelled || admins.length === 0) return;
-        await createChat([user.id, admins[0].id], 'direct', '');
+        await data.ensureSupportChat();
       } catch (err) {
         console.warn('Could not auto-create support chat:', err?.message || err);
       }
@@ -66,7 +64,7 @@ const CustomerDashboard = () => {
     (async () => {
       if (!customerDashCache[user.id]) setLoading(true);
       try {
-        const nowIso = new Date().toISOString().replace('T', ' ');
+        const nowIso = new Date().toISOString();
         const [appts, insps] = await Promise.all([
           data.listAppointments({
             filter: `customer = "${user.id}" && status = "scheduled" && scheduledAt >= "${nowIso}"`,
