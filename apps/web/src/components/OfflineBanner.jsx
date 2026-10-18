@@ -4,7 +4,7 @@ import useOnlineStatus from '@/hooks/useOnlineStatus';
 
 /**
  * Fixed-position banner shown when the device goes offline.
- * Lets users know that browsing cached data is OK, but saving requires a connection.
+ * Shows which work can be kept on this device while the network is down.
  */
 export default function OfflineBanner() {
 	const online = useOnlineStatus();
@@ -19,8 +19,8 @@ export default function OfflineBanner() {
 			<div className="max-w-5xl mx-auto px-4 py-2 flex items-center gap-2 text-sm font-medium">
 				<WifiOff className="w-4 h-4 flex-shrink-0" />
 				<span>
-					You&rsquo;re offline. You can browse previously loaded data, but new
-					inspections, edits and uploads won&rsquo;t save until you reconnect.
+                    You&rsquo;re offline. Inspection drafts, photos and admin settings
+                    can save on this device and sync when you reconnect. Other actions need a connection.
 				</span>
 			</div>
 		</div>

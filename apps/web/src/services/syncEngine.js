@@ -111,6 +111,9 @@ export async function drainOutbox() {
 // Debounced public trigger.
 let scheduled = null;
 export function requestSync() {
+  // Refresh the badge even while offline; drainOutbox intentionally returns
+  // early without emitting when there is no network.
+  if (isSupabaseConfigured) notify().catch(() => {});
   if (scheduled) return;
   scheduled = setTimeout(() => { scheduled = null; drainOutbox(); }, 300);
 }
