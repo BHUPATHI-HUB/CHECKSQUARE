@@ -8,16 +8,17 @@ test('missing IndexedDB rejects durable writes rather than confirming a save', a
   await assert.rejects(store.savePhotoAndQueue({ path: 'photo', blob: new Blob(['photo']), ownerId: 'inspector' }), /unavailable/);
   await assert.rejects(store.enqueue({ type: 'uploadPhoto', path: 'photo' }), /unavailable/);
   await assert.rejects(store.savePendingInspectionAndQueue({ id: 'report' }), /unavailable/);
+  await assert.rejects(store.savePendingSettingsAndQueue('admin', { appName: 'Test' }), /unavailable/);
 });
 
-function installDatabase({ failQueue = false } = {}) {
+function installDatabase({ failQueue = false, stores = ['inspections', 'outbox'] } = {}) {
   const committed = [];
   let finish;
   globalThis.indexedDB = { open() {
     const request = {};
     queueMicrotask(() => {
       request.result = { transaction(names, mode) {
-        assert.deepEqual(names, ['inspections', 'outbox']);
+        assert.deepEqual(names, stores);
         assert.equal(mode, 'readwrite');
         const staged = [];
         const transaction = {
@@ -65,6 +66,25 @@ test('queue storage failure aborts and never confirms an offline save', async ()
     const store = await loadStore();
     await assert.rejects(store.savePendingInspectionAndQueue({ id: 'report' }));
     assert.deepEqual(database.committed, []);
+  } finally { delete globalThis.indexedDB; }
+});
+
+test('settings and retry are durable together and scoped to the admin', async () => {
+  const database = installDatabase({ stores: ['settings', 'outbox'] });
+  try {
+    const store = await loadStore();
+    let confirmed = false;
+    const saving = store.savePendingSettingsAndQueue('admin', { appName: 'Offline brand' })
+      .then(() => { confirmed = true; });
+    await new Promise(setImmediate);
+    assert.equal(confirmed, false);
+    database.finish();
+    await saving;
+    assert.equal(database.committed[0].record.ownerId, 'admin');
+    assert.equal(database.committed[0].record.payload.appName, 'Offline brand');
+    assert.equal(database.committed[1].record.type, 'upsertSettings');
+    assert.equal(database.committed[1].record.ownerId, 'admin');
+    assert.equal(confirmed, true);
   } finally { delete globalThis.indexedDB; }
 });
 
