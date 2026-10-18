@@ -30,6 +30,7 @@ psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/cloud_apply.sql
 psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/003_profile_role_security.sql
 psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/004_workflow_permissions.sql
 psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/005_release_integrity.sql
+psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261018122917_reconcile_hosted_schema.sql
 ```
 
 The policies enable RLS and protect role changes, inspection ownership, appointment assignment, report publication, private media, and customer data. Do not bypass RLS from the browser.
@@ -115,3 +116,13 @@ Production dependency audit has no high/critical findings after compatible upgra
 - `inspection_events` records review transitions, actor IDs and versions. `client_error_events` records authenticated render/unhandled error codes and route templates, capped at 20 per user per minute. It excludes report contents, tokens, user messages and query strings. Admins can inspect these tables in Supabase; configure alerts and retention in the actual project.
 - CI retains the web bundle by commit. For a frontend rollback, redeploy the last verified bundle and record its commit. Keep additive database migrations in place; do not blindly drop columns/functions or restore production over newer data. First reproduce any database rollback in staging and preserve a fresh database plus Storage backup.
 - A signed Android rollback/update must use the existing release key and a valid increasing Android version code. No signing credentials were available here.
+
+## 12. Hosted verification — 18 October 2026
+
+The existing `CHECKSQUARE` project (`jcnvcyocatcovtdedokf`) was resumed and reached ACTIVE_HEALTHY. The combined 003/004/005/hosted-reconciliation migration applied successfully. All three rollback-only SQL suites passed on that project's PostgreSQL 17 database. Original row counts remained 15 profiles, 15 reports and 3 appointments after verification. The `admin-user-management` Edge Function is active at version 1 with JWT verification enabled.
+
+The reconciliation preserves the older submitted/rescheduled/cancelled bookkeeping while removing conflicting duplicate validators. Internal role/media lookups are moved to an unexposed schema. Anonymous SECURITY DEFINER exposure findings were removed. Three authenticated SECURITY DEFINER warnings remain intentionally for the self-scoped support-chat, read-receipt and rate-limited client-error RPCs; they validate the caller and cannot select arbitrary account/report data. Leaked-password protection remains disabled in project Auth settings; enable it in the dashboard if supported by the account plan.
+
+The management connection and SQL access are verified. Direct Auth HTTP requests from this execution environment timed out, so password login, private Storage HTTP delivery, realtime and admin-function invocation still need end-to-end staging verification. No real account passwords were used or reset. The project was not declared production-ready. Database/Storage backups and a restore drill still require the owner's operational access; only the guarded scripts are prepared.
+
+GitHub verification passed on the published commits. A separate debug-signed **CheckSquare Preview** APK was built successfully from `bd4667a8ad6fbd64636cc693615db09ce93265e8`; its Android application ID is `com.bhupathi.checksquare.preview`. It includes sample accounts and the reload intro. This APK does not connect to real data and can install alongside the production package.

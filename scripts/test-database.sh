@@ -19,11 +19,11 @@ else
   psql "$TEST_DATABASE_URL" -Xq -v ON_ERROR_STOP=1 -f supabase/policies/001_rls.sql
   psql "$TEST_DATABASE_URL" -Xq -v ON_ERROR_STOP=1 -f supabase/migrations/002_auth_and_storage.sql
 fi
-for migration in supabase/migrations/00{3,4,5}_*.sql; do
+for migration in supabase/migrations/00{3,4,5}_*.sql supabase/migrations/*_reconcile_hosted_schema.sql; do
   psql "$TEST_DATABASE_URL" -Xq -v ON_ERROR_STOP=1 -f "$migration"
 done
-# Verify repeatability of incremental migrations.
-for migration in supabase/migrations/00{3,4,5}_*.sql; do
+# Verify the latest migration can be repeated without replaying older revisions.
+for migration in supabase/migrations/*_reconcile_hosted_schema.sql; do
   psql "$TEST_DATABASE_URL" -Xq -v ON_ERROR_STOP=1 -f "$migration"
 done
 for test in supabase/tests/profile_role_security.sql supabase/tests/workflow_permissions.sql supabase/tests/release_integrity.sql; do

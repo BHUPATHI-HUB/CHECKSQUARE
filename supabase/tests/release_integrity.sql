@@ -38,29 +38,29 @@ select public.persist_inspection('00000000-0000-4000-c000-000000000011','{"statu
 select pg_temp.expect_denied($q$select public.persist_inspection('00000000-0000-4000-c000-000000000011','{"status":"draft"}',1)$q$);
 -- The client cannot read a pending report or its private photos.
 select set_config('request.jwt.claim.sub','00000000-0000-4000-a000-000000000011',true);
-select pg_temp.assert_true(not exists(select 1 from public.inspections),'unpublished reports hidden from customer');
+select pg_temp.assert_true(not exists(select 1 from public.inspections where id='00000000-0000-4000-c000-000000000011'),'unpublished reports hidden from customer');
 select pg_temp.assert_true(not public.can_read_photo('00000000-0000-4000-a000-000000000013/00000000-0000-4000-c000-000000000011/room/p.jpg','00000000-0000-4000-a000-000000000013'),'pending media hidden');
 select pg_temp.assert_true(not public.can_write_photo('draft/room/p.jpg'),'customer draft upload denied');
 -- Admin rejects; inspector resubmits; only the current revision can approve.
 select set_config('request.jwt.claim.sub','00000000-0000-4000-a000-000000000014',true);
 select pg_temp.expect_denied($q$select public.persist_inspection('00000000-0000-4000-c000-000000000011','{"status":"rejected"}',2)$q$);
 select public.persist_inspection('00000000-0000-4000-c000-000000000011','{"status":"rejected","rejection_reason":"Add water evidence"}',2);
-select pg_temp.assert_true((select rejected_by::text=auth.uid()::text from public.inspections),'review actor recorded by database');
+select pg_temp.assert_true((select rejected_by::text=auth.uid()::text from public.inspections where id='00000000-0000-4000-c000-000000000011'),'review actor recorded by database');
 
 select set_config('request.jwt.claim.sub','00000000-0000-4000-a000-000000000013',true);
 select public.persist_inspection('00000000-0000-4000-c000-000000000011','{"status":"pending"}',3);
 select set_config('request.jwt.claim.sub','00000000-0000-4000-a000-000000000014',true);
 select public.persist_inspection('00000000-0000-4000-c000-000000000011','{"status":"approved"}',4);
-select pg_temp.assert_true((select approved_by::text=auth.uid()::text and approved_at is not null and rejection_reason is null from public.inspections),'approval stamp and rejection cleanup');
-select pg_temp.assert_true((select count(*)=5 from public.inspection_events),'one audit event per transition');
-select pg_temp.assert_true((select status='completed' from public.appointments),'approval completes booking atomically');
+select pg_temp.assert_true((select approved_by::text=auth.uid()::text and approved_at is not null and rejection_reason is null from public.inspections where id='00000000-0000-4000-c000-000000000011'),'approval stamp and rejection cleanup');
+select pg_temp.assert_true((select count(*)=5 from public.inspection_events where inspection_id='00000000-0000-4000-c000-000000000011'),'one audit event per transition');
+select pg_temp.assert_true((select status='completed' from public.appointments where id='00000000-0000-4000-b000-000000000011'),'approval completes booking atomically');
 select pg_temp.expect_denied($q$select public.persist_inspection('00000000-0000-4000-c000-000000000011','{"status":"rejected","rejection_reason":"Stale review"}',4)$q$);
 select set_config('request.jwt.claim.sub','00000000-0000-4000-a000-000000000011',true);
-select pg_temp.assert_true((select count(*)=1 from public.inspections),'approved report visible to its customer');
+select pg_temp.assert_true((select count(*)=1 from public.inspections where id='00000000-0000-4000-c000-000000000011'),'approved report visible to its customer');
 select pg_temp.assert_true(public.can_read_photo('00000000-0000-4000-a000-000000000013/00000000-0000-4000-c000-000000000011/room/p.jpg','00000000-0000-4000-a000-000000000013'),'approved media visible');
-select pg_temp.assert_true((select count(*)=1 from public.notifications),'customer notification visible');
+select pg_temp.assert_true((select count(*)=1 from public.notifications where data->>'inspectionId'='00000000-0000-4000-c000-000000000011'),'customer notification visible');
 select set_config('request.jwt.claim.sub','00000000-0000-4000-a000-000000000012',true);
-select pg_temp.assert_true(not exists(select 1 from public.inspections),'foreign customer report isolation');
+select pg_temp.assert_true(not exists(select 1 from public.inspections where id='00000000-0000-4000-c000-000000000011'),'foreign customer report isolation');
 select pg_temp.assert_true(not public.can_read_photo('draft/room/old.jpg','00000000-0000-4000-a000-000000000013'),'legacy draft media isolated');
 -- Another inspector cannot delete foreign chats or messages.
 reset role;
@@ -72,7 +72,7 @@ delete from public.chats where id='00000000-0000-4000-d000-000000000011';
 delete from public.messages where id='00000000-0000-4000-e000-000000000011';
 reset role;
 select pg_temp.assert_true((select count(*)=1 from public.chats where id='00000000-0000-4000-d000-000000000011'),'unrelated staff cannot delete chat');
-select pg_temp.assert_true((select count(*)=1 from public.messages),'unrelated staff cannot delete message');
+select pg_temp.assert_true((select count(*)=1 from public.messages where id='00000000-0000-4000-e000-000000000011'),'unrelated staff cannot delete message');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','00000000-0000-4000-a000-000000000011',true);
 select public.mark_message_read('00000000-0000-4000-e000-000000000011');

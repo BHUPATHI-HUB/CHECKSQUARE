@@ -11,7 +11,9 @@ The authoritative definitions are:
 - `004_workflow_permissions.sql`: appointment/report mutation restrictions.
 - `005_release_integrity.sql`: schema parity, explicit grants, private-media isolation, versioned report saves, atomic appointment linkage, review stamps, audit events, notifications, support chats, private avatars and client-error events.
 
-`supabase/cloud_apply.sql` is the alternative fresh-project base. **Apply 003, 004 and 005 afterward**. Do not run a fresh base script on a populated project. See [SUPABASE_SETUP.md](SUPABASE_SETUP.md).
+`20261018122917_reconcile_hosted_schema.sql` reconciles historical hosted validators, preserves lifecycle bookkeeping, and hides internal RLS lookups. Apply it after 005.
+
+`supabase/cloud_apply.sql` is the alternative fresh-project base. **Apply 003, 004, 005 and the hosted reconciliation afterward**. Do not run a fresh base script on a populated project. See [SUPABASE_SETUP.md](SUPABASE_SETUP.md).
 
 Customers book unassigned appointments and see only their approved reports. Admins assign staff before work starts. Inspectors capture and submit their own reports. A report save links its appointment in the same transaction. Approval completes the appointment and publishes the report; rejection requires feedback. Server-stored actor IDs, status events and notifications commit with the review. Version checks reject stale clients rather than overwriting newer data.
 
