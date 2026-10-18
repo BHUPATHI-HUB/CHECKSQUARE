@@ -208,13 +208,21 @@ export const useInspectionStatus = () => {
       || (typeof crypto !== 'undefined' && crypto.randomUUID
         ? crypto.randomUUID()
         : `local_${Date.now()}_${Math.random().toString(36).slice(2)}`);
+    const localDraft = await getPendingInspection(clientId);
+    const pendingBeforeSave = (localDraft?.ownerId || localDraft?.inspector) === accountId ? localDraft : null;
+    // A draft created offline may have received its server version while this
+    // form stayed open. Keep that version for the next queued edit.
+    if (payload.version == null && pendingBeforeSave?.version != null) {
+      payload.version = pendingBeforeSave.version;
+    }
 
     // Persist locally + queue for sync. Used when offline OR when a network
     // write fails, so the inspector never loses a submission with no signal.
     const queueLocally = async () => {
       const now = new Date().toISOString();
       const localRecord = {
-        id: clientId, ...payload, ownerId: accountId, created: now, updated: now, syncStatus: 'pending',
+        id: clientId, ...payload, ownerId: accountId,
+        created: pendingBeforeSave?.created || now, updated: now, syncStatus: 'pending',
       };
       try {
         await savePendingInspectionAndQueue(localRecord);
@@ -230,7 +238,9 @@ export const useInspectionStatus = () => {
     };
 
     const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
-    if (offline) return queueLocally();
+    // Do not race an already-queued draft with a direct online write. Its
+    // first server version belongs to the sync engine until the queue clears.
+    if (offline || pendingBeforeSave?.syncStatus === 'pending') return queueLocally();
 
     try {
       let record;

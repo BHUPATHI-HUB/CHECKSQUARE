@@ -14,6 +14,7 @@ import {
   listOutbox, updateOutbox, deleteOutbox,
   getPhotoBlob, markPhotoSynced,
   getPendingInspection, completePendingInspection, outboxStats,
+  getPendingSettings, completePendingSettings,
   resetOutboxBackoff, requestPersistentStorage,
 } from '@/lib/localStore.js';
 
@@ -53,6 +54,11 @@ async function handleOp(op) {
     if (!insp) return;
     const saved = await data.upsertInspection(insp);
     await completePendingInspection(insp.id, insp.localRevision, saved.version);
+  } else if (op.type === 'upsertSettings') {
+    const pending = await getPendingSettings(op.ownerId);
+    if (!pending) return;
+    await data.upsertAppSettings(pending.payload);
+    await completePendingSettings(op.ownerId, pending.localRevision);
   }
 }
 
@@ -74,6 +80,7 @@ export async function drainOutbox() {
       if (currentSession?.user?.id !== activeUserId) break;
       // Never send work from a shared device through another user's session.
       if (op.ownerId && op.ownerId !== activeUserId) continue;
+      if (op.type === 'upsertSettings' && !op.ownerId) continue;
       if (op.type === 'uploadPhoto' && !op.ownerId) continue;
       if (op.type === 'upsertInspection') {
         // eslint-disable-next-line no-await-in-loop

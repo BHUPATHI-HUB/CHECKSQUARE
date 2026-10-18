@@ -155,6 +155,7 @@ const AdminSettingsPage = () => {
   const [selectedRoom, setSelectedRoom] = useState('General');
   const [newComment, setNewComment] = useState('');
   const [hasError, setHasError] = useState(false);
+  const [saving, setSaving] = useState(false);
   // Comment library staging state — flat array of {id, classify, text, severity}
   const [libDraft, setLibDraft] = useState([]);
   const [libFilter, setLibFilter] = useState('All');
@@ -218,12 +219,22 @@ const AdminSettingsPage = () => {
     return <div className="min-h-screen flex items-center justify-center"><p>Error loading settings. Please refresh.</p></div>;
   }
 
-  const handleSave = () => {
-    const result = updateSettings(localSettings);
-    if (result.success) {
-      toast.success('Settings updated successfully');
-    } else {
-      toast.error(result.error || 'Failed to update settings');
+  const handleSave = async (overrides = {}) => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      const nextSettings = { ...localSettings, ...overrides };
+      const result = await updateSettings(nextSettings);
+      if (result.success) {
+        if (Object.keys(overrides).length) setLocalSettings(nextSettings);
+        toast.success(result.syncStatus === 'pending'
+          ? 'Settings saved on this device. They will sync when you reconnect.'
+          : 'Settings updated successfully');
+      } else {
+        toast.error(result.error || 'Failed to update settings');
+      }
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -473,7 +484,7 @@ const AdminSettingsPage = () => {
                   </div>
                 </CardContent>
                 <CardFooter className="border-t bg-muted/30 py-4 justify-end">
-                  <Button onClick={handleSave}><Save className="w-4 h-4 mr-2" /> Save Global Branding</Button>
+                  <Button onClick={() => handleSave()} disabled={saving}><Save className="w-4 h-4 mr-2" /> Save Global Branding</Button>
                 </CardFooter>
               </Card>
             </TabsContent>
@@ -628,7 +639,7 @@ const AdminSettingsPage = () => {
                   </div>
                 </CardContent>
                 <CardFooter className="border-t bg-muted/30 py-4 justify-end">
-                  <Button onClick={handleSave}><Save className="w-4 h-4 mr-2" /> Save PDF Settings</Button>
+                  <Button onClick={() => handleSave()} disabled={saving}><Save className="w-4 h-4 mr-2" /> Save PDF Settings</Button>
                 </CardFooter>
               </Card>
             </TabsContent>
@@ -979,10 +990,8 @@ const AdminSettingsPage = () => {
                     Discard
                   </Button>
                   <Button
-                    onClick={() => {
-                      handleAppChange('commentLibrary', libDraft);
-                      handleSave();
-                    }}
+                    onClick={() => handleSave({ commentLibrary: libDraft })}
+                    disabled={saving}
                   >
                     <Save className="w-4 h-4 mr-2" /> Save Library
                   </Button>
@@ -1068,7 +1077,7 @@ const AdminSettingsPage = () => {
                   </Button>
                 </CardContent>
                 <CardFooter className="border-t py-4 justify-end">
-                  <Button onClick={handleSave}><Save className="w-4 h-4 mr-2" /> Save Severities</Button>
+                  <Button onClick={() => handleSave()} disabled={saving}><Save className="w-4 h-4 mr-2" /> Save Severities</Button>
                 </CardFooter>
               </Card>
             </TabsContent>
@@ -1089,7 +1098,7 @@ const AdminSettingsPage = () => {
                   />
                 </CardContent>
                 <CardFooter className="border-t py-4 justify-end">
-                  <Button onClick={handleSave}><Save className="w-4 h-4 mr-2" /> Save Brand Catalog</Button>
+                  <Button onClick={() => handleSave()} disabled={saving}><Save className="w-4 h-4 mr-2" /> Save Brand Catalog</Button>
                 </CardFooter>
               </Card>
             </TabsContent>
@@ -1322,7 +1331,7 @@ const AdminSettingsPage = () => {
                   </div>
                 </CardContent>
                 <CardFooter>
-                  <Button onClick={handleSave}><Save className="w-4 h-4 mr-2" /> Save Scoring Settings</Button>
+                  <Button onClick={() => handleSave()} disabled={saving}><Save className="w-4 h-4 mr-2" /> Save Scoring Settings</Button>
                 </CardFooter>
               </Card>
             </TabsContent>
@@ -1366,7 +1375,7 @@ const AdminSettingsPage = () => {
                   </div>
                 </CardContent>
                 <CardFooter className="border-t py-4 justify-end">
-                  <Button onClick={handleSave}><Save className="w-4 h-4 mr-2" /> Save Legal Pages</Button>
+                  <Button onClick={() => handleSave()} disabled={saving}><Save className="w-4 h-4 mr-2" /> Save Legal Pages</Button>
                 </CardFooter>
               </Card>
             </TabsContent>
@@ -1467,7 +1476,7 @@ const AdminSettingsPage = () => {
                   </p>
                 </CardContent>
                 <CardFooter className="border-t py-4 justify-end">
-                  <Button onClick={handleSave}><Save className="w-4 h-4 mr-2" /> Save Image Settings</Button>
+                  <Button onClick={() => handleSave()} disabled={saving}><Save className="w-4 h-4 mr-2" /> Save Image Settings</Button>
                 </CardFooter>
               </Card>
             </TabsContent>

@@ -2,8 +2,16 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { DEFAULT_WEIGHTS, DEFAULT_SCORE_EXPLANATION_HTML, PROPCHK_WEIGHTS, PROPCHK_ITEMS_PER_ROOM, DEFAULT_ROOM_SCORE_EXPR, DEFAULT_PRIORITY_EXPR } from '@/utils/scoring';
 import { STARTER_COMMENT_LIBRARY } from '@/utils/commentLibrary';
 import data from '@/services/dataService.js';
+import { supabase } from '@/lib/supabaseClient.js';
+import { getPendingSettings, savePendingSettingsAndQueue, completePendingSettings } from '@/lib/localStore.js';
+import { isNetworkError, requestSync } from '@/services/syncEngine.js';
 
 const SettingsContext = createContext(null);
+
+const cacheSettings = (payload) => {
+  try { localStorage.setItem('app-settings', JSON.stringify(payload)); }
+  catch (error) { console.warn('Could not cache settings on this device:', error); }
+};
 
 export const useSettings = () => {
   const context = useContext(SettingsContext);
@@ -146,6 +154,7 @@ export const SettingsProvider = ({ children }) => {
   useEffect(() => {
     let cancelled = false;
     let unsub = null;
+    let authSubscription = null;
 
     const hydrateFromCache = () => {
       try {
@@ -161,11 +170,17 @@ export const SettingsProvider = ({ children }) => {
 
     const fetchFromServer = async () => {
       try {
+        const { data: { session } } = supabase ? await supabase.auth.getSession() : { data: { session: null } };
+        const pending = await getPendingSettings(session?.user?.id);
+        if (pending) {
+          if (!cancelled) setSettings((prev) => ({ ...prev, ...pending.payload }));
+          return;
+        }
         const payload = await data.getAppSettings();
         if (cancelled) return;
         if (Object.keys(payload).length > 0) {
           setSettings((prev) => ({ ...prev, ...payload }));
-          localStorage.setItem('app-settings', JSON.stringify(payload));
+          cacheSettings(payload);
         }
       } catch (_) {
         // First boot or unauthed visitor — silently fall back to cache + defaults.
@@ -175,15 +190,31 @@ export const SettingsProvider = ({ children }) => {
     };
 
     hydrateFromCache();
+    // An offline WebView must not wait for a network request before opening
+    // the settings page. The cached values (or defaults) are already usable.
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) setLoading(false);
     fetchFromServer();
+    // The provider mounts before Auth initializes. Refresh once the session
+    // arrives; the first unauthenticated read cannot see the RLS-protected row.
+    if (supabase) {
+      const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+        if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+          setTimeout(() => { if (!cancelled) fetchFromServer(); }, 0);
+        }
+      });
+      authSubscription = sub.subscription;
+    }
 
     // Realtime: refresh whenever an admin saves changes elsewhere.
     try {
-      unsub = data.subscribe('app_settings', (e) => {
+      unsub = data.subscribe('app_settings', async (e) => {
         if (e.action === 'update' || e.action === 'create') {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (await getPendingSettings(session?.user?.id)) return;
+          if (cancelled) return;
           const payload = e.record?.payload || {};
           setSettings((prev) => ({ ...prev, ...payload }));
-          localStorage.setItem('app-settings', JSON.stringify(payload));
+          cacheSettings(payload);
         }
       }, APP_SETTINGS_ID);
     } catch (_) { /* offline / unauthed — skip */ }
@@ -191,6 +222,7 @@ export const SettingsProvider = ({ children }) => {
     return () => {
       cancelled = true;
       if (unsub) unsub();
+      authSubscription?.unsubscribe();
     };
   }, []);
 
@@ -225,21 +257,34 @@ export const SettingsProvider = ({ children }) => {
   const updateSettings = async (newSettings) => {
     try {
       const updated = { ...settings, ...newSettings };
-      setSettings(updated);
-      // Optimistic local write-through.
-      localStorage.setItem('app-settings', JSON.stringify({
-        ...updated,
-        lastUpdated: new Date().toISOString(),
-      }));
-      // Persist to server (admins only — the API rule rejects non-admins
-      // and the UI never invokes this for them).
       const { lastUpdated, __brandVersion, ...payload } = updated; // eslint-disable-line no-unused-vars
+      if (!supabase) {
+        await data.upsertAppSettings(payload);
+        setSettings(updated);
+        cacheSettings(updated);
+        return { success: true, syncStatus: 'synced' };
+      }
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) throw new Error('Sign in before saving settings.');
+      const saveOnDevice = async () => {
+        await savePendingSettingsAndQueue(session.user.id, payload);
+        setSettings(updated);
+        cacheSettings(updated);
+        requestSync();
+        return { success: true, syncStatus: 'pending' };
+      };
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) return await saveOnDevice();
       try {
         await data.upsertAppSettings(payload);
+        const pending = await getPendingSettings(session.user.id);
+        if (pending) await completePendingSettings(session.user.id, pending.localRevision);
+        setSettings(updated);
+        cacheSettings(updated);
+        return { success: true, syncStatus: 'synced' };
       } catch (innerErr) {
+        if (isNetworkError(innerErr)) return await saveOnDevice();
         throw innerErr;
       }
-      return { success: true };
     } catch (err) {
       console.error('Failed to persist settings:', err);
       return { success: false, error: err?.message || 'Failed to update settings' };

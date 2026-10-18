@@ -13,8 +13,8 @@
 // callers never report an offline save that did not reach device storage.
 
 const DB_NAME = 'checksquare-offline';
-const DB_VERSION = 2;
-const STORES = { photos: 'photos', outbox: 'outbox', inspections: 'inspections', lists: 'lists' };
+const DB_VERSION = 3;
+const STORES = { photos: 'photos', outbox: 'outbox', inspections: 'inspections', lists: 'lists', settings: 'settings' };
 
 let dbPromise = null;
 
@@ -40,6 +40,9 @@ function openDB() {
       }
       if (!db.objectStoreNames.contains(STORES.lists)) {
         db.createObjectStore(STORES.lists, { keyPath: 'key' });
+      }
+      if (!db.objectStoreNames.contains(STORES.settings)) {
+        db.createObjectStore(STORES.settings, { keyPath: 'ownerId' });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -245,6 +248,43 @@ export async function completePendingInspection(id, localRevision, version) {
 export async function deletePendingInspection(id) {
   try { await tx(STORES.inspections, 'readwrite', (s) => s.delete(id)); }
   catch { /* non-fatal */ }
+}
+
+// Admin settings saved offline are scoped to the signed-in account. Commit
+// the payload and its sync operation atomically, just like an inspection.
+export async function savePendingSettingsAndQueue(ownerId, payload) {
+  if (!ownerId) throw new Error('Sign in before saving settings.');
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([STORES.settings, STORES.outbox], 'readwrite');
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error || new Error('Offline settings save failed.'));
+    transaction.onabort = () => reject(transaction.error || new Error('Offline settings save was cancelled.'));
+    const now = Date.now();
+    try {
+      const localRevision = crypto.randomUUID();
+      transaction.objectStore(STORES.settings).put({ ownerId, payload, localRevision, updatedAt: now });
+      transaction.objectStore(STORES.outbox).add({
+        type: 'upsertSettings', ownerId, tries: 0, nextAttemptAt: now, createdAt: now,
+      });
+    } catch (error) {
+      transaction.abort();
+      reject(error);
+    }
+  });
+}
+
+export async function getPendingSettings(ownerId) {
+  if (!ownerId) return null;
+  try { return await tx(STORES.settings, 'readonly', (s) => reqToPromise(s.get(ownerId))); }
+  catch { return null; }
+}
+
+export async function completePendingSettings(ownerId, localRevision) {
+  return tx(STORES.settings, 'readwrite', async (store) => {
+    const current = await reqToPromise(store.get(ownerId));
+    if (current?.localRevision === localRevision) store.delete(ownerId);
+  });
 }
 
 // ─── cached lists (offline dashboard browsing) ───────────────────────────

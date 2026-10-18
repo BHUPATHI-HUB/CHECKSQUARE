@@ -108,28 +108,28 @@ const DisclaimerEditor = () => {
   const [activeTab, setActiveTab] = useState('page1');
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
-  const handleSave = () => {
-    const result = updateSettings({
+  const handleSave = async () => {
+    const result = await updateSettings({
       disclaimerPage1: page1Content,
       disclaimerPage2: page2Content
     });
     
     if (result.success) {
-      toast.success('Disclaimers saved successfully');
+      toast.success(result.syncStatus === 'pending' ? 'Disclaimers saved on this device. They will sync when you reconnect.' : 'Disclaimers saved successfully');
     } else {
-      toast.error('Failed to save disclaimers');
+      toast.error(result.error || 'Failed to save disclaimers');
     }
   };
 
-  const handleReset = () => {
+  const handleReset = async () => {
     if (window.confirm('Are you sure you want to reset both disclaimer pages to their default text? This cannot be undone.')) {
-      const result = resetDisclaimers();
+      const result = await resetDisclaimers();
       if (result.success) {
         setPage1Content(result.disclaimerPage1);
         setPage2Content(result.disclaimerPage2);
-        toast.success('Disclaimers reset to defaults');
+        toast.success(result.syncStatus === 'pending' ? 'Defaults saved on this device. They will sync when you reconnect.' : 'Disclaimers reset to defaults');
       } else {
-        toast.error('Failed to reset disclaimers');
+        toast.error(result.error || 'Failed to reset disclaimers');
       }
     }
   };
