@@ -14,6 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
+import { useFeedback } from '@/contexts/FeedbackContext.jsx';
 import { Save, Plus, Trash2, AlertCircle, Upload, Image as ImageIcon, FileSpreadsheet, Download } from 'lucide-react';
 import DisclaimerEditor from '@/components/DisclaimerEditor.jsx';
 import { Switch } from '@/components/ui/switch';
@@ -151,6 +152,7 @@ const BrandCatalogEditor = ({ catalog, onChange }) => {
 
 const AdminSettingsPage = () => {
   const { settings, updateSettings, loading } = useSettings();
+  const { confirmAction } = useFeedback();
   const [localSettings, setLocalSettings] = useState(null);
   const [selectedRoom, setSelectedRoom] = useState('General');
   const [newComment, setNewComment] = useState('');
@@ -222,17 +224,23 @@ const AdminSettingsPage = () => {
   const handleSave = async (overrides = {}) => {
     if (saving) return;
     setSaving(true);
+    const notice = toast.loading('Saving settings…');
     try {
       const nextSettings = { ...localSettings, ...overrides };
       const result = await updateSettings(nextSettings);
       if (result.success) {
         if (Object.keys(overrides).length) setLocalSettings(nextSettings);
         toast.success(result.syncStatus === 'pending'
-          ? 'Settings saved on this device. They will sync when you reconnect.'
-          : 'Settings updated successfully');
+          ? 'Saved on this device'
+          : 'Settings saved', {
+          id: notice,
+          description: result.syncStatus === 'pending' ? 'Changes will sync when you reconnect.' : 'Your changes are up to date.',
+        });
       } else {
-        toast.error(result.error || 'Failed to update settings');
+        toast.error('Could not save settings', { id: notice, description: result.error || 'Please try again.' });
       }
+    } catch (error) {
+      toast.error('Could not save settings', { id: notice, description: error?.message || 'Please try again.' });
     } finally {
       setSaving(false);
     }
@@ -727,8 +735,13 @@ const AdminSettingsPage = () => {
                     </Button>
                     <Button
                       variant="ghost"
-                      onClick={() => {
-                        if (!confirm('Replace the current library with the built-in CHECK SQUARE starter set? Unsaved edits will be lost.')) return;
+                      onClick={async () => {
+                        const confirmed = await confirmAction({
+                          title: 'Load the starter library?',
+                          description: 'This replaces the current draft library. Unsaved edits will be lost.',
+                          confirmLabel: 'Load starter set',
+                        });
+                        if (!confirmed) return;
                         setLibDraft(normalizeCommentLibrary(STARTER_COMMENT_LIBRARY));
                         toast.success('Loaded starter library');
                       }}

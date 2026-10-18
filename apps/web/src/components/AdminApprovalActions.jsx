@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
 import { CheckCircle, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useInspectionStatus } from '@/hooks/useInspectionStatus.js';
@@ -12,24 +13,31 @@ const AdminApprovalActions = ({ inspection, onStatusChanged }) => {
   const { user } = useAuth();
   const { showSuccess, showWarning } = useFeedback();
   const [isUpdating, setIsUpdating] = useState(false);
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState('');
 
   const handleStatusChange = async (newStatus) => {
     setIsUpdating(true);
-    const rejectionReason = newStatus === 'rejected' ? window.prompt('What should the inspector correct?')?.trim() : undefined;
-    if (newStatus === 'rejected' && !rejectionReason) { setIsUpdating(false); return; }
-    const success = await updateInspectionStatus(inspection.id, newStatus, user, { version: inspection.version, ...(rejectionReason && { rejectionReason }) });
-    if (success) {
-      const addr = inspection.metadata?.propertyAddress || 'The inspection';
-      if (newStatus === 'approved') {
-        showSuccess('Inspection approved', `"${addr}" is now visible to the customer.`);
-      } else if (newStatus === 'rejected') {
-        showWarning('Inspection rejected', `"${addr}" was sent back to the inspector for changes.`);
-      } else {
-        showSuccess('Status updated', `"${addr}" is now marked as ${newStatus}.`);
+    try {
+      const reason = newStatus === 'rejected' ? rejectionReason.trim() : undefined;
+      if (newStatus === 'rejected' && !reason) return;
+      const success = await updateInspectionStatus(inspection.id, newStatus, user, { version: inspection.version, ...(reason && { rejectionReason: reason }) });
+      if (success) {
+        const addr = inspection.metadata?.propertyAddress || 'The inspection';
+        if (newStatus === 'approved') {
+          showSuccess('Inspection approved', `"${addr}" is now visible to the customer.`);
+        } else if (newStatus === 'rejected') {
+          showWarning('Inspection rejected', `"${addr}" was sent back to the inspector for changes.`);
+          setRejectOpen(false);
+          setRejectionReason('');
+        } else {
+          showSuccess('Status updated', `"${addr}" is now marked as ${newStatus}.`);
+        }
+        onStatusChanged?.(newStatus);
       }
-      if (onStatusChanged) onStatusChanged(newStatus);
+    } finally {
+      setIsUpdating(false);
     }
-    setIsUpdating(false);
   };
 
   if (!inspection || inspection.status !== 'pending') {
@@ -38,7 +46,7 @@ const AdminApprovalActions = ({ inspection, onStatusChanged }) => {
 
   return (
     <div className="flex items-center gap-2">
-      <AlertDialog>
+      <AlertDialog open={rejectOpen} onOpenChange={(open) => { setRejectOpen(open); if (!open) setRejectionReason(''); }}>
         <AlertDialogTrigger asChild>
           <Button variant="outline" size="sm" className="text-destructive hover:bg-destructive/10 hover:text-destructive" disabled={isUpdating}>
             <XCircle className="w-4 h-4 mr-2" /> Reject
@@ -48,13 +56,25 @@ const AdminApprovalActions = ({ inspection, onStatusChanged }) => {
           <AlertDialogHeader>
             <AlertDialogTitle>Reject Inspection?</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to reject this inspection? The inspector will be notified and may need to submit a revised report.
+              Tell the inspector what needs correction. They will see your reason with the rejected report.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <Textarea
+            aria-label="Reason for rejection"
+            placeholder="Describe what needs correction…"
+            value={rejectionReason}
+            onChange={(event) => setRejectionReason(event.target.value)}
+            maxLength={1000}
+            className="min-h-28"
+          />
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => handleStatusChange('rejected')} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Reject Inspection
+            <AlertDialogCancel disabled={isUpdating}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => { event.preventDefault(); handleStatusChange('rejected'); }}
+              disabled={isUpdating || !rejectionReason.trim()}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isUpdating ? 'Rejecting…' : 'Reject inspection'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

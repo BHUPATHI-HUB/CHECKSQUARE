@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
+import { useFeedback } from '@/contexts/FeedbackContext.jsx';
 import RoomPhotoManager from '@/components/RoomPhotoManager.jsx';
 import PhotoImg from '@/components/PhotoImg.jsx';
 import { toast } from 'sonner';
@@ -19,6 +21,7 @@ const InspectionDetailView = ({ inspection, onUpdate }) => {
   const { user, role } = useAuth();
   const { settings } = useSettings();
   const { updateInspectionStatus, softDeleteInspection, saveInspection } = useInspectionStatus();
+  const { confirmAction } = useFeedback();
   const navigate = useNavigate();
   const [localInspection, setLocalInspection] = useState(inspection);
   const [selectedRoom, setSelectedRoom] = useState(null);
@@ -26,28 +29,37 @@ const InspectionDetailView = ({ inspection, onUpdate }) => {
   const [generating, setGenerating] = useState(false);
   const [busy, setBusy] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState('');
 
   const isAdmin = role === 'admin';
   const canEdit = isAdmin || (user?.id === inspection.inspector && inspection.status !== 'approved');
   const canDownload = inspection.status === 'approved' || isAdmin;
 
-  const handleApprove = () => updateStatus('approved');
-  const handleReject = () => updateStatus('rejected');
+  const handleApprove = async () => {
+    const confirmed = await confirmAction({
+      title: 'Approve this inspection?',
+      description: 'The report will be available to the customer after approval.',
+      confirmLabel: 'Approve inspection',
+    });
+    if (confirmed) updateStatus('approved');
+  };
+  const handleReject = () => setRejectOpen(true);
 
   // Persist status via the Supabase data boundary (previously wrote to a non-existent
   // `inspections` localStorage key, so approvals silently disappeared on
   // reload). The hook handles audit fields (approvedBy/approvedAt etc.)
   // and customer notifications server-side.
-  const updateStatus = async (status) => {
+  const updateStatus = async (status, reason) => {
     if (busy) return;
     setBusy(true);
     try {
-      const rejectionReason = status === 'rejected' ? window.prompt('What should the inspector correct?')?.trim() : undefined;
-      if (status === 'rejected' && !rejectionReason) return;
-      const ok = await updateInspectionStatus(inspection.id, status, user, { version: localInspection.version, ...(rejectionReason && { rejectionReason }) });
+      if (status === 'rejected' && !reason?.trim()) return;
+      const ok = await updateInspectionStatus(inspection.id, status, user, { version: localInspection.version, ...(reason && { rejectionReason: reason.trim() }) });
       if (ok) {
         setLocalInspection((prev) => ({ ...prev, status, version: prev.version + 1 }));
         toast.success(`Inspection ${status}`);
+        if (status === 'rejected') { setRejectOpen(false); setRejectionReason(''); }
         if (onUpdate) onUpdate();
       }
     } finally {
@@ -98,7 +110,7 @@ const InspectionDetailView = ({ inspection, onUpdate }) => {
 
   const handleDownload = async (format) => {
     setGenerating(true);
-    toast.info(`Generating ${format.toUpperCase()}...`);
+    const notice = toast.loading(`Generating ${format.toUpperCase()}…`);
     try {
       if (format === 'pdf') {
         await generatePDF(localInspection, settings);
@@ -107,10 +119,10 @@ const InspectionDetailView = ({ inspection, onUpdate }) => {
       } else {
         await generateDOCX(localInspection, settings);
       }
-      toast.success('Report downloaded successfully');
+      toast.success('Report downloaded', { id: notice });
     } catch (err) {
       console.error(err);
-      toast.error('Failed to generate report');
+      toast.error('Failed to generate report', { id: notice });
     } finally {
       setGenerating(false);
     }
@@ -290,6 +302,29 @@ const InspectionDetailView = ({ inspection, onUpdate }) => {
           <DialogFooter className="mt-4">
             <Button variant="outline" onClick={() => setDeleteConfirmOpen(false)}>Cancel</Button>
             <Button variant="destructive" onClick={handleDeleteReport}>Delete Report</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject inspection</DialogTitle>
+            <DialogDescription>Explain what the inspector should correct before resubmitting.</DialogDescription>
+          </DialogHeader>
+          <Textarea
+            aria-label="Reason for rejection"
+            placeholder="Describe the required corrections…"
+            value={rejectionReason}
+            onChange={(event) => setRejectionReason(event.target.value)}
+            maxLength={1000}
+            className="min-h-28"
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectOpen(false)} disabled={busy}>Cancel</Button>
+            <Button variant="destructive" onClick={() => updateStatus('rejected', rejectionReason)} disabled={busy || !rejectionReason.trim()}>
+              {busy ? 'Rejecting…' : 'Reject inspection'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

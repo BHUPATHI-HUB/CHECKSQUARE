@@ -15,6 +15,68 @@ body {
 
 html { scroll-behavior: smooth; }
 
+/* Shared in-app feedback, including saves, downloads, errors and sync. */
+[data-sonner-toaster].checksquare-toaster {
+  --width: min(380px, calc(100vw - 32px));
+  width: var(--width);
+  z-index: 100;
+}
+
+.cs-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 42px 14px 14px;
+  border: 1px solid hsl(var(--border));
+  border-left: 3px solid hsl(var(--primary));
+  border-radius: 16px;
+  background: hsl(var(--card));
+  color: hsl(var(--card-foreground));
+  box-shadow: 0 14px 38px rgb(20 34 51 / 16%);
+  font-family: "Inter", "DM Sans", system-ui, sans-serif;
+  text-align: left;
+}
+
+.cs-toast[data-type="success"] { border-left-color: hsl(var(--success)); }
+.cs-toast[data-type="error"] { border-left-color: hsl(var(--destructive)); }
+.cs-toast[data-type="warning"] { border-left-color: hsl(var(--warning)); }
+.cs-toast[data-type="loading"] { border-left-color: hsl(var(--secondary)); }
+
+.cs-toast-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  color: hsl(var(--primary));
+  background: hsl(var(--accent));
+}
+.cs-toast[data-type="success"] .cs-toast-icon { color: hsl(var(--success)); }
+.cs-toast[data-type="error"] .cs-toast-icon { color: hsl(var(--destructive)); }
+.cs-toast[data-type="warning"] .cs-toast-icon { color: hsl(var(--warning)); }
+
+.cs-toast-title { font-size: 13px; font-weight: 600; line-height: 1.45; }
+.cs-toast-description { margin-top: 3px; color: hsl(var(--muted-foreground)); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.cs-toast-close {
+  position: absolute;
+  top: 14px;
+  right: 12px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 8px;
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cs-toast * { animation-duration: 0.01ms !important; }
+}
+
 .font-display {
   font-family: "Fraunces", "Merriweather", Georgia, serif;
   font-feature-settings: "ss01", "ss02";

@@ -169,15 +169,15 @@ const ReportPreviewModal = ({ open, onOpenChange, inspection, onSaved }) => {
   const handleDownload = async (format) => {
     if (!draft) return;
     setGenerating(format);
-    toast.info(`Composing ${format.toUpperCase()}…`);
+    const notice = toast.loading(`Composing ${format.toUpperCase()}…`);
     try {
       if (format === 'pdf') await generatePDF(draft, settings);
       else if (format === 'xlsx') await generateXLSX(draft, settings);
       else await generateDOCX(draft, settings);
-      toast.success('Report downloaded.');
+      toast.success('Report downloaded', { id: notice });
     } catch (err) {
       console.error(err);
-      toast.error('Failed to generate report');
+      toast.error('Failed to generate report', { id: notice });
     } finally {
       setGenerating(null);
     }

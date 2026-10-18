@@ -149,16 +149,16 @@ const AdminDownloadReport = ({ inspection, variant = 'icon' }) => {
       }
     }
     setGenerating(format);
-    toast.info(`Composing ${format.toUpperCase()}…`);
+    const notice = toast.loading(`Composing ${format.toUpperCase()}…`);
     try {
       if (format === 'pdf') await generatePDF(data, settings);
       else if (format === 'xlsx') await generateXLSX(data, settings);
       else await generateDOCX(data, settings);
-      toast.success('Report downloaded.');
+      toast.success('Report downloaded', { id: notice });
       setOpen(false);
     } catch (err) {
       console.error(err);
-      toast.error('Failed to generate report');
+      toast.error('Failed to generate report', { id: notice });
     } finally {
       setGenerating(null);
     }

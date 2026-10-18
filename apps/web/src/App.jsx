@@ -13,7 +13,7 @@ import SyncStatusBadge from '@/components/SyncStatusBadge.jsx';
 import { startSyncEngine } from '@/services/syncEngine.js';
 import ReloadIntro from '@/components/ReloadIntro.jsx';
 import PreviewBanner from '@/components/PreviewBanner.jsx';
-import { Toaster } from 'sonner';
+import AppToaster from '@/components/AppToaster.jsx';
 
 // Public pages stay eager-loaded — they're tiny and needed on first paint.
 import HomePage from '@/pages/HomePage.jsx';
@@ -221,7 +221,7 @@ function App() {
               <Route path="*" element={<NotFoundPage />} />
             </Routes>
             </Suspense>
-            <Toaster position="top-right" richColors closeButton />
+            <AppToaster />
           </Router>
           </ChatProvider>
         </FeedbackProvider>

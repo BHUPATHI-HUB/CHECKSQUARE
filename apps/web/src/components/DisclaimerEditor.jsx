@@ -2,6 +2,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { useSettings } from '@/contexts/SettingsContext.jsx';
 import { toast } from 'sonner';
+import { useFeedback } from '@/contexts/FeedbackContext.jsx';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Bold, Italic, Underline, List, ListOrdered, Heading2, Heading3, Undo, Save, Eye, AlignLeft, AlignCenter, AlignRight, AlignJustify } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -103,33 +104,63 @@ const RichTextEditor = ({ value, onChange, placeholder }) => {
 
 const DisclaimerEditor = () => {
   const { settings, updateSettings, resetDisclaimers } = useSettings();
+  const { confirmAction } = useFeedback();
   const [page1Content, setPage1Content] = useState(settings.disclaimerPage1 || '');
   const [page2Content, setPage2Content] = useState(settings.disclaimerPage2 || '');
   const [activeTab, setActiveTab] = useState('page1');
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
-    const result = await updateSettings({
-      disclaimerPage1: page1Content,
-      disclaimerPage2: page2Content
-    });
-    
-    if (result.success) {
-      toast.success(result.syncStatus === 'pending' ? 'Disclaimers saved on this device. They will sync when you reconnect.' : 'Disclaimers saved successfully');
-    } else {
-      toast.error(result.error || 'Failed to save disclaimers');
+    if (saving) return;
+    setSaving(true);
+    const notice = toast.loading('Saving disclaimers…');
+    try {
+      const result = await updateSettings({
+        disclaimerPage1: page1Content,
+        disclaimerPage2: page2Content,
+      });
+      if (result.success) {
+        toast.success(result.syncStatus === 'pending' ? 'Saved on this device' : 'Disclaimers saved', {
+          id: notice,
+          description: result.syncStatus === 'pending' ? 'Changes will sync when you reconnect.' : undefined,
+        });
+      } else {
+        toast.error('Could not save disclaimers', { id: notice, description: result.error || 'Please try again.' });
+      }
+    } catch (error) {
+      toast.error('Could not save disclaimers', { id: notice, description: error?.message || 'Please try again.' });
+    } finally {
+      setSaving(false);
     }
   };
 
   const handleReset = async () => {
-    if (window.confirm('Are you sure you want to reset both disclaimer pages to their default text? This cannot be undone.')) {
-      const result = await resetDisclaimers();
-      if (result.success) {
-        setPage1Content(result.disclaimerPage1);
-        setPage2Content(result.disclaimerPage2);
-        toast.success(result.syncStatus === 'pending' ? 'Defaults saved on this device. They will sync when you reconnect.' : 'Disclaimers reset to defaults');
-      } else {
-        toast.error(result.error || 'Failed to reset disclaimers');
+    const confirmed = await confirmAction({
+      title: 'Reset both disclaimer pages?',
+      description: 'The current text will be replaced with the defaults. This cannot be undone.',
+      confirmLabel: 'Reset defaults',
+      destructive: true,
+    });
+    if (confirmed) {
+      setSaving(true);
+      const notice = toast.loading('Restoring disclaimers…');
+      try {
+        const result = await resetDisclaimers();
+        if (result.success) {
+          setPage1Content(result.disclaimerPage1);
+          setPage2Content(result.disclaimerPage2);
+          toast.success(result.syncStatus === 'pending' ? 'Defaults saved on this device' : 'Disclaimers reset', {
+            id: notice,
+            description: result.syncStatus === 'pending' ? 'Changes will sync when you reconnect.' : undefined,
+          });
+        } else {
+          toast.error('Could not reset disclaimers', { id: notice, description: result.error || 'Please try again.' });
+        }
+      } catch (error) {
+        toast.error('Could not reset disclaimers', { id: notice, description: error?.message || 'Please try again.' });
+      } finally {
+        setSaving(false);
       }
     }
   };
@@ -166,11 +197,11 @@ const DisclaimerEditor = () => {
             </DialogContent>
           </Dialog>
           
-          <Button variant="outline" className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={handleReset}>
+          <Button variant="outline" className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={handleReset} disabled={saving}>
             <Undo className="w-4 h-4 mr-2" /> Reset Defaults
           </Button>
-          <Button onClick={handleSave}>
-            <Save className="w-4 h-4 mr-2" /> Save Changes
+          <Button onClick={handleSave} disabled={saving}>
+            <Save className="w-4 h-4 mr-2" /> {saving ? 'Saving…' : 'Save Changes'}
           </Button>
         </div>
       </div>

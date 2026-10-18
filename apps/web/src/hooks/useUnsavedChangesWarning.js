@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
+import { useFeedback } from '@/contexts/FeedbackContext.jsx';
 
 /**
  * Warns / confirms before the user leaves a page with unsaved work.
@@ -19,6 +20,14 @@ export default function useUnsavedChangesWarning(
 	when,
 	message = 'You have an inspection in progress. Are you sure you want to leave? Unsaved changes will be lost.'
 ) {
+  const { confirmAction } = useFeedback();
+  const bypassRef = useRef(false);
+  const confirmLeave = useCallback(() => confirmAction({
+    title: 'Leave this inspection?',
+    description: message,
+    confirmLabel: 'Leave page',
+    destructive: true,
+  }), [confirmAction, message]);
 	// Browser tab close / refresh / web back-button.
 	useEffect(() => {
 		if (!when) return;
@@ -35,14 +44,21 @@ export default function useUnsavedChangesWarning(
 	useEffect(() => {
 		if (!when) return undefined;
 		const guard = (event) => {
-			const link = event.target.closest?.('a[href]');
-			if (!link || link.target === '_blank' || link.hasAttribute('download') || event.metaKey || event.ctrlKey) return;
+        if (bypassRef.current) return;
+        const link = event.target?.closest?.('a[href]');
+        if (!link || link.target === '_blank' || link.hasAttribute('download') || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
 			if (link.href === window.location.href) return;
-			if (!window.confirm(message)) { event.preventDefault(); event.stopPropagation(); }
+        event.preventDefault();
+        event.stopPropagation();
+        confirmLeave().then((accepted) => {
+          if (!accepted || !link.isConnected) return;
+          bypassRef.current = true;
+          try { link.click(); } finally { bypassRef.current = false; }
+        });
 		};
 		document.addEventListener('click', guard, true);
 		return () => document.removeEventListener('click', guard, true);
-	}, [when, message]);
+  }, [when, confirmLeave]);
 
 	// Capacitor (Android) hardware Back button.
 	const subRef = useRef(null);
@@ -53,7 +69,7 @@ export default function useUnsavedChangesWarning(
 				const { Capacitor } = await import('@capacitor/core');
 				if (!Capacitor?.isNativePlatform?.()) return;
 				const { App } = await import('@capacitor/app');
-				const sub = await App.addListener('backButton', ({ canGoBack } = {}) => {
+                const sub = await App.addListener('backButton', async ({ canGoBack } = {}) => {
 					if (!when) {
 						// No unsaved work — preserve normal Android back semantics:
 						// navigate back if possible, otherwise exit the app.
@@ -61,7 +77,7 @@ export default function useUnsavedChangesWarning(
 						else App.exitApp?.();
 						return;
 					}
-					if (window.confirm(message)) {
+                    if (await confirmLeave()) {
 						window.history.back();
 					}
 				});
@@ -76,5 +92,5 @@ export default function useUnsavedChangesWarning(
 			subRef.current?.remove?.();
 			subRef.current = null;
 		};
-	}, [when, message]);
+  }, [when, confirmLeave]);
 }

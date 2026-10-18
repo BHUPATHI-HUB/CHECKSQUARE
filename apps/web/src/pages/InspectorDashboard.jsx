@@ -31,7 +31,7 @@ const InspectorDashboard = () => {
   const { user } = useAuth();
   const { unreadCount } = useChatContext();
   const { getInspectionsForInspector, updateInspectionStatus } = useInspectionStatus();
-  const { showSuccess } = useFeedback();
+  const { showSuccess, confirmAction } = useFeedback();
   const { settings } = useSettings();
   const brand = settings?.appName || 'CheckSquare';
   const [inspections, setInspections] = useState(() => getCachedInspectorInspections(user.id) || []);
@@ -78,9 +78,11 @@ const InspectorDashboard = () => {
   // Approved reports remain immutable and require an admin correction path.
   const handleRecallToDraft = async (inspection) => {
     if (!['pending', 'rejected'].includes(inspection.status)) return;
-    const ok = window.confirm(
-      `Move "${inspection.metadata?.propertyAddress || 'this inspection'}" back to Draft? You can keep editing and re-submit it when ready.`,
-    );
+    const ok = await confirmAction({
+      title: 'Move inspection to Draft?',
+      description: `Move "${inspection.metadata?.propertyAddress || 'this inspection'}" back to Draft? You can keep editing and submit it again when ready.`,
+      confirmLabel: 'Move to Draft',
+    });
     if (!ok) return;
     // Review metadata stays intact until the database clears it on resubmission.
     const success = await updateInspectionStatus(inspection.id, 'draft', user, { version: inspection.version });
