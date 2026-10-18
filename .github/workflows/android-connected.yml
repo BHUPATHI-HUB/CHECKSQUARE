@@ -7,7 +7,7 @@ on:
 permissions:
   contents: read
 jobs:
-  preview-apk:
+  connected-apk:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -50,7 +50,28 @@ jobs:
       - run: node apps/web/scripts/make-icon.mjs
       - run: cd apps/web && npx cap sync android
       - run: cd apps/web/android && chmod +x gradlew && ./gradlew assembleDebug --no-daemon
+      - name: Verify and name installable APK
+        id: package
+        run: |
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify apps/web/android/app/build/outputs/apk/debug/app-debug.apk
+          python3 - <<'PYCODE'
+          import datetime
+          import os
+          import re
+          import shutil
+          from pathlib import Path
+          gradle = Path('apps/web/android/app/build.gradle').read_text()
+          version = re.search(r'versionName "([0-9.]+)"', gradle).group(1)
+          date = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
+          name = f'CheckSquare-Connected-v{version}-debug-{date}'
+          artifact = Path('artifacts') / f'{name}.apk'
+          artifact.parent.mkdir(exist_ok=True)
+          shutil.copyfile('apps/web/android/app/build/outputs/apk/debug/app-debug.apk', artifact)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'name={name}\npath={artifact}\n')
+          PYCODE
       - uses: actions/upload-artifact@v4
         with:
-          name: CheckSquare-Connected-APK
-          path: apps/web/android/app/build/outputs/apk/debug/app-debug.apk
+          name: ${{ steps.package.outputs.name }}
+          path: ${{ steps.package.outputs.path }}
+          if-no-files-found: error
