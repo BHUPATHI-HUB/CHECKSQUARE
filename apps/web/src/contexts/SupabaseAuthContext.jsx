@@ -1,8 +1,13 @@
 // Supabase Auth context for OAuth and email magic-link sign-in flows.
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { App } from '@capacitor/app';
+import { Browser } from '@capacitor/browser';
+import { Capacitor } from '@capacitor/core';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient.js';
+
+const NATIVE_AUTH_CALLBACK = 'com.bhupathi.checksquare.connected://auth/callback';
 
 const SupabaseAuthContext = createContext(null);
 
@@ -14,6 +19,7 @@ export const useSupabaseAuth = () => useContext(SupabaseAuthContext) || {
 
 export const SupabaseAuthProvider = ({ children }) => {
   const [supabaseSession, setSupabaseSession] = useState(null);
+  const handledCallbackUrls = useRef(new Set());
 
   // Listen for Supabase auth-state changes (OAuth callback, sign-out, etc.).
   useEffect(() => {
@@ -28,17 +34,79 @@ export const SupabaseAuthProvider = ({ children }) => {
     return () => { mounted = false; sub.subscription.unsubscribe(); };
   }, []);
 
+  // Google authentication runs in the system browser on Android. Return the
+  // authorization code to this app through its registered deep link, then
+  // exchange it in the WebView where Supabase stored the PKCE verifier.
+  useEffect(() => {
+    if (!isSupabaseConfigured || !Capacitor.isNativePlatform()) return;
+    let mounted = true;
+    let listener;
+
+    const handleUrl = async ({ url }) => {
+      if (!mounted || !url || handledCallbackUrls.current.has(url)) return;
+      let callback;
+      try {
+        callback = new URL(url);
+      } catch {
+        return;
+      }
+      if (callback.protocol !== 'com.bhupathi.checksquare.connected:' || callback.hostname !== 'auth' || callback.pathname !== '/callback') return;
+      handledCallbackUrls.current.add(url);
+
+      try {
+        const authError = callback.searchParams.get('error_description') || callback.searchParams.get('error');
+        if (authError) throw new Error(authError);
+
+        const code = callback.searchParams.get('code');
+        if (!code) throw new Error('Google sign-in did not return an authorization code.');
+
+        const { error } = await supabase.auth.exchangeCodeForSession(code);
+        if (error) throw error;
+        await Browser.close().catch(() => {});
+      } catch (error) {
+        toast.error(error?.message || 'Could not complete Google sign-in.');
+      }
+    };
+
+    const listenForCallback = async () => {
+      listener = await App.addListener('appUrlOpen', handleUrl);
+      const launch = await App.getLaunchUrl();
+      if (launch?.url) await handleUrl({ url: launch.url });
+    };
+
+    listenForCallback().catch((error) => {
+      if (mounted) toast.error(error?.message || 'Could not listen for the Google sign-in callback.');
+    });
+
+    return () => {
+      mounted = false;
+      listener?.remove();
+    };
+  }, []);
+
 
   const signInWithGoogle = async () => {
     if (!isSupabaseConfigured) {
       toast.error('Google sign-in is not configured. Use email & password.');
       return;
     }
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: `${window.location.origin}/login` },
-    });
-    if (error) toast.error(error.message);
+    const native = Capacitor.isNativePlatform();
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: native ? NATIVE_AUTH_CALLBACK : `${window.location.origin}/login`,
+          ...(native ? { skipBrowserRedirect: true } : {}),
+        },
+      });
+      if (error) throw error;
+      if (native) {
+        if (!data?.url) throw new Error('Supabase did not return a Google sign-in URL.');
+        await Browser.open({ url: data.url });
+      }
+    } catch (error) {
+      toast.error(error?.message || 'Could not start Google sign-in.');
+    }
   };
 
   const signInWithMagicLink = async (email) => {

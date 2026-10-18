@@ -2,7 +2,13 @@ name: Build connected CheckSquare APK
 on:
   push:
     branches: [main]
-    paths: ['.github/workflows/android-connected.yml']
+    paths:
+      - '.github/workflows/android-connected.yml'
+      - 'apps/web/src/**'
+      - 'apps/web/package.json'
+      - 'package-lock.json'
+      - 'apps/web/capacitor.config.json'
+      - 'scripts/prepare-android.mjs'
   workflow_dispatch:
 permissions:
   contents: read
@@ -39,13 +45,18 @@ jobs:
           fs.writeFileSync(path,JSON.stringify(config,null,2));
           JS
       - run: node scripts/prepare-android.mjs
+      - name: Verify native Google OAuth callback registration
+        run: grep -q 'android:scheme="com.bhupathi.checksquare.connected"' apps/web/android/app/src/main/AndroidManifest.xml
       - name: Separate Android installation ID
         run: |
           python3 - <<'PYCODE'
           from pathlib import Path
           file=Path('apps/web/android/app/build.gradle')
           source=file.read_text().replace('applicationId "com.bhupathi.checksquare"', 'applicationId "com.bhupathi.checksquare.connected"')
+          source=source.replace('versionCode 1', 'versionCode 2').replace('versionName "1.0"', 'versionName "1.1"')
           file.write_text(source)
+          if 'versionCode 2' not in source or 'versionName "1.1"' not in source:
+              raise SystemExit('Could not set connected APK version 1.1 (version code 2).')
           PYCODE
       - run: node apps/web/scripts/make-icon.mjs
       - run: cd apps/web && npx cap sync android
