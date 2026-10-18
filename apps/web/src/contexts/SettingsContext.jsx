@@ -205,6 +205,14 @@ export const SettingsProvider = ({ children }) => {
       authSubscription = sub.subscription;
     }
 
+    // Reconcile on reconnect/foreground as well. Realtime can miss changes
+    // while an Android WebView is suspended or the device is offline.
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') fetchFromServer();
+    };
+    window.addEventListener('online', fetchFromServer);
+    document.addEventListener('visibilitychange', onVisible);
+
     // Realtime: refresh whenever an admin saves changes elsewhere.
     try {
       unsub = data.subscribe('app_settings', async (e) => {
@@ -223,6 +231,8 @@ export const SettingsProvider = ({ children }) => {
       cancelled = true;
       if (unsub) unsub();
       authSubscription?.unsubscribe();
+      window.removeEventListener('online', fetchFromServer);
+      document.removeEventListener('visibilitychange', onVisible);
     };
   }, []);
 
