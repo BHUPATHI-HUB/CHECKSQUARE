@@ -2,6 +2,9 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { toast } from 'sonner';
 import { isDemoMode, getDemoUser } from '@/lib/previewMode.js';
 import { supabase } from '@/lib/supabaseClient.js';
+import { Capacitor } from '@capacitor/core';
+import { NATIVE_AUTH_CALLBACK, RECOVERY_PENDING_KEY } from '@/lib/authRedirect.js';
+import data from '@/services/dataService.js';
 
 const AuthContext = createContext(null);
 // Supabase Auth is the only supported production identity provider.
@@ -286,16 +289,32 @@ export const AuthProvider = ({ children }) => {
   const requestPasswordReset = async (email) => {
     if (supabase) {
       try {
+        const native = Capacitor.isNativePlatform();
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: `${window.location.origin}/login`,
+          redirectTo: native ? NATIVE_AUTH_CALLBACK : `${window.location.origin}/reset-password`,
         });
         if (error) throw error;
+        if (native) {
+          try { localStorage.setItem(RECOVERY_PENDING_KEY, String(Date.now())); }
+          catch { /* Recovery email was still sent. */ }
+        }
         return { success: true };
       } catch (e) {
         return { success: false, error: e?.message || 'Could not send reset email.' };
       }
     }
     return { success: false, error: 'Supabase is not configured.' };
+  };
+
+  const updateProfile = async (changes) => {
+    if (!user?.id || !supabaseSession?.user) throw new Error('Sign in before updating your profile.');
+    const row = await data.updateUser(user.id, {
+      name: changes.name, phone: changes.phone, address: changes.address,
+    });
+    const updated = toSupabaseUserSession(supabaseSession.user, row);
+    setUser(updated);
+    try { localStorage.setItem(`profile:${user.id}`, JSON.stringify(updated)); } catch { /* optional cache */ }
+    return updated;
   };
 
   const hasRole = (requiredRole) => {
@@ -314,6 +333,7 @@ export const AuthProvider = ({ children }) => {
     logout,
     extendSession,
     requestPasswordReset,
+    updateProfile,
     hasRole,
     isAuthenticated: !!user && !!supabaseSession,
   };

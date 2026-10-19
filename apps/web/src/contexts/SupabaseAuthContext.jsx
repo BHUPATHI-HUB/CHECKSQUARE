@@ -6,8 +6,7 @@ import { App } from '@capacitor/app';
 import { Browser } from '@capacitor/browser';
 import { Capacitor } from '@capacitor/core';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient.js';
-
-const NATIVE_AUTH_CALLBACK = 'com.bhupathi.checksquare.connected://auth/callback';
+import { NATIVE_AUTH_CALLBACK, RECOVERY_PENDING_KEY, isRecoveryPending } from '@/lib/authRedirect.js';
 
 const SupabaseAuthContext = createContext(null);
 
@@ -63,6 +62,10 @@ export const SupabaseAuthProvider = ({ children }) => {
         const { error } = await supabase.auth.exchangeCodeForSession(code);
         if (error) throw error;
         await Browser.close().catch(() => {});
+        if (isRecoveryPending()) {
+          window.history.pushState(null, '', '/reset-password');
+          window.dispatchEvent(new PopStateEvent('popstate'));
+        }
       } catch (error) {
         toast.error(error?.message || 'Could not complete Google sign-in.');
       }
@@ -92,6 +95,9 @@ export const SupabaseAuthProvider = ({ children }) => {
     }
     const native = Capacitor.isNativePlatform();
     try {
+      if (native) {
+        try { localStorage.removeItem(RECOVERY_PENDING_KEY); } catch { /* optional flag */ }
+      }
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {

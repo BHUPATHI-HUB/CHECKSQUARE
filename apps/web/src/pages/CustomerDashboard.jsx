@@ -281,7 +281,7 @@ const CustomerDashboard = () => {
                     {[
                       { to: '/customer/book-appointment', icon: Calendar, label: 'Book new inspection', desc: 'Pick a date and inspector.' },
                       { to: '/chat', icon: MessageSquare, label: 'Open messages', desc: 'Talk to your inspector or admin.' },
-                      { to: '/customer/profile', icon: UserCircle, label: 'Your profile', desc: 'Address, contact, preferences.' },
+                      { to: '/customer/profile', icon: UserCircle, label: 'Your profile', desc: 'Contact and address.' },
                     ].map((a) => (
                       <Link key={a.to} to={a.to} className="group block py-3 border-b last:border-b-0">
                         <div className="flex items-center justify-between gap-3">

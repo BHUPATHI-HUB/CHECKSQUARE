@@ -19,6 +19,7 @@ import AppToaster from '@/components/AppToaster.jsx';
 // Public pages stay eager-loaded — they're tiny and needed on first paint.
 import HomePage from '@/pages/HomePage.jsx';
 import LoginPage from '@/pages/LoginPage.jsx';
+import ResetPasswordPage from '@/pages/ResetPasswordPage.jsx';
 import NotFoundPage from '@/pages/NotFoundPage.jsx';
 
 // Everything else loads on demand to shrink the initial JS bundle.
@@ -35,6 +36,7 @@ const InspectionViewPage      = lazy(() => import('@/pages/InspectionViewPage.js
 const InspectorDashboard      = lazy(() => import('@/pages/InspectorDashboard.jsx'));
 const NewInspectionPage       = lazy(() => import('@/pages/NewInspectionPage.jsx'));
 const CustomerDashboard       = lazy(() => import('@/pages/CustomerDashboard.jsx'));
+const CustomerProfilePage     = lazy(() => import('@/pages/CustomerProfilePage.jsx'));
 const AppointmentBookingPage  = lazy(() => import('@/pages/AppointmentBookingPage.jsx'));
 const DownloadsPage           = lazy(() => import('@/pages/DownloadsPage.jsx'));
 
@@ -68,6 +70,7 @@ function App() {
               {/* Public Routes */}
               <Route path="/" element={<HomePage />} />
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/reset-password" element={<ResetPasswordPage />} />
               <Route path="/signup" element={<CustomerSignupPage />} />
               <Route path="/privacy" element={<InfoPage title="Privacy Policy" settingsKey="privacyPolicy" />} />
               <Route path="/terms"   element={<InfoPage title="Terms of Service" settingsKey="termsOfService" />} />
@@ -204,8 +207,7 @@ function App() {
                 path="/customer/profile"
                 element={
                   <ProtectedRoute requiredRole="customer">
-                    {/* Placeholder for Profile, fallback to dashboard for now */}
-                    <Navigate to="/customer" replace />
+                    <CustomerProfilePage />
                   </ProtectedRoute>
                 }
               />

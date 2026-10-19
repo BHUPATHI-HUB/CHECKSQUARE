@@ -83,38 +83,35 @@ export async function saveFile(blob, filename, opts = {}) {
 		saveAs(blob, filename);
 	}
 
-	// 2. Sync report download record (best-effort — silent on failure).
+	// 2. Sync a re-downloadable copy. A local save remains successful if the
+	// cloud is unavailable, but tell the user it is only on this device.
 	if (sync && supabase) {
 		try {
-			const { data: { user } = {} } = await supabase.auth.getUser();
-			if (user?.id) {
-				// Upload the report blob to the private `reports` bucket so it can be
-				// re-downloaded later from the Downloads page. Best-effort: if the
-				// upload fails we still record the metadata row.
-				let storageKey = null;
-				try {
-					const path = `${user.id}/${Date.now()}-${filename}`;
-					const { error: upErr } = await supabase.storage
-						.from('reports')
-						.upload(path, blob, {
-							contentType: blob.type || 'application/octet-stream',
-							upsert: false,
-						});
-					if (!upErr) storageKey = path;
-				} catch (upErr) {
-					console.warn('Could not upload report to Supabase storage:', upErr?.message || upErr);
-				}
-				await supabase.from('report_downloads').insert({
-					user_id: user.id,
-					inspection_id: inspectionId || null,
-					filename,
-					format: extToFormat(filename),
-					file_size: blob.size || 0,
-					storage_key: storageKey,
-				});
+			const { data: { user } = {}, error: userError } = await supabase.auth.getUser();
+			if (userError) throw userError;
+			if (!user?.id) throw new Error('Sign in to sync this report.');
+			const storageKey = `${user.id}/${Date.now()}-${crypto.randomUUID()}-${filename}`;
+			const { error: uploadError } = await supabase.storage.from('reports').upload(storageKey, blob, {
+				contentType: blob.type || 'application/octet-stream', upsert: false,
+			});
+			if (uploadError) throw uploadError;
+			const { error: recordError } = await supabase.from('report_downloads').insert({
+				user_id: user.id,
+				inspection_id: inspectionId || null,
+				filename,
+				format: extToFormat(filename),
+				file_size: blob.size || 0,
+				storage_key: storageKey,
+			});
+			if (recordError) {
+				await supabase.storage.from('reports').remove([storageKey]).catch(() => {});
+				throw recordError;
 			}
 		} catch (err) {
 			console.warn('Could not sync download to Supabase:', err?.message || err);
+			toast.warning('Saved on this device; cloud copy unavailable.', {
+				description: 'Reconnect and download the report again to add it to your Downloads list.',
+			});
 		}
 	}
 

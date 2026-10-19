@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from 'sonner';
 import { ArrowRight, Mail, Lock, AlertCircle, CheckSquare } from 'lucide-react';
 import GoogleSignInButton from '@/components/GoogleSignInButton.jsx';
+import { isRecoveryPending } from '@/lib/authRedirect.js';
 
 const fadeUp = { initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.6, ease: [0.22, 1, 0.36, 1] } };
 
@@ -33,7 +34,7 @@ const LoginPage = () => {
   // OAuth-based sign-in happens outside handleSubmit; once auth state flips to
   // valid, route users away from /login using the same role-based destinations.
   useEffect(() => {
-    if (!isAuthenticated || !user) return;
+    if (!isAuthenticated || !user || isRecoveryPending()) return;
     if (from) {
       navigate(from, { replace: true });
       return;

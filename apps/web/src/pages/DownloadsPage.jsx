@@ -15,6 +15,7 @@ import {
 import { Download, Trash2, FileText, FileSpreadsheet, FileType2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { saveFile } from '@/utils/saveFile';
+import { hasStoredReport } from '@/services/reportDownloadRecord.js';
 
 const formatIcon = (fmt) => {
 	if (fmt === 'pdf')  return <FileType2 className="w-5 h-5 text-red-500" />;
@@ -56,13 +57,14 @@ const DownloadsPage = () => {
 	useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [user?.id]);
 
 	const handleDownload = async (rec) => {
-		if (!rec.file) {
+		if (!hasStoredReport(rec)) {
 			toast.error('This download has no stored file. It may have been generated before sync.');
 			return;
 		}
 		try {
 			// Authenticated file URL — PB returns a direct URL, Supabase a signed one.
 			const url = await data.getReportDownloadFileUrl(rec);
+			if (!url) throw new Error('Stored file is unavailable.');
 			const res = await fetch(url);
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
 			const blob = await res.blob();
@@ -155,8 +157,8 @@ const DownloadsPage = () => {
 											size="sm"
 											variant="outline"
 											onClick={() => handleDownload(rec)}
-											disabled={!rec.file}
-											title={rec.file ? 'Re-download' : 'No stored file'}
+											disabled={!hasStoredReport(rec)}
+											title={hasStoredReport(rec) ? 'Re-download' : 'No stored file'}
 										>
 											<Download className="w-4 h-4" />
 											<span className="hidden sm:inline ml-2">Download</span>

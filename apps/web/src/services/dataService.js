@@ -3,6 +3,7 @@ import { supabase, requireSupabase } from '@/lib/supabaseClient.js';
 import { isDemoMode } from '@/lib/previewMode.js';
 import { rowToAppointment } from './appointmentRecord.js';
 import { persistChatMessage, chatAttachmentBucket } from './chatAttachments.js';
+import { rowToReportDownload, deleteStoredReport } from './reportDownloadRecord.js';
 
 // Supabase is deliberately selected unconditionally. A missing configuration
 // must surface as a clear runtime error instead of silently writing to a
@@ -213,17 +214,17 @@ const supaAdapter = {
     const { data, error } = await supabase.from('report_downloads').select('*')
       .eq('user_id', userId).order('created_at', { ascending: false });
     if (error) throw error;
-    return data || [];
+    return (data || []).map(rowToReportDownload);
   },
   async getReportDownloadFileUrl(rec) {
-    if (!rec?.storage_key) return null;
-    const { data, error } = await supabase.storage.from('reports').createSignedUrl(rec.storage_key, 3600);
+    const key = rec?.storageKey || rec?.storage_key;
+    if (!key) return null;
+    const { data, error } = await supabase.storage.from('reports').createSignedUrl(key, 3600);
     if (error) throw error;
     return data?.signedUrl;
   },
   async deleteReportDownload(id) {
-    const { error } = await supabase.from('report_downloads').delete().eq('id', id);
-    if (error) throw error;
+    return deleteStoredReport(requireSupabase(), id);
   },
 
   // ─── app_settings ────────────────────────────────────────────────────
