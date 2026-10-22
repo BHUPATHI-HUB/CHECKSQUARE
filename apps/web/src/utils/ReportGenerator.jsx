@@ -205,7 +205,7 @@ export const buildReportHTML = (inspection, settings) => {
         font-family: Arial, Helvetica, sans-serif;
         color: ${PRIMARY}; background: ${PAPER};
         page-break-after: always; position: relative;
-        border: 1px solid ${PRIMARY};
+        border: 1px solid ${RULE};
         overflow: hidden;
       }
       .pg.cover, .pg.ty-pg { border: none; }
@@ -306,7 +306,7 @@ export const buildReportHTML = (inspection, settings) => {
       table.editorial.score-table td { padding: 10px 6px; font-size: 12px; word-break: break-word; }
       table.editorial.score-table td span { white-space: nowrap; }
       table.editorial th {
-        text-align: left; padding: 10px 12px;
+        text-align: left; vertical-align: middle; padding: 10px 12px; overflow-wrap: anywhere;
         font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase;
         color: #fff; background: ${PRIMARY};
         border: 1px solid ${RULE};
@@ -357,7 +357,7 @@ export const buildReportHTML = (inspection, settings) => {
       }
 
       .gallery { display: flex; flex-wrap: wrap; gap: 12px; }
-      .gallery .cell { width: calc(50% - 6px); border: 1px solid ${PRIMARY}; background: #fff; page-break-inside: avoid; }
+      .gallery .cell { width: calc(50% - 6px); border: 1px solid ${RULE}; background: #fff; page-break-inside: avoid; }
       /* Same cover-crop technique as the defect photos — keeps wide and
          portrait images filling the cell without aspect distortion. */
       .gallery .cell .cell-photo {
@@ -366,7 +366,7 @@ export const buildReportHTML = (inspection, settings) => {
         background-position: center;
         background-repeat: no-repeat;
         background-size: ${imgFit};
-        border-bottom: 1px solid ${PRIMARY};
+        border-bottom: 1px solid ${RULE};
       }
       .gallery .cell .cap {
         font-family: Helvetica, sans-serif; font-size: 9px; letter-spacing: 0.2em;
