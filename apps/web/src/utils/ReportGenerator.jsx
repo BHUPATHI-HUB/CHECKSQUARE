@@ -3451,7 +3451,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
     // body cells Georgia 13px in TEAL ink, alternating zebra rows in
     // #fafafa. We mirror that here so the DOCX visually reads as the
     // same table — no more black/INK header bars.
-    const teal4 = { style: BorderStyle.SINGLE, size: 4, color: TEAL_HEX };
+    const teal4 = { style: BorderStyle.SINGLE, size: 4, color: 'D1D5DB' };
     const tealCellBorders = { top: teal4, left: teal4, right: teal4, bottom: teal4 };
     const headerCell = (text, align = AlignmentType.LEFT, width) => new TableCell({
       ...(width ? { width: { size: width, type: WidthType.PERCENTAGE } } : {}),
@@ -3558,7 +3558,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
   const buildEnvironmental = async () => {
     const out = [];
     const TEAL_HEX = (settings?.primaryBrandColor || settings?.primaryColor || '#2DB4C6').replace('#', '').toUpperCase();
-    const teal4 = { style: BorderStyle.SINGLE, size: 4, color: TEAL_HEX };
+    const teal4 = { style: BorderStyle.SINGLE, size: 4, color: 'D1D5DB' };
     const tealCellBorders = { top: teal4, left: teal4, right: teal4, bottom: teal4 };
 
     out.push(eyebrowPara('Readings · Environment'));
@@ -3693,7 +3693,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
   // ─── 8. ROOMS ─────────────────────────────────────────────────
   const buildRooms = async () => {
     const TEAL_HEX = (settings?.primaryBrandColor || settings?.primaryColor || '#2DB4C6').replace('#', '').toUpperCase();
-    const teal4 = { style: BorderStyle.SINGLE, size: 4, color: TEAL_HEX };
+    const teal4 = { style: BorderStyle.SINGLE, size: 4, color: 'D1D5DB' };
     const tealCellBorders = { top: teal4, left: teal4, right: teal4, bottom: teal4 };
     const out = [];
     const rooms = inspection.roomInspections || [];
