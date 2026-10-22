@@ -97,9 +97,9 @@ const scoreDonutSVG = (factors, overall, grade) => {
     <svg viewBox="0 0 220 220" xmlns="http://www.w3.org/2000/svg" style="width:220px;height:220px;">
       <circle cx="${cx}" cy="${cy}" r="${r}" fill="transparent" stroke="#f3f4f6" stroke-width="${sw}"/>
       ${slices}
-      <text x="${cx}" y="${cy - 4}" text-anchor="middle" font-family="Georgia" font-size="44" font-weight="300" fill="#1f2937">${overall}</text>
+      <text x="${cx}" y="${cy - 4}" text-anchor="middle" font-family="Arial" font-size="44" font-weight="300" fill="#1f2937">${overall}</text>
       <text x="${cx}" y="${cy + 18}" text-anchor="middle" font-family="Helvetica" font-size="8" letter-spacing="3" fill="#6b7280">SCORE / 100</text>
-      <text x="${cx}" y="${cy + 42}" text-anchor="middle" font-family="Georgia" font-size="18" font-style="italic" fill="${grade.color}">${grade.letter} · ${grade.label}</text>
+      <text x="${cx}" y="${cy + 42}" text-anchor="middle" font-family="Arial" font-size="18" font-style="italic" fill="${grade.color}">${grade.letter} · ${grade.label}</text>
     </svg>
   `;
 };
@@ -122,7 +122,7 @@ const miniDonutSVG = (value, color, size = 96) => {
       <circle cx="${cx}" cy="${cy}" r="${r}" fill="transparent" stroke="${color}" stroke-width="${sw}"
               stroke-dasharray="${dash} ${C}" stroke-linecap="round"
               transform="rotate(-90 ${cx} ${cy})" />
-      <text x="${cx}" y="${cy + 2}" text-anchor="middle" font-family="Georgia" font-size="22" font-weight="300" fill="#1f2937">${value}</text>
+      <text x="${cx}" y="${cy + 2}" text-anchor="middle" font-family="Arial" font-size="22" font-weight="300" fill="#1f2937">${value}</text>
       <text x="${cx}" y="${cy + 16}" text-anchor="middle" font-family="Helvetica" font-size="6" letter-spacing="1.5" fill="#9ca3af">/ 100</text>
     </svg>
   `;
@@ -202,10 +202,10 @@ export const buildReportHTML = (inspection, settings) => {
       body { margin: 0; }
       .pg {
         width: 100%; height: 1050px; padding: 70px 64px;
-        font-family: Georgia, 'Times New Roman', serif;
+        font-family: Arial, Helvetica, sans-serif;
         color: ${PRIMARY}; background: ${PAPER};
         page-break-after: always; position: relative;
-        border: 1px solid ${PRIMARY};
+        border: 1px solid ${RULE};
         overflow: hidden;
       }
       .pg.cover, .pg.ty-pg { border: none; }
@@ -229,13 +229,13 @@ export const buildReportHTML = (inspection, settings) => {
         background: ${ACCENT}; vertical-align: middle; margin-right: 14px;
       }
       .headline {
-        font-family: Georgia, 'Times New Roman', serif; font-weight: 300;
+        font-family: Arial, Helvetica, sans-serif; font-weight: 300;
         font-size: 48px; line-height: 1.05; letter-spacing: -0.5px;
         margin: 0; color: ${PRIMARY};
       }
       .headline em { color: ${ACCENT}; font-style: italic; }
       .deck {
-        font-family: Georgia, serif; font-size: 16px; line-height: 1.55;
+        font-family: Arial, Helvetica, sans-serif; font-size: 16px; line-height: 1.55;
         color: ${MUTED}; margin: 22px 0 0; max-width: 540px; font-style: italic;
       }
       .meta-table { width: 100%; border-collapse: collapse; margin-top: 24px; }
@@ -251,7 +251,7 @@ export const buildReportHTML = (inspection, settings) => {
         background: #fafafa;
       }
       .meta-table td.value {
-        font-family: Georgia, serif; font-size: 14px; color: ${PRIMARY};
+        font-family: Arial, Helvetica, sans-serif; font-size: 14px; color: ${PRIMARY};
         background: #fff;
       }
 
@@ -266,7 +266,7 @@ export const buildReportHTML = (inspection, settings) => {
         margin-bottom: 6px;
       }
       .meta-grid .cell .value {
-        font-family: Georgia, serif; font-size: 15px; color: ${PRIMARY};
+        font-family: Arial, Helvetica, sans-serif; font-size: 15px; color: ${PRIMARY};
       }
 
       /* Property image card on cover */
@@ -276,11 +276,11 @@ export const buildReportHTML = (inspection, settings) => {
       .prop-card .img-wrap .placeholder { font-family: Helvetica, sans-serif; font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase; color: ${MUTED}; padding: 8px; text-align: center; }
       .prop-card .info { flex: 1; display: flex; flex-direction: column; justify-content: center; }
       .prop-card .info .eyebrow { margin-bottom: 8px; }
-      .prop-card .info .addr { font-family: Georgia, serif; font-size: 22px; line-height: 1.3; color: ${PRIMARY}; font-weight: 400; }
+      .prop-card .info .addr { font-family: Arial, Helvetica, sans-serif; font-size: 22px; line-height: 1.3; color: ${PRIMARY}; font-weight: 400; }
       .prop-card .info .date { font-family: Helvetica, sans-serif; font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: ${ACCENT}; margin-top: 12px; }
 
       .section-title {
-        font-family: Georgia, serif; font-weight: 300;
+        font-family: Arial, Helvetica, sans-serif; font-weight: 300;
         font-size: 36px; line-height: 1.1; letter-spacing: -0.4px;
         margin: 0 0 6px; color: ${PRIMARY};
       }
@@ -288,7 +288,7 @@ export const buildReportHTML = (inspection, settings) => {
       .rule { width: 56px; height: 2px; background: ${ACCENT}; margin: 0 0 36px; }
 
       .body p, .body li {
-        font-family: Georgia, serif; font-size: 13px; line-height: 1.85;
+        font-family: Arial, Helvetica, sans-serif; font-size: 13px; line-height: 1.85;
         color: ${PRIMARY}; margin: 0 0 14px;
       }
       /* Disclaimer pages run two sizes smaller than the standard body copy
@@ -299,23 +299,24 @@ export const buildReportHTML = (inspection, settings) => {
       .body.disclaimer-body h2 { font-size: 14px; margin: 12px 0 6px; }
       .body.disclaimer-body h3 { font-size: 12px; margin: 10px 0 4px; }
 
-      table.editorial { width: 100%; border-collapse: collapse; margin-top: 16px; font-family: Helvetica, Arial, sans-serif; font-size: 12px; border: 1px solid ${PRIMARY}; }
+      table.editorial { width: 100%; border-collapse: collapse; margin-top: 16px; font-family: Arial, Helvetica, sans-serif; font-size: 12px; border: 1px solid ${RULE}; table-layout: fixed; }
       /* The 8-column score table needs tighter typography and padding so
          every cell fits inside the page body without overflow. */
       table.editorial.score-table th { padding: 8px 6px; font-size: 8px; letter-spacing: 0.12em; word-break: keep-all; white-space: nowrap; }
       table.editorial.score-table td { padding: 10px 6px; font-size: 12px; word-break: break-word; }
       table.editorial.score-table td span { white-space: nowrap; }
       table.editorial th {
-        text-align: left; padding: 10px 12px;
+        text-align: left; vertical-align: middle; padding: 10px 12px; overflow-wrap: anywhere;
         font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase;
         color: #fff; background: ${PRIMARY};
-        border: 1px solid ${PRIMARY};
+        border: 1px solid ${RULE};
         font-weight: 600;
       }
       table.editorial td {
-        padding: 12px 14px;
-        border: 1px solid ${PRIMARY};
-        font-family: Georgia, serif; font-size: 13px; color: ${PRIMARY};
+        padding: 10px 12px;
+        border: 1px solid ${RULE};
+        font-family: Arial, Helvetica, sans-serif; font-size: 12px; color: ${PRIMARY};
+        vertical-align: middle; overflow-wrap: anywhere;
         background: #fff;
       }
       table.editorial tr { page-break-inside: avoid; break-inside: avoid; }
@@ -342,13 +343,13 @@ export const buildReportHTML = (inspection, settings) => {
         letter-spacing: 0.22em; text-transform: uppercase; color: ${PRIMARY};
         font-weight: 700; display: block;
       }
-      .sev-def { font-family: Georgia, serif; font-size: 13px; color: ${MUTED}; margin-top: 8px; line-height: 1.7; }
+      .sev-def { font-family: Arial, Helvetica, sans-serif; font-size: 13px; color: ${MUTED}; margin-top: 8px; line-height: 1.7; }
 
       .room-eyebrow {
         font-family: Helvetica, sans-serif; font-size: 9px;
         letter-spacing: 0.28em; text-transform: uppercase; color: ${ACCENT};
       }
-      .room-title { font-family: Georgia, serif; font-size: 32px; font-weight: 300; margin: 6px 0 4px; }
+      .room-title { font-family: Arial, Helvetica, sans-serif; font-size: 32px; font-weight: 300; margin: 6px 0 4px; }
       .phase-label {
         font-family: Helvetica, sans-serif; font-size: 10px;
         letter-spacing: 0.22em; text-transform: uppercase; color: ${MUTED};
@@ -356,7 +357,7 @@ export const buildReportHTML = (inspection, settings) => {
       }
 
       .gallery { display: flex; flex-wrap: wrap; gap: 12px; }
-      .gallery .cell { width: calc(50% - 6px); border: 1px solid ${PRIMARY}; background: #fff; page-break-inside: avoid; }
+      .gallery .cell { width: calc(50% - 6px); border: 1px solid ${RULE}; background: #fff; page-break-inside: avoid; }
       /* Same cover-crop technique as the defect photos — keeps wide and
          portrait images filling the cell without aspect distortion. */
       .gallery .cell .cell-photo {
@@ -365,7 +366,7 @@ export const buildReportHTML = (inspection, settings) => {
         background-position: center;
         background-repeat: no-repeat;
         background-size: ${imgFit};
-        border-bottom: 1px solid ${PRIMARY};
+        border-bottom: 1px solid ${RULE};
       }
       .gallery .cell .cap {
         font-family: Helvetica, sans-serif; font-size: 9px; letter-spacing: 0.2em;
@@ -389,7 +390,7 @@ export const buildReportHTML = (inspection, settings) => {
         background: #fafafa;
       }
       .defect-title {
-        font-family: Georgia, serif; font-size: 13px; color: ${PRIMARY};
+        font-family: Arial, Helvetica, sans-serif; font-size: 13px; color: ${PRIMARY};
         margin: 0; flex: 1;
       }
       .defect-tag {
@@ -416,7 +417,7 @@ export const buildReportHTML = (inspection, settings) => {
       }
       .defect-table .dr-desc {
         width: 44%;
-        font-family: Georgia, serif; font-size: 11.5px; line-height: 1.5;
+        font-family: Arial, Helvetica, sans-serif; font-size: 11.5px; line-height: 1.5;
         color: ${PRIMARY};
       }
       .defect-table .dr-desc .dr-caption {
@@ -466,14 +467,14 @@ export const buildReportHTML = (inspection, settings) => {
         color: ${ACCENT}; margin: 0 0 32px;
       }
       .ty-pg .ty-headline {
-        font-family: Georgia, serif; font-weight: 300;
+        font-family: Arial, Helvetica, sans-serif; font-weight: 300;
         font-size: 96px; line-height: 0.95; letter-spacing: -1.5px;
         margin: 0; color: ${PRIMARY};
       }
       .ty-pg .ty-headline em { color: ${ACCENT}; font-style: italic; }
       .ty-pg .ty-rule { width: 96px; height: 3px; background: ${ACCENT}; margin: 40px 0 32px; }
       .ty-pg .ty-deck {
-        font-family: Georgia, serif; font-style: italic; font-size: 18px;
+        font-family: Arial, Helvetica, sans-serif; font-style: italic; font-size: 18px;
         line-height: 1.6; color: ${MUTED}; max-width: 480px; margin: 0;
       }
       .ty-pg .ty-brand {
@@ -1377,7 +1378,7 @@ export const buildReportHTML = (inspection, settings) => {
         `;
       }).join('');
       const cappedNote = capped ? `
-        <p style="margin:6px 0 0; font-family:Georgia, serif; font-size:10px; color:${MUTED}; font-style:italic;">
+        <p style="margin:6px 0 0; font-family:Arial, Helvetica, sans-serif; font-size:10px; color:${MUTED}; font-style:italic;">
           Showing ${MAX_BARS} lowest-scoring rooms of ${rooms.length}. Full breakdown in the table below.
         </p>
       ` : '';
@@ -1404,7 +1405,7 @@ export const buildReportHTML = (inspection, settings) => {
         <circle r="${donutRadius}" fill="none" stroke="${donutColor}" stroke-width="${donutStroke}"
                 stroke-dasharray="${donutCirc}" stroke-dashoffset="${donutOffset}"
                 transform="rotate(-90)" stroke-linecap="butt" />
-        <text text-anchor="middle" font-family="Georgia, serif" font-size="34" font-weight="600"
+        <text text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="600"
               fill="${donutColor}" y="6">${Math.round(avgPct)}%</text>
         <text text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="7"
               letter-spacing="2.5" fill="${MUTED}" y="28">AVERAGE SCORE</text>
@@ -1488,7 +1489,7 @@ export const buildReportHTML = (inspection, settings) => {
                     display:flex; flex-direction:column; align-items:center;">
           <p class="eyebrow" style="margin:0 0 4px;">Average score</p>
           ${donutSVG}
-          <p style="margin:8px 0 0; font-family:Georgia, serif; font-size:11px; color:${MUTED};">
+          <p style="margin:8px 0 0; font-family:Arial, Helvetica, sans-serif; font-size:11px; color:${MUTED};">
             Across ${rooms.length} room${rooms.length === 1 ? '' : 's'}
           </p>
         </div>
@@ -1496,7 +1497,7 @@ export const buildReportHTML = (inspection, settings) => {
       ${remarks ? `
         <div class="keep-together" style="border-left:3px solid ${ACCENT}; padding:12px 18px; background:#fafaf7; margin-top:24px;">
           <p class="eyebrow" style="margin:0 0 6px;">Inspector remarks</p>
-          <p style="font-family:Georgia, serif; font-size:12px; line-height:1.6; color:${PRIMARY}; margin:0;">
+          <p style="font-family:Arial, Helvetica, sans-serif; font-size:12px; line-height:1.6; color:${PRIMARY}; margin:0;">
             ${esc(remarks)}
           </p>
         </div>
@@ -1581,13 +1582,13 @@ export const buildReportHTML = (inspection, settings) => {
       <div style="display:grid;grid-template-columns:1.1fr 1fr;gap:24px;margin-bottom:22px;">
         <div style="border:1px solid ${RULE};padding:18px 20px;background:#fafaf7;">
           <p class="eyebrow" style="margin:0 0 8px;">Live property summary</p>
-          <div style="font-family:Georgia,serif;font-size:34px;line-height:1;color:${tone};font-weight:600;">
+          <div style="font-family:Arial,Helvetica,sans-serif;font-size:34px;line-height:1;color:${tone};font-weight:600;">
             ${Math.round(avgPct)}<span style="font-size:18px;color:${MUTED};font-weight:400;"> / 100</span>
           </div>
           <div style="margin-top:4px;font-family:Helvetica,sans-serif;font-size:10px;letter-spacing:0.22em;text-transform:uppercase;color:${MUTED};">
             ${esc(scoreSummary.grade.letter)} · ${esc(scoreSummary.grade.label)} · ${esc(scoreSummary.priority || '—')}
           </div>
-          <div style="margin-top:12px;font-family:Georgia,serif;font-size:12px;line-height:1.6;color:${PRIMARY};">
+          <div style="margin-top:12px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.6;color:${PRIMARY};">
             Computed across <strong>${rooms.length}</strong> room${rooms.length === 1 ? '' : 's'} and
             <strong>${totAll}</strong> total observation${totAll === 1 ? '' : 's'}
             (<strong>${totMajor}</strong> major, <strong>${totMinor}</strong> minor, <strong>${totCosmetic}</strong> cosmetic).
@@ -1858,7 +1859,7 @@ const htmlToDocxParagraphs = (html, opts = {}) => {
   const {
     defaultSize = 22,      // half-points → 11pt
     defaultColor = INK,
-    defaultFont = 'Georgia',
+    defaultFont = 'Arial',
     paragraphSpacingAfter = 120,
     lineSpacing = 320,
     // Per-tag heading sizes (half-points). Callers can pass a partial
@@ -2074,11 +2075,11 @@ const eyebrowPara = (text) => new Paragraph({
   children: [
     new TextRun({
       text: '\u2501\u2501\u2501',           // 3 × U+2501 "Box Drawings Heavy Horizontal" → ~24px gold dash
-      font: 'Helvetica', size: 16, color: GOLD, characterSpacing: 0,
+      font: 'Arial', size: 16, color: GOLD, characterSpacing: 0,
     }),
     new TextRun({
       text: '   ' + text.toUpperCase(),
-      font: 'Helvetica',
+      font: 'Arial',
       size: 16, // half-points → 8pt (PDF eyebrow is 10px Helvetica)
       color: MUTED_HEX,
       characterSpacing: 60,             // ≈ letter-spacing 0.28em
@@ -2089,8 +2090,8 @@ const eyebrowPara = (text) => new Paragraph({
 const headlinePara = (text, italic = '') => new Paragraph({
   spacing: { before: 0, after: 80 },
   children: [
-    new TextRun({ text, font: 'Cambria', size: 64, color: INK }),
-    italic ? new TextRun({ text: ' ' + italic, font: 'Cambria', size: 64, color: GOLD, italics: true }) : new TextRun(''),
+    new TextRun({ text, font: 'Arial', size: 64, color: INK }),
+    italic ? new TextRun({ text: ' ' + italic, font: 'Arial', size: 64, color: GOLD, italics: true }) : new TextRun(''),
   ],
 });
 
@@ -2099,8 +2100,8 @@ const headlinePara = (text, italic = '') => new Paragraph({
 const sectionTitlePara = (text, italic = '') => new Paragraph({
   spacing: { before: 240, after: 80, line: 320 },
   children: [
-    new TextRun({ text, font: 'Cambria', size: 54, color: INK, characterSpacing: -8 }),
-    italic ? new TextRun({ text: ' ' + italic, font: 'Cambria', size: 54, color: GOLD, italics: true, characterSpacing: -8 }) : new TextRun(''),
+    new TextRun({ text, font: 'Arial', size: 54, color: INK, characterSpacing: -8 }),
+    italic ? new TextRun({ text: ' ' + italic, font: 'Arial', size: 54, color: GOLD, italics: true, characterSpacing: -8 }) : new TextRun(''),
   ],
 });
 
@@ -2119,7 +2120,7 @@ const goldRulePara = () => new Paragraph({
 
 const bodyPara = (text) => new Paragraph({
   spacing: { after: 160, line: 360 },
-  children: [new TextRun({ text, font: 'Georgia', size: 22, color: INK })],
+  children: [new TextRun({ text, font: 'Arial', size: 22, color: INK })],
 });
 
 const labelValueRow = (label, value) => new TableRow({
@@ -2130,7 +2131,7 @@ const labelValueRow = (label, value) => new TableRow({
       children: [new Paragraph({
         spacing: { before: 120, after: 120 },
         children: [new TextRun({
-          text: label.toUpperCase(), font: 'Helvetica',
+          text: label.toUpperCase(), font: 'Arial',
           size: 16, color: MUTED_HEX, characterSpacing: 60,
         })],
       })],
@@ -2140,7 +2141,7 @@ const labelValueRow = (label, value) => new TableRow({
       borders: rowBorders(),
       children: [new Paragraph({
         spacing: { before: 120, after: 120 },
-        children: [new TextRun({ text: value || '—', font: 'Cambria', size: 24, color: INK })],
+        children: [new TextRun({ text: value || '—', font: 'Arial', size: 24, color: INK })],
       })],
     }),
   ],
@@ -2148,7 +2149,7 @@ const labelValueRow = (label, value) => new TableRow({
 
 const noBorder = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' };
 const ruleBorder = { style: BorderStyle.SINGLE, size: 6, color: RULE_HEX };
-const fourSideBorder = { style: BorderStyle.SINGLE, size: 8, color: INK };
+const fourSideBorder = { style: BorderStyle.SINGLE, size: 4, color: RULE_HEX };
 const rowBorders = () => ({
   top: fourSideBorder,
   left: fourSideBorder,
@@ -2364,7 +2365,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
           spacing: { after: isLast ? 280 : 60 },
           children: [new TextRun({
             text: isLast ? `${wd}.` : wd,
-            font: 'Cambria', size: brandHalfPt,
+            font: 'Arial', size: brandHalfPt,
             color: isLast ? GOLD : INK, italics: isLast,
           })],
         }));
@@ -2378,7 +2379,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
         spacing: { after: 720 },
         children: [new TextRun({
           text: 'A complete documentation of the property as found on the day of inspection — defects, dimensions, environmental readings, and the photographic record.',
-          font: 'Cambria', size: 28, color: MUTED_HEX, italics: true,
+          font: 'Arial', size: 28, color: MUTED_HEX, italics: true,
         })],
       }));
     }
@@ -2495,7 +2496,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
           shading: { type: 'clear', color: 'auto', fill: TEAL_HEX },
           spacing: { before: 240, after: 240 },
           alignment: AlignmentType.CENTER,
-          children: [new TextRun({ text: 'PROPERTY', color: 'FFFFFF', bold: true, font: 'Helvetica', size: 32 })],
+          children: [new TextRun({ text: 'PROPERTY', color: 'FFFFFF', bold: true, font: 'Arial', size: 32 })],
         })];
 
     // ── RIGHT COLUMN: eyebrow, headline, rule, detail rows ───────
@@ -2505,7 +2506,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
       children: [
         new TextRun({
           text: 'SECTION 01',
-          font: 'Helvetica', size: 18, color: TEAL_HEX,
+          font: 'Arial', size: 18, color: TEAL_HEX,
           bold: true, characterSpacing: 100,
         }),
       ],
@@ -2515,7 +2516,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
       children: [
         new TextRun({
           text: 'PROPERTY',
-          font: 'Helvetica', size: 56, color: INK, bold: true, characterSpacing: -10,
+          font: 'Arial', size: 56, color: INK, bold: true, characterSpacing: -10,
         }),
       ],
     }));
@@ -2524,7 +2525,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
       children: [
         new TextRun({
           text: 'DETAILS',
-          font: 'Helvetica', size: 56, color: INK, bold: true, characterSpacing: -10,
+          font: 'Arial', size: 56, color: INK, bold: true, characterSpacing: -10,
         }),
       ],
     }));
@@ -2546,7 +2547,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
           children: [
             new TextRun({
               text: label.toUpperCase(),
-              font: 'Helvetica', size: 16, color: MUTED_HEX, characterSpacing: 80,
+              font: 'Arial', size: 16, color: MUTED_HEX, characterSpacing: 80,
             }),
           ],
         }),
@@ -2556,7 +2557,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
           children: [
             new TextRun({
               text: hasValue ? String(value) : 'Not provided',
-              font: 'Helvetica', size: 22, color: hasValue ? INK : '9CA3AF',
+              font: 'Arial', size: 22, color: hasValue ? INK : '9CA3AF',
               bold: !!hasValue,
               italics: !hasValue,
             }),
@@ -2786,13 +2787,13 @@ export const generateDOCX = async (inspection, settings, opts) => {
       spacing: { before: 0, after: 80 },
       children: [new TextRun({
         text: 'SECTION 03 · PROPERTY SCORE',
-        font: 'Helvetica', size: 18, color: TEAL_HEX, bold: true, characterSpacing: 100,
+        font: 'Arial', size: 18, color: TEAL_HEX, bold: true, characterSpacing: 100,
       })],
     }));
     out.push(new Paragraph({
       spacing: { after: 40 },
       children: [new TextRun({
-        text: 'HEALTH, AT A GLANCE.', font: 'Helvetica', size: 56,
+        text: 'HEALTH, AT A GLANCE.', font: 'Arial', size: 56,
         color: INK, bold: true, characterSpacing: -10,
       })],
     }));
@@ -2819,7 +2820,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
       new Paragraph({
         spacing: { before: 0, after: 80 },
         children: [new TextRun({
-          text: 'HEALTH SCORE BY ROOM', font: 'Helvetica', size: 14,
+          text: 'HEALTH SCORE BY ROOM', font: 'Arial', size: 14,
           color: MUTED_HEX, characterSpacing: 80,
         })],
       }),
@@ -2832,7 +2833,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
             })],
           })
         : new Paragraph({
-            children: [new TextRun({ text: 'Chart unavailable.', font: 'Cambria', size: 22, color: MUTED_HEX, italics: true })],
+            children: [new TextRun({ text: 'Chart unavailable.', font: 'Arial', size: 22, color: MUTED_HEX, italics: true })],
           }),
     ];
 
@@ -2841,7 +2842,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
         alignment: AlignmentType.CENTER,
         spacing: { before: 0, after: 80 },
         children: [new TextRun({
-          text: 'AVERAGE SCORE', font: 'Helvetica', size: 14,
+          text: 'AVERAGE SCORE', font: 'Arial', size: 14,
           color: MUTED_HEX, characterSpacing: 80,
         })],
       }),
@@ -2856,14 +2857,14 @@ export const generateDOCX = async (inspection, settings, opts) => {
           })
         : new Paragraph({
             alignment: AlignmentType.CENTER,
-            children: [new TextRun({ text: `${Math.round(avgPct)}%`, font: 'Cambria', size: 60, color: INK, bold: true })],
+            children: [new TextRun({ text: `${Math.round(avgPct)}%`, font: 'Arial', size: 60, color: INK, bold: true })],
           }),
       new Paragraph({
         alignment: AlignmentType.CENTER,
         spacing: { after: 60 },
         children: [new TextRun({
           text: `${summary.grade.letter} · ${summary.grade.label}`,
-          font: 'Cambria', size: 24, color: GOLD, italics: true,
+          font: 'Arial', size: 24, color: GOLD, italics: true,
         })],
       }),
       new Paragraph({
@@ -2871,7 +2872,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
         spacing: { after: 0 },
         children: [new TextRun({
           text: `Across ${rooms.length} room${rooms.length === 1 ? '' : 's'}`,
-          font: 'Cambria', size: 20, color: MUTED_HEX,
+          font: 'Arial', size: 20, color: MUTED_HEX,
         })],
       }),
     ];
@@ -2955,14 +2956,14 @@ export const generateDOCX = async (inspection, settings, opts) => {
                   new Paragraph({
                     spacing: { after: 80 },
                     children: [new TextRun({
-                      text: 'INSPECTOR REMARKS', font: 'Helvetica', size: 14,
+                      text: 'INSPECTOR REMARKS', font: 'Arial', size: 14,
                       color: MUTED_HEX, characterSpacing: 80,
                     })],
                   }),
                   new Paragraph({
                     spacing: { after: 0, line: 320 },
                     children: [new TextRun({
-                      text: summary.remarks, font: 'Cambria', size: 22, color: INK,
+                      text: summary.remarks, font: 'Arial', size: 22, color: INK,
                     })],
                   }),
                 ],
@@ -3042,13 +3043,13 @@ export const generateDOCX = async (inspection, settings, opts) => {
       spacing: { before: 0, after: 80 },
       children: [new TextRun({
         text: 'SECTION 04 · ROOM SCORES',
-        font: 'Helvetica', size: 18, color: TEAL_HEX, bold: true, characterSpacing: 100,
+        font: 'Arial', size: 18, color: TEAL_HEX, bold: true, characterSpacing: 100,
       })],
     }));
     out.push(new Paragraph({
       spacing: { after: 40 },
       children: [new TextRun({
-        text: 'ROOM SCORES, BY AREA.', font: 'Helvetica', size: 56,
+        text: 'ROOM SCORES, BY AREA.', font: 'Arial', size: 56,
         color: INK, bold: true, characterSpacing: -10,
       })],
     }));
@@ -3068,7 +3069,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
         alignment: idx === 0 ? AlignmentType.LEFT : AlignmentType.CENTER,
         spacing: { before: 100, after: 100 },
         children: [new TextRun({
-          text: text.toUpperCase(), font: 'Helvetica',
+          text: text.toUpperCase(), font: 'Arial',
           size: 14, color: 'FFFFFF', bold: true, characterSpacing: 60,
         })],
       })],
@@ -3085,7 +3086,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
             alignment: AlignmentType.CENTER,
             spacing: { before: 100, after: 100 },
             children: [new TextRun({
-              text: nm.toUpperCase(), font: 'Helvetica',
+              text: nm.toUpperCase(), font: 'Arial',
               size: 14, color: 'FFFFFF', bold: true, characterSpacing: 60,
             })],
           })],
@@ -3106,7 +3107,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
         spacing: { before: 100, after: 100 },
         children: [new TextRun({
           text: String(text),
-          font: opts.font || 'Cambria',
+          font: opts.font || 'Arial',
           size: opts.size || 20,
           color: opts.color || INK,
           bold: opts.bold || false,
@@ -3147,7 +3148,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
               spacing: { before: 0, after: 0 },
               children: [new TextRun({
                 text: (priority || '—').toUpperCase(),
-                font: 'Helvetica', size: 13, color: 'FFFFFF', bold: true, characterSpacing: 80,
+                font: 'Arial', size: 13, color: 'FFFFFF', bold: true, characterSpacing: 80,
               })],
             })],
           })],
@@ -3183,7 +3184,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
       children: [
         cell('AVERAGE', {
           widthPct: colPcts[0], align: AlignmentType.LEFT,
-          font: 'Helvetica', size: 16, color: INK, bold: true, bg: COL_AVG_BG,
+          font: 'Arial', size: 16, color: INK, bold: true, bg: COL_AVG_BG,
         }),
         ...sevNames.map((nm, i) => cell(totByName[nm] || 0, {
           widthPct: colPcts[1 + i], bg: COL_AVG_BG, bold: true, color: INK,
@@ -3212,13 +3213,13 @@ export const generateDOCX = async (inspection, settings, opts) => {
           spacing: { before: 0, after: 60 },
           children: [new TextRun({
             text: `SECTION 04 · ROOM SCORES · PAGE ${idx + 1}`,
-            font: 'Helvetica', size: 16, color: TEAL_HEX, bold: true, characterSpacing: 100,
+            font: 'Arial', size: 16, color: TEAL_HEX, bold: true, characterSpacing: 100,
           })],
         }));
         out.push(new Paragraph({
           spacing: { after: 40 },
           children: [new TextRun({
-            text: 'ROOM SCORES, CONTINUED.', font: 'Helvetica',
+            text: 'ROOM SCORES, CONTINUED.', font: 'Arial',
             size: 44, color: INK, bold: true, characterSpacing: -8,
           })],
         }));
@@ -3245,7 +3246,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
           spacing: { before: 120, after: 0 },
           children: [new TextRun({
             text: 'CONTINUED ON NEXT PAGE  →',
-            font: 'Helvetica', size: 13, color: MUTED_HEX, characterSpacing: 100,
+            font: 'Arial', size: 13, color: MUTED_HEX, characterSpacing: 100,
           })],
         }));
       }
@@ -3283,9 +3284,9 @@ export const generateDOCX = async (inspection, settings, opts) => {
     const discHeadline = (before, italicWord, after) => new Paragraph({
       spacing: { before: 240, after: 80, line: 320 },
       children: [
-        new TextRun({ text: before, font: 'Cambria', size: 54, color: INK, characterSpacing: -8 }),
-        new TextRun({ text: italicWord, font: 'Cambria', size: 54, color: GOLD, italics: true, characterSpacing: -8 }),
-        new TextRun({ text: after, font: 'Cambria', size: 54, color: INK, characterSpacing: -8 }),
+        new TextRun({ text: before, font: 'Arial', size: 54, color: INK, characterSpacing: -8 }),
+        new TextRun({ text: italicWord, font: 'Arial', size: 54, color: GOLD, italics: true, characterSpacing: -8 }),
+        new TextRun({ text: after, font: 'Arial', size: 54, color: INK, characterSpacing: -8 }),
       ],
     });
 
@@ -3329,13 +3330,13 @@ export const generateDOCX = async (inspection, settings, opts) => {
       spacing: { before: 0, after: 80 },
       children: [new TextRun({
         text: 'SECTION 05 · TAXONOMY',
-        font: 'Helvetica', size: 18, color: TEAL_HEX, bold: true, characterSpacing: 100,
+        font: 'Arial', size: 18, color: TEAL_HEX, bold: true, characterSpacing: 100,
       })],
     }));
     out.push(new Paragraph({
       spacing: { after: 40 },
       children: [new TextRun({
-        text: 'SEVERITY, DEFINED.', font: 'Helvetica', size: 56,
+        text: 'SEVERITY, DEFINED.', font: 'Arial', size: 56,
         color: INK, bold: true, characterSpacing: -10,
       })],
     }));
@@ -3390,7 +3391,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
           spacing: { before: 0, after: 80 },
           children: [new TextRun({
             text: (s.name || '').toUpperCase(),
-            font: 'Helvetica', size: 22, color: INK,
+            font: 'Arial', size: 22, color: INK,
             bold: true, characterSpacing: 100,
           })],
         }),
@@ -3398,7 +3399,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
           spacing: { after: 0, line: 340 },
           children: [new TextRun({
             text: s.definition || '',
-            font: 'Cambria', size: 24, color: MUTED_HEX,
+            font: 'Arial', size: 24, color: MUTED_HEX,
           })],
         }),
       ];
@@ -3451,7 +3452,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
     // body cells Georgia 13px in TEAL ink, alternating zebra rows in
     // #fafafa. We mirror that here so the DOCX visually reads as the
     // same table — no more black/INK header bars.
-    const teal4 = { style: BorderStyle.SINGLE, size: 4, color: TEAL_HEX };
+    const teal4 = { style: BorderStyle.SINGLE, size: 4, color: 'D1D5DB' };
     const tealCellBorders = { top: teal4, left: teal4, right: teal4, bottom: teal4 };
     const headerCell = (text, align = AlignmentType.LEFT, width) => new TableCell({
       ...(width ? { width: { size: width, type: WidthType.PERCENTAGE } } : {}),
@@ -3460,7 +3461,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
       children: [new Paragraph({
         alignment: align,
         spacing: { before: 80, after: 80 },
-        children: [new TextRun({ text: text.toUpperCase(), font: 'Helvetica', size: 14, color: 'FFFFFF', bold: true, characterSpacing: 60 })],
+        children: [new TextRun({ text: text.toUpperCase(), font: 'Arial', size: 14, color: 'FFFFFF', bold: true, characterSpacing: 60 })],
       })],
     });
     const bodyCell = (text, opts = {}) => new TableCell({
@@ -3469,7 +3470,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
       children: [new Paragraph({
         alignment: opts.align || AlignmentType.LEFT,
         spacing: { before: 100, after: 100 },
-        children: [new TextRun({ text: String(text), font: 'Georgia', size: 22, color: INK })],
+        children: [new TextRun({ text: String(text), font: 'Arial', size: 22, color: INK })],
       })],
     });
     const totalCell = (text, opts = {}) => new TableCell({
@@ -3479,7 +3480,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
       children: [new Paragraph({
         alignment: opts.align || AlignmentType.LEFT,
         spacing: { before: 100, after: 100 },
-        children: [new TextRun({ text: String(text).toUpperCase(), font: 'Helvetica', size: 16, color: 'FFFFFF', bold: true, characterSpacing: 60 })],
+        children: [new TextRun({ text: String(text).toUpperCase(), font: 'Arial', size: 16, color: 'FFFFFF', bold: true, characterSpacing: 60 })],
       })],
     });
 
@@ -3558,7 +3559,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
   const buildEnvironmental = async () => {
     const out = [];
     const TEAL_HEX = (settings?.primaryBrandColor || settings?.primaryColor || '#2DB4C6').replace('#', '').toUpperCase();
-    const teal4 = { style: BorderStyle.SINGLE, size: 4, color: TEAL_HEX };
+    const teal4 = { style: BorderStyle.SINGLE, size: 4, color: 'D1D5DB' };
     const tealCellBorders = { top: teal4, left: teal4, right: teal4, bottom: teal4 };
 
     out.push(eyebrowPara('Readings · Environment'));
@@ -3596,7 +3597,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
           border: { top: { style: BorderStyle.SINGLE, size: 4, color: RULE_HEX, space: 4 } },
           children: [new TextRun({
             text: `Water test · photo ${String(k + 1).padStart(2, '0')}`.toUpperCase(),
-            font: 'Helvetica', size: 12, color: MUTED_HEX, characterSpacing: 60, bold: true,
+            font: 'Arial', size: 12, color: MUTED_HEX, characterSpacing: 60, bold: true,
           })],
         }));
         return new TableCell({
@@ -3619,7 +3620,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
       shading: { type: ShadingType.SOLID, color: TEAL_HEX, fill: TEAL_HEX },
       children: [new Paragraph({
         spacing: { before: 80, after: 80 },
-        children: [new TextRun({ text: text.toUpperCase(), font: 'Helvetica', size: 14, color: 'FFFFFF', bold: true, characterSpacing: 60 })],
+        children: [new TextRun({ text: text.toUpperCase(), font: 'Arial', size: 14, color: 'FFFFFF', bold: true, characterSpacing: 60 })],
       })],
     });
     const indicatorCell = (text, opts = {}) => new TableCell({
@@ -3627,14 +3628,14 @@ export const generateDOCX = async (inspection, settings, opts) => {
       ...(opts.zebra ? { shading: { type: ShadingType.SOLID, color: 'FAFAFA', fill: 'FAFAFA' } } : {}),
       children: [new Paragraph({
         spacing: { before: 100, after: 100 },
-        children: [new TextRun({ text: String(text), font: 'Georgia', size: 22, color: INK })],
+        children: [new TextRun({ text: String(text), font: 'Arial', size: 22, color: INK })],
       })],
     });
     out.push(new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
       rows: [
         new TableRow({ children: [
-          new TableCell({ width: { size: 60, type: WidthType.PERCENTAGE }, borders: tealCellBorders, shading: { type: ShadingType.SOLID, color: TEAL_HEX, fill: TEAL_HEX }, children: [new Paragraph({ spacing: { before: 80, after: 80 }, children: [new TextRun({ text: 'INDICATOR', font: 'Helvetica', size: 14, color: 'FFFFFF', bold: true, characterSpacing: 60 })] })] }),
+          new TableCell({ width: { size: 60, type: WidthType.PERCENTAGE }, borders: tealCellBorders, shading: { type: ShadingType.SOLID, color: TEAL_HEX, fill: TEAL_HEX }, children: [new Paragraph({ spacing: { before: 80, after: 80 }, children: [new TextRun({ text: 'INDICATOR', font: 'Arial', size: 14, color: 'FFFFFF', bold: true, characterSpacing: 60 })] })] }),
           indicatorHeader('Reading'),
         ] }),
         new TableRow({ children: [indicatorCell('Total dissolved solids (TDS)'), indicatorCell(w.tds ? `${w.tds} ppm` : '—', { zebra: false })] }),
@@ -3663,7 +3664,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
           children: [new Paragraph({
             alignment: AlignmentType.CENTER,
             spacing: { before: 80, after: 80 },
-            children: [new TextRun({ text: String(b).toUpperCase(), font: 'Helvetica', size: 14, color: TEAL_HEX, bold: true, characterSpacing: 60 })],
+            children: [new TextRun({ text: String(b).toUpperCase(), font: 'Arial', size: 14, color: TEAL_HEX, bold: true, characterSpacing: 60 })],
           })],
         }));
         while (cells.length < PER_ROW) {
@@ -3682,7 +3683,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
     } else {
       out.push(new Paragraph({
         spacing: { after: 200 },
-        children: [new TextRun({ text: 'No brands recorded.', font: 'Georgia', size: 22, color: MUTED_HEX, italics: true })],
+        children: [new TextRun({ text: 'No brands recorded.', font: 'Arial', size: 22, color: MUTED_HEX, italics: true })],
       }));
     }
 
@@ -3693,7 +3694,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
   // ─── 8. ROOMS ─────────────────────────────────────────────────
   const buildRooms = async () => {
     const TEAL_HEX = (settings?.primaryBrandColor || settings?.primaryColor || '#2DB4C6').replace('#', '').toUpperCase();
-    const teal4 = { style: BorderStyle.SINGLE, size: 4, color: TEAL_HEX };
+    const teal4 = { style: BorderStyle.SINGLE, size: 4, color: 'D1D5DB' };
     const tealCellBorders = { top: teal4, left: teal4, right: teal4, bottom: teal4 };
     const out = [];
     const rooms = inspection.roomInspections || [];
@@ -3708,13 +3709,13 @@ export const generateDOCX = async (inspection, settings, opts) => {
       out.push(eyebrowPara(`Room ${roomNo} of ${totalNo} · Phase A`));
       out.push(new Paragraph({
         spacing: { after: 80 },
-        children: [new TextRun({ text: room.name || 'Room', font: 'Cambria', size: 52, color: INK })],
+        children: [new TextRun({ text: room.name || 'Room', font: 'Arial', size: 52, color: INK })],
       }));
       out.push(goldRulePara());
       out.push(new Paragraph({
         spacing: { before: 240, after: 200 },
         border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: RULE_HEX, space: 4 } },
-        children: [new TextRun({ text: 'PHASE A · THE SPACES, OBSERVED', font: 'Helvetica', size: 18, color: MUTED_HEX, bold: true, characterSpacing: 60 })],
+        children: [new TextRun({ text: 'PHASE A · THE SPACES, OBSERVED', font: 'Arial', size: 18, color: MUTED_HEX, bold: true, characterSpacing: 60 })],
       }));
       if (corners.length > 0) {
         // 2-up grid — matches the PDF gallery layout instead of one giant
@@ -3741,7 +3742,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
               cellChildren.push(new Paragraph({
                 alignment: AlignmentType.CENTER,
                 spacing: { before: 60, after: 60 },
-                children: [new TextRun({ text: 'Photograph unavailable.', font: 'Georgia', size: 20, color: MUTED_HEX, italics: true })],
+                children: [new TextRun({ text: 'Photograph unavailable.', font: 'Arial', size: 20, color: MUTED_HEX, italics: true })],
               }));
             }
             // Caption bar — white text on TEAL, mirroring PDF .cap.
@@ -3750,7 +3751,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
               shading: { type: ShadingType.SOLID, color: TEAL_HEX, fill: TEAL_HEX },
               children: [new TextRun({
                 text: '  ' + (p.corner || `Corner ${ci + k + 1}`).toUpperCase(),
-                font: 'Helvetica', size: 14, color: 'FFFFFF', characterSpacing: 60, bold: true,
+                font: 'Arial', size: 14, color: 'FFFFFF', characterSpacing: 60, bold: true,
               })],
             }));
             return new TableCell({
@@ -3777,7 +3778,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
       } else {
         out.push(new Paragraph({
           spacing: { after: 160 },
-          children: [new TextRun({ text: 'No ambient photographs recorded for this room.', font: 'Cambria', size: 22, color: MUTED_HEX, italics: true })],
+          children: [new TextRun({ text: 'No ambient photographs recorded for this room.', font: 'Arial', size: 22, color: MUTED_HEX, italics: true })],
         }));
       }
       out.push(fullPageBreak());
@@ -3786,18 +3787,18 @@ export const generateDOCX = async (inspection, settings, opts) => {
       out.push(eyebrowPara(`Room ${roomNo} of ${totalNo} · Phase B`));
       out.push(new Paragraph({
         spacing: { after: 80 },
-        children: [new TextRun({ text: room.name || 'Room', font: 'Cambria', size: 52, color: INK })],
+        children: [new TextRun({ text: room.name || 'Room', font: 'Arial', size: 52, color: INK })],
       }));
       out.push(goldRulePara());
       out.push(new Paragraph({
         spacing: { before: 240, after: 200 },
         border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: RULE_HEX, space: 4 } },
-        children: [new TextRun({ text: `PHASE B · DEFECTS (${defects.length})`, font: 'Helvetica', size: 18, color: MUTED_HEX, bold: true, characterSpacing: 60 })],
+        children: [new TextRun({ text: `PHASE B · DEFECTS (${defects.length})`, font: 'Arial', size: 18, color: MUTED_HEX, bold: true, characterSpacing: 60 })],
       }));
       if (defects.length === 0) {
         out.push(new Paragraph({
           spacing: { after: 160 },
-          children: [new TextRun({ text: 'No defects recorded for this room.', font: 'Cambria', size: 22, color: MUTED_HEX, italics: true })],
+          children: [new TextRun({ text: 'No defects recorded for this room.', font: 'Arial', size: 22, color: MUTED_HEX, italics: true })],
         }));
       } else {
         for (let di = 0; di < defects.length; di++) {
@@ -3822,7 +3823,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
                   children: [new Paragraph({
                     children: [new TextRun({
                       text: `${String(di + 1).padStart(2, '0')} · ${d.title || d.classify || 'Defect'}`,
-                      font: 'Georgia', size: 26, color: TEAL_HEX,
+                      font: 'Arial', size: 26, color: TEAL_HEX,
                     })],
                   })],
                 }),
@@ -3834,7 +3835,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
                   children: [new Paragraph({
                     alignment: AlignmentType.CENTER,
                     children: [new TextRun({
-                      text: sevLabel, font: 'Helvetica', size: 14, color: 'FFFFFF',
+                      text: sevLabel, font: 'Arial', size: 14, color: 'FFFFFF',
                       bold: true, characterSpacing: 60,
                     })],
                   })],
@@ -3861,7 +3862,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
                 children: [new Paragraph({
                   alignment: AlignmentType.CENTER,
                   spacing: { before: 100, after: 100 },
-                  children: [new TextRun({ text: 'NO PHOTO', font: 'Helvetica', size: 14, color: MUTED_HEX, characterSpacing: 60, bold: true })],
+                  children: [new TextRun({ text: 'NO PHOTO', font: 'Arial', size: 14, color: MUTED_HEX, characterSpacing: 60, bold: true })],
                 })],
               }),
               new TableCell({
@@ -3869,7 +3870,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
                 borders: tealCellBorders,
                 children: [new Paragraph({
                   spacing: { before: 100, after: 100, line: 300 },
-                  children: [new TextRun({ text: d.description || d.title || 'Observation', font: 'Georgia', size: 22, color: TEAL_HEX })],
+                  children: [new TextRun({ text: d.description || d.title || 'Observation', font: 'Arial', size: 22, color: TEAL_HEX })],
                 })],
               }),
               new TableCell({
@@ -3878,7 +3879,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
                 children: [new Paragraph({
                   alignment: AlignmentType.CENTER,
                   spacing: { before: 100, after: 100 },
-                  children: [new TextRun({ text: sevLabel, font: 'Helvetica', size: 16, color: sevHex, bold: true, characterSpacing: 60 })],
+                  children: [new TextRun({ text: sevLabel, font: 'Arial', size: 16, color: sevHex, bold: true, characterSpacing: 60 })],
                 })],
               }),
             ] }));
@@ -3900,30 +3901,30 @@ export const generateDOCX = async (inspection, settings, opts) => {
                 : [new Paragraph({
                     alignment: AlignmentType.CENTER,
                     spacing: { before: 60, after: 60 },
-                    children: [new TextRun({ text: 'Photograph unavailable.', font: 'Georgia', size: 18, color: MUTED_HEX, italics: true })],
+                    children: [new TextRun({ text: 'Photograph unavailable.', font: 'Arial', size: 18, color: MUTED_HEX, italics: true })],
                   })];
               const descChildren = [];
               if (pi === 0) {
                 descChildren.push(new Paragraph({
                   spacing: { before: 80, after: p.caption ? 60 : 80, line: 300 },
-                  children: [new TextRun({ text: d.description || d.title || 'Observation', font: 'Georgia', size: 22, color: TEAL_HEX })],
+                  children: [new TextRun({ text: d.description || d.title || 'Observation', font: 'Arial', size: 22, color: TEAL_HEX })],
                 }));
                 if (p.caption) {
                   descChildren.push(new Paragraph({
                     spacing: { after: 80 },
-                    children: [new TextRun({ text: p.caption.toUpperCase(), font: 'Helvetica', size: 14, color: MUTED_HEX, characterSpacing: 60, bold: true })],
+                    children: [new TextRun({ text: p.caption.toUpperCase(), font: 'Arial', size: 14, color: MUTED_HEX, characterSpacing: 60, bold: true })],
                   }));
                 }
               } else {
                 descChildren.push(new Paragraph({
                   spacing: { before: 80, after: 80, line: 300 },
-                  children: [new TextRun({ text: p.caption || '', font: 'Georgia', size: 18, color: MUTED_HEX, italics: !p.caption })],
+                  children: [new TextRun({ text: p.caption || '', font: 'Arial', size: 18, color: MUTED_HEX, italics: !p.caption })],
                 }));
               }
               const sevChildren = pi === 0 ? [new Paragraph({
                 alignment: AlignmentType.CENTER,
                 spacing: { before: 80, after: 80 },
-                children: [new TextRun({ text: sevLabel, font: 'Helvetica', size: 16, color: sevHex, bold: true, characterSpacing: 60 })],
+                children: [new TextRun({ text: sevLabel, font: 'Arial', size: 16, color: sevHex, bold: true, characterSpacing: 60 })],
               })] : [new Paragraph({ children: [new TextRun({ text: '' })] })];
 
               rows.push(new TableRow({ children: [
@@ -3977,7 +3978,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
         new Paragraph({
           alignment: AlignmentType.CENTER,
           children: [new TextRun({
-            text: label, font: 'Helvetica', size: 14, color: MUTED_HEX, characterSpacing: 60,
+            text: label, font: 'Arial', size: 14, color: MUTED_HEX, characterSpacing: 60,
           })],
         }),
       ],
@@ -4019,18 +4020,18 @@ export const generateDOCX = async (inspection, settings, opts) => {
       spacing: { after: 360 },
       children: [new TextRun({
         text: '— A NOTE IN CLOSING —',
-        font: 'Helvetica', size: 18, color: GOLD, bold: true, characterSpacing: 80,
+        font: 'Arial', size: 18, color: GOLD, bold: true, characterSpacing: 80,
       })],
     }));
     out.push(new Paragraph({
       alignment: AlignmentType.CENTER,
       spacing: { after: 80 },
-      children: [new TextRun({ text: 'Thank', font: 'Cambria', size: 120, color: INK })],
+      children: [new TextRun({ text: 'Thank', font: 'Arial', size: 120, color: INK })],
     }));
     out.push(new Paragraph({
       alignment: AlignmentType.CENTER,
       spacing: { after: 360 },
-      children: [new TextRun({ text: 'you.', font: 'Cambria', size: 120, color: GOLD, italics: true })],
+      children: [new TextRun({ text: 'you.', font: 'Arial', size: 120, color: GOLD, italics: true })],
     }));
     out.push(new Paragraph({
       alignment: AlignmentType.CENTER,
@@ -4043,7 +4044,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
       spacing: { after: 180 },
       children: [new TextRun({
         text: 'It has been our privilege to walk through your home with care and attention.',
-        font: 'Cambria', size: 24, color: MUTED_HEX, italics: true,
+        font: 'Arial', size: 24, color: MUTED_HEX, italics: true,
       })],
     }));
     out.push(new Paragraph({
@@ -4051,7 +4052,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
       spacing: { after: 180 },
       children: [new TextRun({
         text: 'We hope this record gives you clarity, confidence, and a warm sense of what makes the space yours.',
-        font: 'Cambria', size: 24, color: MUTED_HEX, italics: true,
+        font: 'Arial', size: 24, color: MUTED_HEX, italics: true,
       })],
     }));
     out.push(new Paragraph({
@@ -4059,7 +4060,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
       spacing: { after: 600 },
       children: [new TextRun({
         text: 'May the days within it be quiet, warm, and well-kept.',
-        font: 'Cambria', size: 24, color: MUTED_HEX, italics: true,
+        font: 'Arial', size: 24, color: MUTED_HEX, italics: true,
       })],
     }));
 
@@ -4071,7 +4072,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
       border: { top: { style: BorderStyle.SINGLE, size: 6, color: RULE_HEX, space: 16 } },
       children: [new TextRun({
         text: 'DOCUMENT OF RECORD',
-        font: 'Helvetica', size: 16, color: MUTED_HEX, bold: true, characterSpacing: 80,
+        font: 'Arial', size: 16, color: MUTED_HEX, bold: true, characterSpacing: 80,
       })],
     }));
     out.push(new Table({
@@ -4112,7 +4113,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
                   alignment: AlignmentType.CENTER,
                   children: [new TextRun({
                     text: 'INSPECTOR SIGNATURE',
-                    font: 'Helvetica', size: 14, color: MUTED_HEX, characterSpacing: 60,
+                    font: 'Arial', size: 14, color: MUTED_HEX, characterSpacing: 60,
                   })],
                 }),
               ],
@@ -4129,7 +4130,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
                   alignment: AlignmentType.CENTER,
                   children: [new TextRun({
                     text: 'CLIENT SIGNATURE',
-                    font: 'Helvetica', size: 14, color: MUTED_HEX, characterSpacing: 60,
+                    font: 'Arial', size: 14, color: MUTED_HEX, characterSpacing: 60,
                   })],
                 }),
               ],
@@ -4145,7 +4146,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
       alignment: AlignmentType.CENTER,
       spacing: { before: 600, after: 120 },
       children: [new TextRun({
-        text: cName.toUpperCase(), font: 'Helvetica', size: 22, color: INK,
+        text: cName.toUpperCase(), font: 'Arial', size: 22, color: INK,
         bold: true, characterSpacing: 80,
       })],
     }));
@@ -4155,7 +4156,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
         alignment: AlignmentType.CENTER,
         spacing: { after: 240 },
         children: [new TextRun({
-          text: contactLine, font: 'Helvetica', size: 16, color: MUTED_HEX, characterSpacing: 40,
+          text: contactLine, font: 'Arial', size: 16, color: MUTED_HEX, characterSpacing: 40,
         })],
       }));
     }
@@ -4164,7 +4165,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
         alignment: AlignmentType.CENTER,
         children: [new TextRun({
           text: `Bound on ${fmtDate(new Date().toISOString())} · Ref #${refId}`,
-          font: 'Helvetica', size: 14, color: GOLD, characterSpacing: 60, bold: true,
+          font: 'Arial', size: 14, color: GOLD, characterSpacing: 60, bold: true,
         })],
       }));
     }
@@ -4307,7 +4308,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
         // PDF body copy uses Georgia, so the DOCX default run font
         // mirrors that for legal/disclaimer pages and any other body
         // text we leave at the section default.
-        document: { run: { font: 'Georgia', size: 22, color: INK } },
+        document: { run: { font: 'Arial', size: 22, color: INK } },
       },
     },
     sections,

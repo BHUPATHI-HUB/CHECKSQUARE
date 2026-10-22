@@ -259,7 +259,7 @@ const ReportPreviewModal = ({ open, onOpenChange, inspection, onSaved }) => {
                 <style>{`
                   .docx-preview-wrapper .docx-wrapper { background: transparent !important; padding: 16px 0 24px 0 !important; display: flex; flex-direction: column; align-items: center; }
                   .docx-preview-wrapper section.docx { background: #fff !important; box-shadow: 0 4px 16px rgba(0,0,0,0.08) !important; margin: 0 auto 16px !important; }
-                  .docx-preview-wrapper section.docx img { object-fit: cover; }
+                  .docx-preview-wrapper section.docx img { max-width: 100%; height: auto; object-fit: contain; }
                 `}</style>
                 <div ref={docxContainerRef} className="docx-preview-wrapper w-full" />
               </div>
