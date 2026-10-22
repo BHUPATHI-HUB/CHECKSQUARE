@@ -97,9 +97,9 @@ const scoreDonutSVG = (factors, overall, grade) => {
     <svg viewBox="0 0 220 220" xmlns="http://www.w3.org/2000/svg" style="width:220px;height:220px;">
       <circle cx="${cx}" cy="${cy}" r="${r}" fill="transparent" stroke="#f3f4f6" stroke-width="${sw}"/>
       ${slices}
-      <text x="${cx}" y="${cy - 4}" text-anchor="middle" font-family="Georgia" font-size="44" font-weight="300" fill="#1f2937">${overall}</text>
+      <text x="${cx}" y="${cy - 4}" text-anchor="middle" font-family="Arial" font-size="44" font-weight="300" fill="#1f2937">${overall}</text>
       <text x="${cx}" y="${cy + 18}" text-anchor="middle" font-family="Helvetica" font-size="8" letter-spacing="3" fill="#6b7280">SCORE / 100</text>
-      <text x="${cx}" y="${cy + 42}" text-anchor="middle" font-family="Georgia" font-size="18" font-style="italic" fill="${grade.color}">${grade.letter} · ${grade.label}</text>
+      <text x="${cx}" y="${cy + 42}" text-anchor="middle" font-family="Arial" font-size="18" font-style="italic" fill="${grade.color}">${grade.letter} · ${grade.label}</text>
     </svg>
   `;
 };
@@ -122,7 +122,7 @@ const miniDonutSVG = (value, color, size = 96) => {
       <circle cx="${cx}" cy="${cy}" r="${r}" fill="transparent" stroke="${color}" stroke-width="${sw}"
               stroke-dasharray="${dash} ${C}" stroke-linecap="round"
               transform="rotate(-90 ${cx} ${cy})" />
-      <text x="${cx}" y="${cy + 2}" text-anchor="middle" font-family="Georgia" font-size="22" font-weight="300" fill="#1f2937">${value}</text>
+      <text x="${cx}" y="${cy + 2}" text-anchor="middle" font-family="Arial" font-size="22" font-weight="300" fill="#1f2937">${value}</text>
       <text x="${cx}" y="${cy + 16}" text-anchor="middle" font-family="Helvetica" font-size="6" letter-spacing="1.5" fill="#9ca3af">/ 100</text>
     </svg>
   `;
@@ -299,7 +299,7 @@ export const buildReportHTML = (inspection, settings) => {
       .body.disclaimer-body h2 { font-size: 14px; margin: 12px 0 6px; }
       .body.disclaimer-body h3 { font-size: 12px; margin: 10px 0 4px; }
 
-      table.editorial { width: 100%; border-collapse: collapse; margin-top: 16px; font-family: Helvetica, Arial, sans-serif; font-size: 12px; border: 1px solid ${PRIMARY}; }
+      table.editorial { width: 100%; border-collapse: collapse; margin-top: 16px; font-family: Arial, Helvetica, sans-serif; font-size: 12px; border: 1px solid ${RULE}; table-layout: fixed; }
       /* The 8-column score table needs tighter typography and padding so
          every cell fits inside the page body without overflow. */
       table.editorial.score-table th { padding: 8px 6px; font-size: 8px; letter-spacing: 0.12em; word-break: keep-all; white-space: nowrap; }
@@ -309,13 +309,14 @@ export const buildReportHTML = (inspection, settings) => {
         text-align: left; padding: 10px 12px;
         font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase;
         color: #fff; background: ${PRIMARY};
-        border: 1px solid ${PRIMARY};
+        border: 1px solid ${RULE};
         font-weight: 600;
       }
       table.editorial td {
-        padding: 12px 14px;
-        border: 1px solid ${PRIMARY};
-        font-family: Arial, Helvetica, sans-serif; font-size: 13px; color: ${PRIMARY};
+        padding: 10px 12px;
+        border: 1px solid ${RULE};
+        font-family: Arial, Helvetica, sans-serif; font-size: 12px; color: ${PRIMARY};
+        vertical-align: middle; overflow-wrap: anywhere;
         background: #fff;
       }
       table.editorial tr { page-break-inside: avoid; break-inside: avoid; }
@@ -1581,13 +1582,13 @@ export const buildReportHTML = (inspection, settings) => {
       <div style="display:grid;grid-template-columns:1.1fr 1fr;gap:24px;margin-bottom:22px;">
         <div style="border:1px solid ${RULE};padding:18px 20px;background:#fafaf7;">
           <p class="eyebrow" style="margin:0 0 8px;">Live property summary</p>
-          <div style="font-family:Georgia,serif;font-size:34px;line-height:1;color:${tone};font-weight:600;">
+          <div style="font-family:Arial,Helvetica,sans-serif;font-size:34px;line-height:1;color:${tone};font-weight:600;">
             ${Math.round(avgPct)}<span style="font-size:18px;color:${MUTED};font-weight:400;"> / 100</span>
           </div>
           <div style="margin-top:4px;font-family:Helvetica,sans-serif;font-size:10px;letter-spacing:0.22em;text-transform:uppercase;color:${MUTED};">
             ${esc(scoreSummary.grade.letter)} · ${esc(scoreSummary.grade.label)} · ${esc(scoreSummary.priority || '—')}
           </div>
-          <div style="margin-top:12px;font-family:Georgia,serif;font-size:12px;line-height:1.6;color:${PRIMARY};">
+          <div style="margin-top:12px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.6;color:${PRIMARY};">
             Computed across <strong>${rooms.length}</strong> room${rooms.length === 1 ? '' : 's'} and
             <strong>${totAll}</strong> total observation${totAll === 1 ? '' : 's'}
             (<strong>${totMajor}</strong> major, <strong>${totMinor}</strong> minor, <strong>${totCosmetic}</strong> cosmetic).
@@ -1858,7 +1859,7 @@ const htmlToDocxParagraphs = (html, opts = {}) => {
   const {
     defaultSize = 22,      // half-points → 11pt
     defaultColor = INK,
-    defaultFont = 'Georgia',
+    defaultFont = 'Arial',
     paragraphSpacingAfter = 120,
     lineSpacing = 320,
     // Per-tag heading sizes (half-points). Callers can pass a partial
@@ -2119,7 +2120,7 @@ const goldRulePara = () => new Paragraph({
 
 const bodyPara = (text) => new Paragraph({
   spacing: { after: 160, line: 360 },
-  children: [new TextRun({ text, font: 'Georgia', size: 22, color: INK })],
+  children: [new TextRun({ text, font: 'Arial', size: 22, color: INK })],
 });
 
 const labelValueRow = (label, value) => new TableRow({
@@ -2148,7 +2149,7 @@ const labelValueRow = (label, value) => new TableRow({
 
 const noBorder = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' };
 const ruleBorder = { style: BorderStyle.SINGLE, size: 6, color: RULE_HEX };
-const fourSideBorder = { style: BorderStyle.SINGLE, size: 8, color: INK };
+const fourSideBorder = { style: BorderStyle.SINGLE, size: 4, color: RULE_HEX };
 const rowBorders = () => ({
   top: fourSideBorder,
   left: fourSideBorder,
@@ -3106,7 +3107,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
         spacing: { before: 100, after: 100 },
         children: [new TextRun({
           text: String(text),
-          font: opts.font || 'Cambria',
+          font: opts.font || 'Arial',
           size: opts.size || 20,
           color: opts.color || INK,
           bold: opts.bold || false,
@@ -3469,7 +3470,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
       children: [new Paragraph({
         alignment: opts.align || AlignmentType.LEFT,
         spacing: { before: 100, after: 100 },
-        children: [new TextRun({ text: String(text), font: 'Georgia', size: 22, color: INK })],
+        children: [new TextRun({ text: String(text), font: 'Arial', size: 22, color: INK })],
       })],
     });
     const totalCell = (text, opts = {}) => new TableCell({
@@ -3627,7 +3628,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
       ...(opts.zebra ? { shading: { type: ShadingType.SOLID, color: 'FAFAFA', fill: 'FAFAFA' } } : {}),
       children: [new Paragraph({
         spacing: { before: 100, after: 100 },
-        children: [new TextRun({ text: String(text), font: 'Georgia', size: 22, color: INK })],
+        children: [new TextRun({ text: String(text), font: 'Arial', size: 22, color: INK })],
       })],
     });
     out.push(new Table({
@@ -3682,7 +3683,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
     } else {
       out.push(new Paragraph({
         spacing: { after: 200 },
-        children: [new TextRun({ text: 'No brands recorded.', font: 'Georgia', size: 22, color: MUTED_HEX, italics: true })],
+        children: [new TextRun({ text: 'No brands recorded.', font: 'Arial', size: 22, color: MUTED_HEX, italics: true })],
       }));
     }
 
@@ -3741,7 +3742,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
               cellChildren.push(new Paragraph({
                 alignment: AlignmentType.CENTER,
                 spacing: { before: 60, after: 60 },
-                children: [new TextRun({ text: 'Photograph unavailable.', font: 'Georgia', size: 20, color: MUTED_HEX, italics: true })],
+                children: [new TextRun({ text: 'Photograph unavailable.', font: 'Arial', size: 20, color: MUTED_HEX, italics: true })],
               }));
             }
             // Caption bar — white text on TEAL, mirroring PDF .cap.
@@ -3822,7 +3823,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
                   children: [new Paragraph({
                     children: [new TextRun({
                       text: `${String(di + 1).padStart(2, '0')} · ${d.title || d.classify || 'Defect'}`,
-                      font: 'Georgia', size: 26, color: TEAL_HEX,
+                      font: 'Arial', size: 26, color: TEAL_HEX,
                     })],
                   })],
                 }),
@@ -3869,7 +3870,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
                 borders: tealCellBorders,
                 children: [new Paragraph({
                   spacing: { before: 100, after: 100, line: 300 },
-                  children: [new TextRun({ text: d.description || d.title || 'Observation', font: 'Georgia', size: 22, color: TEAL_HEX })],
+                  children: [new TextRun({ text: d.description || d.title || 'Observation', font: 'Arial', size: 22, color: TEAL_HEX })],
                 })],
               }),
               new TableCell({
@@ -3900,13 +3901,13 @@ export const generateDOCX = async (inspection, settings, opts) => {
                 : [new Paragraph({
                     alignment: AlignmentType.CENTER,
                     spacing: { before: 60, after: 60 },
-                    children: [new TextRun({ text: 'Photograph unavailable.', font: 'Georgia', size: 18, color: MUTED_HEX, italics: true })],
+                    children: [new TextRun({ text: 'Photograph unavailable.', font: 'Arial', size: 18, color: MUTED_HEX, italics: true })],
                   })];
               const descChildren = [];
               if (pi === 0) {
                 descChildren.push(new Paragraph({
                   spacing: { before: 80, after: p.caption ? 60 : 80, line: 300 },
-                  children: [new TextRun({ text: d.description || d.title || 'Observation', font: 'Georgia', size: 22, color: TEAL_HEX })],
+                  children: [new TextRun({ text: d.description || d.title || 'Observation', font: 'Arial', size: 22, color: TEAL_HEX })],
                 }));
                 if (p.caption) {
                   descChildren.push(new Paragraph({
@@ -3917,7 +3918,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
               } else {
                 descChildren.push(new Paragraph({
                   spacing: { before: 80, after: 80, line: 300 },
-                  children: [new TextRun({ text: p.caption || '', font: 'Georgia', size: 18, color: MUTED_HEX, italics: !p.caption })],
+                  children: [new TextRun({ text: p.caption || '', font: 'Arial', size: 18, color: MUTED_HEX, italics: !p.caption })],
                 }));
               }
               const sevChildren = pi === 0 ? [new Paragraph({
@@ -4307,7 +4308,7 @@ export const generateDOCX = async (inspection, settings, opts) => {
         // PDF body copy uses Georgia, so the DOCX default run font
         // mirrors that for legal/disclaimer pages and any other body
         // text we leave at the section default.
-        document: { run: { font: 'Georgia', size: 22, color: INK } },
+        document: { run: { font: 'Arial', size: 22, color: INK } },
       },
     },
     sections,
